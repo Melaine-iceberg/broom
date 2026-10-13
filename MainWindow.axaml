@@ -51,11 +51,22 @@
     </Window.Styles>
 
     <DockPanel Margin="16">
-        <StackPanel DockPanel.Dock="Top" Spacing="4">
-            <TextBlock Classes="h1" Text="broom · 垃圾清理"/>
-            <TextBlock Classes="muted" TextWrapping="Wrap"
-                       Text="扫描临时文件、缓存与残留。安全项默认勾选;删除默认移入回收站(可恢复),可切换为永久删除。"/>
-        </StackPanel>
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto">
+            <StackPanel Grid.Column="0" Spacing="4">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Classes="h1" Text="broom · 垃圾清理"/>
+                    <Border Classes="badge admin" IsVisible="{Binding IsElevated}" VerticalAlignment="Center">
+                        <TextBlock Text="已以管理员身份运行"/>
+                    </Border>
+                </StackPanel>
+                <TextBlock Classes="muted" TextWrapping="Wrap"
+                           Text="扫描临时文件、缓存与残留。安全项默认勾选;删除默认移入回收站(可恢复),可切换为永久删除。"/>
+            </StackPanel>
+            <Button Grid.Column="1" VerticalAlignment="Top" Content="以管理员身份重启"
+                    IsVisible="{Binding !IsElevated}" IsEnabled="{Binding !IsBusy}"
+                    Command="{Binding RestartElevatedCommand}"
+                    ToolTip.Tip="通过 UAC 以管理员身份重新启动,用于清理需要管理员权限的项目。"/>
+        </Grid>
 
         <Grid DockPanel.Dock="Top" Margin="0,14,0,0" ColumnDefinitions="Auto,Auto,Auto,Auto,*">
             <Button Grid.Column="0" Content="开始扫描" Classes="accent"

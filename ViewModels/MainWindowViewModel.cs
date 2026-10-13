@@ -13,11 +13,14 @@ public partial class MainWindowViewModel : ObservableObject
 {
     private readonly Scanner _scanner = new();
     private readonly Cleaner _cleaner = new();
+    private readonly IElevationService _elevation = PlatformServices.CreateElevationService();
     private IReadOnlyList<RuleScanResult>? _lastScan;
     private CancellationTokenSource? _cts;
 
     public MainWindowViewModel()
     {
+        IsElevated = _elevation.IsElevated;
+
         Rules = new ObservableCollection<RuleViewModel>(WindowsRuleSet.Create().Select(rule => new RuleViewModel(rule)));
         foreach (var rule in Rules)
         {
@@ -27,7 +30,13 @@ public partial class MainWindowViewModel : ObservableObject
         UpdateSummary();
     }
 
+    /// <summary>提权重启已成功启动新实例,视图收到后应退出当前进程。</summary>
+    public event EventHandler? RestartRequested;
+
     public ObservableCollection<RuleViewModel> Rules { get; }
+
+    /// <summary>当前进程是否以管理员身份运行(进程生命周期内不变)。</summary>
+    public bool IsElevated { get; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanClean))]
@@ -73,6 +82,23 @@ public partial class MainWindowViewModel : ObservableObject
 
     [RelayCommand]
     private void Cancel() => _cts?.Cancel();
+
+    [RelayCommand]
+    private void RestartElevated()
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        if (!_elevation.TryRestartElevated(out var error))
+        {
+            StatusText = error ?? "提权重启失败。";
+            return;
+        }
+
+        RestartRequested?.Invoke(this, EventArgs.Empty);
+    }
 
     [RelayCommand]
     private async Task CleanAsync()
@@ -241,7 +267,7 @@ public partial class MainWindowViewModel : ObservableObject
         return (new PermanentFileDeleter(), "当前平台暂不支持回收站,本次改为永久删除。");
     }
 
-    private static string BuildReport(CleanupReport report, IFileDeleter deleter, string? warning)
+    private string BuildReport(CleanupReport report, IFileDeleter deleter, string? warning)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"{deleter.Name}:清理 {report.TotalDeleted:N0} 项,共 {Formatting.FormatBytes(report.TotalBytesRemoved)}。");
@@ -282,6 +308,11 @@ public partial class MainWindowViewModel : ObservableObject
         if (report.SkippedRules.Count > 0)
         {
             sb.AppendLine($"· 未执行的规则:{string.Join("、", report.SkippedRules.Select(r => r.DisplayName))}");
+        }
+
+        if (!IsElevated && report.Results.Any(r => r.Rule.RequiresAdmin && r.Failures.Count > 0))
+        {
+            sb.AppendLine("部分失败可通过提权重试 —— 点击右上角“以管理员身份重启”。");
         }
 
         return sb.ToString().TrimEnd();
