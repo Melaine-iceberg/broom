@@ -38,7 +38,7 @@ public sealed class Cleaner
             var result = new RuleCleanResult { Rule = target.Rule };
             if (target.Rule.Kind == RuleKind.RecycleBin)
             {
-                EmptyRecycleBin(target, result);
+                EmptyRecycleBin(result);
             }
             else
             {
@@ -71,7 +71,7 @@ public sealed class Cleaner
         }
     }
 
-    private static void EmptyRecycleBin(RuleScanResult target, RuleCleanResult result)
+    private static void EmptyRecycleBin(RuleCleanResult result)
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -79,12 +79,13 @@ public sealed class Cleaner
             return;
         }
 
-        if (RecycleBinOps.TryEmpty(out var error))
-        {
-            result.BytesRemoved = target.TotalBytes;
-            result.DeletedCount = target.ItemCount;
-        }
-        else
+        var ok = RecycleBinOps.TryPurge(out var itemsRemoved, out var bytesFreed, out var error);
+
+        // 以实际清除量为准:Shell 管理的条目 + 孤立残留;被占用而清不掉的部分不计入
+        result.DeletedCount = itemsRemoved;
+        result.BytesRemoved = bytesFreed;
+
+        if (!ok)
         {
             result.Failures.Add(new DeleteFailure("<回收站>", error));
         }

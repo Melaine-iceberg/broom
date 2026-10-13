@@ -1,5 +1,6 @@
 using System.IO.Enumeration;
 using broom.Core;
+using broom.Platform;
 
 namespace broom.Services;
 
@@ -32,7 +33,7 @@ public sealed class Scanner
             progress?.Report(new ScanProgress(i, rules.Count, rule.DisplayName, ""));
 
             results.Add(rule.Kind == RuleKind.RecycleBin
-                ? ScanRecycleBin(rule, i, rules.Count, excluded, progress, ct)
+                ? ScanRecycleBin(rule, i, rules.Count, progress, ct)
                 : ScanPaths(rule, i, rules.Count, excluded, progress, ct));
         }
 
@@ -108,71 +109,36 @@ public sealed class Scanner
         return result;
     }
 
+    /// <summary>
+    /// 回收站改为向 Shell 查询,而不是遍历 $Recycle.Bin 目录:
+    /// 目录里除了 Shell 管理的条目,还堆着它不再承认的孤立残留($I 元数据等),
+    /// 直接数文件会让界面数字与资源管理器不一致,清空操作也永远清不掉它们。
+    /// </summary>
     private static RuleScanResult ScanRecycleBin(
         CleanupRule rule,
         int index,
         int count,
-        List<string> excluded,
         IProgress<ScanProgress>? progress,
         CancellationToken ct)
     {
         var result = new RuleScanResult { Rule = rule };
-        var options = new EnumerationOptions
+        ct.ThrowIfCancellationRequested();
+        progress?.Report(new ScanProgress(index, count, rule.DisplayName, ""));
+
+        if (!OperatingSystem.IsWindows())
         {
-            RecurseSubdirectories = true,
-            IgnoreInaccessible = true,
-            AttributesToSkip = FileAttributes.ReparsePoint,
-        };
+            result.Errors.Add("当前平台暂不支持扫描回收站");
+            return result;
+        }
 
-        foreach (var drive in DriveInfo.GetDrives())
+        if (RecycleBinOps.TryQuery(out var size, out var itemCount, out var error))
         {
-            if (!drive.IsReady || drive.DriveType is not (DriveType.Fixed or DriveType.Removable))
-            {
-                continue;
-            }
-
-            var binRoot = Path.Combine(drive.RootDirectory.FullName, "$Recycle.Bin");
-            if (!Directory.Exists(binRoot))
-            {
-                continue;
-            }
-
-            result.Roots.Add(binRoot);
-            progress?.Report(new ScanProgress(index, count, rule.DisplayName, binRoot));
-
-            try
-            {
-                foreach (var item in Directory.EnumerateFileSystemEntries(binRoot, "*", options))
-                {
-                    ct.ThrowIfCancellationRequested();
-                    try
-                    {
-                        if (IsExcluded(item, excluded))
-                        {
-                            continue;
-                        }
-
-                        if ((File.GetAttributes(item) & FileAttributes.Directory) != 0)
-                        {
-                            continue;
-                        }
-
-                        result.TotalBytes += new FileInfo(item).Length;
-                        result.ItemCount++;
-                        if (result.ItemCount % ProgressInterval == 0)
-                        {
-                            progress?.Report(new ScanProgress(index, count, rule.DisplayName, item));
-                        }
-                    }
-                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                    {
-                    }
-                }
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                result.Errors.Add($"{binRoot}: {ex.Message}");
-            }
+            result.TotalBytes = size;
+            result.ItemCount = (int)Math.Min(itemCount, int.MaxValue);
+        }
+        else
+        {
+            result.Errors.Add($"<回收站>: {error}");
         }
 
         return result;

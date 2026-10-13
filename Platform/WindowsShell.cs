@@ -6,7 +6,7 @@ using System.Runtime.Versioning;
 namespace broom.Platform;
 
 /// <summary>
-/// Windows Shell 互操作:移入回收站、清空回收站、登记重启后删除。
+/// Windows Shell 互操作:移入回收站、查询/清空回收站、登记重启后删除。
 /// Shell API 约定在 STA 线程上调用,这里统一通过 <see cref="RunSta{T}"/> 切换到专用 STA 线程。
 /// </summary>
 [SupportedOSPlatform("windows")]
@@ -22,6 +22,9 @@ internal static class WindowsShell
     private const uint SHERB_NOCONFIRMATION = 0x00000001;
     private const uint SHERB_NOPROGRESSUI = 0x00000002;
     private const uint SHERB_NOSOUND = 0x00000004;
+
+    /// <summary>回收站为空(或只剩 Shell 不管理的孤立残留)时 SHEmptyRecycleBin 的既定义返回值,不是错误。</summary>
+    private const int E_UNEXPECTED = unchecked((int)0x8000FFFF);
 
     private const uint MOVEFILE_DELAY_UNTIL_REBOOT = 0x00000004;
 
@@ -52,13 +55,64 @@ internal static class WindowsShell
         return true;
     }
 
-    public static bool EmptyRecycleBin(out string error)
+    /// <summary>查询当前用户回收站的占用空间与项数 —— 与资源管理器展示的内容一致(不含孤立残留)。</summary>
+    public static bool TryQueryRecycleBin(out long size, out long itemCount, out string error)
     {
-        var hr = SHEmptyRecycleBinW(IntPtr.Zero, null, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
+        var info = new SHQUERYRBINFO { cbSize = Marshal.SizeOf<SHQUERYRBINFO>() };
+        var hr = SHQueryRecycleBinW(null, ref info);
         if (hr < 0)
         {
+            size = 0;
+            itemCount = 0;
             error = $"Shell 错误码 0x{hr:X8}";
             return false;
+        }
+
+        size = info.i64Size;
+        itemCount = info.i64NumItems;
+        error = "";
+        return true;
+    }
+
+    /// <summary>清空回收站,并通过前后查询得到实际清除的项数与字节数。</summary>
+    public static bool EmptyRecycleBin(out int itemsRemoved, out long bytesFreed, out string error)
+    {
+        itemsRemoved = 0;
+        bytesFreed = 0;
+
+        if (!TryQueryRecycleBin(out var bytesBefore, out var itemsBefore, out var queryError))
+        {
+            error = queryError;
+            return false;
+        }
+
+        // 查询为空时不再调用 SHEmptyRecycleBin,避免撞上 E_UNEXPECTED
+        if (itemsBefore > 0)
+        {
+            var hr = SHEmptyRecycleBinW(IntPtr.Zero, null, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
+            if (hr < 0 && hr != E_UNEXPECTED)
+            {
+                error = $"Shell 错误码 0x{hr:X8}";
+                return false;
+            }
+        }
+
+        // 以重新查询的结果为准:被占用而清不掉的项会留在回收站里
+        if (TryQueryRecycleBin(out var bytesAfter, out var itemsAfter, out _))
+        {
+            itemsRemoved = (int)Math.Max(0, itemsBefore - itemsAfter);
+            bytesFreed = Math.Max(0, bytesBefore - bytesAfter);
+
+            if (itemsAfter > 0)
+            {
+                error = $"仍有 {itemsAfter:N0} 项未能清空(可能被占用)。";
+                return false;
+            }
+        }
+        else
+        {
+            itemsRemoved = (int)Math.Min(itemsBefore, int.MaxValue);
+            bytesFreed = bytesBefore;
         }
 
         error = "";
@@ -128,8 +182,19 @@ internal static class WindowsShell
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern int SHFileOperationW(ref SHFILEOPSTRUCTW lpFileOp);
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SHQUERYRBINFO
+    {
+        public int cbSize;
+        public long i64Size;
+        public long i64NumItems;
+    }
+
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
     private static extern int SHEmptyRecycleBinW(IntPtr hwnd, string? pszRootPath, uint dwFlags);
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern int SHQueryRecycleBinW(string? pszRootPath, ref SHQUERYRBINFO pSHQueryRBInfo);
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
