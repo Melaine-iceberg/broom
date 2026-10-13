@@ -1,0 +1,124 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:broom.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="760" d:DesignHeight="620"
+        x:Class="broom.SettingsWindow"
+        x:DataType="vm:SettingsViewModel"
+        Title="broom · 设置"
+        Width="760" Height="620"
+        MinWidth="640" MinHeight="480"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.muted">
+            <Setter Property="Opacity" Value="0.65"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="#14808080"/>
+            <Setter Property="BorderBrush" Value="#22808080"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="12"/>
+        </Style>
+        <Style Selector="TextBlock.section">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="TextBlock.error">
+            <Setter Property="Foreground" Value="#D7483A"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+    </Window.Styles>
+
+    <DockPanel Margin="16">
+        <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0" Orientation="Horizontal"
+                    Spacing="12" HorizontalAlignment="Right">
+            <TextBlock Classes="error" VerticalAlignment="Center" MaxWidth="380"
+                       TextWrapping="Wrap" Text="{Binding ErrorText}"/>
+            <Button Content="保存" Classes="accent" Command="{Binding SaveCommand}"/>
+            <Button Content="取消" Command="{Binding CancelCommand}"/>
+        </StackPanel>
+
+        <ScrollViewer>
+            <StackPanel Spacing="12">
+                <Border Classes="card">
+                    <StackPanel Spacing="8">
+                        <TextBlock Classes="section" Text="自定义目录"/>
+                        <TextBlock Classes="muted" TextWrapping="Wrap"
+                                   Text="这些目录会作为自定义规则出现在主界面,可扫描、可清理。路径支持 %ENV% 环境变量与目录级通配符(*)。"/>
+                        <ItemsControl ItemsSource="{Binding CustomRules}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:CustomRuleViewModel">
+                                    <Border BorderBrush="#22808080" BorderThickness="0,1,0,0"
+                                            Padding="0,8" Margin="0,4,0,0">
+                                        <Grid ColumnDefinitions="*,*,Auto" RowDefinitions="Auto,Auto">
+                                            <StackPanel Grid.Row="0" Grid.Column="0" Spacing="2">
+                                                <TextBlock Classes="muted" Text="名称(可留空)"/>
+                                                <TextBox Text="{Binding Name}" PlaceholderText="例如:我的下载缓存"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Row="0" Grid.Column="1" Spacing="2" Margin="8,0,0,0">
+                                                <TextBlock Classes="muted" Text="路径"/>
+                                                <TextBox Text="{Binding Path}" PlaceholderText="%LOCALAPPDATA%\MyApp\Cache"/>
+                                            </StackPanel>
+                                            <Button Grid.Row="0" Grid.Column="2" Content="删除" Margin="8,18,0,0"
+                                                    VerticalAlignment="Center" Command="{Binding RemoveCommand}"/>
+                                            <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,8,0,0"
+                                                  ColumnDefinitions="*,*,Auto,Auto">
+                                                <StackPanel Grid.Column="0" Spacing="2">
+                                                    <TextBlock Classes="muted" Text="包含模式(逗号分隔)"/>
+                                                    <TextBox Text="{Binding IncludePatternsText}" PlaceholderText="*"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" Margin="8,0,0,0" Spacing="2">
+                                                    <TextBlock Classes="muted" Text="排除模式(逗号分隔)"/>
+                                                    <TextBox Text="{Binding ExcludePatternsText}" PlaceholderText="*.db, *.log"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="2" Margin="8,0,0,0" Spacing="2">
+                                                    <TextBlock Classes="muted" Text="风险等级"/>
+                                                    <ComboBox ItemsSource="{Binding RiskOptions}"
+                                                              SelectedItem="{Binding SelectedRisk}">
+                                                        <ComboBox.ItemTemplate>
+                                                            <DataTemplate x:DataType="vm:RiskOption">
+                                                                <TextBlock Text="{Binding Label}"/>
+                                                            </DataTemplate>
+                                                        </ComboBox.ItemTemplate>
+                                                    </ComboBox>
+                                                </StackPanel>
+                                                <CheckBox Grid.Column="3" Margin="8,18,0,0" Content="默认勾选"
+                                                          IsChecked="{Binding Recommended}"/>
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Content="添加目录" Command="{Binding AddCustomRuleCommand}" HorizontalAlignment="Left"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="card">
+                    <StackPanel Spacing="8">
+                        <TextBlock Classes="section" Text="排除规则"/>
+                        <TextBlock Classes="muted" TextWrapping="Wrap"
+                                   Text="每行一个路径,命中的文件在任何规则下都会被跳过(包含该目录下的所有内容)。"/>
+                        <TextBox AcceptsReturn="True" MinHeight="100" TextWrapping="Wrap"
+                                 VerticalContentAlignment="Top"
+                                 Text="{Binding ExcludedPathsText}"
+                                 PlaceholderText="例如:C:\Users\me\AppData\Local\Temp\keep"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="card">
+                    <StackPanel Spacing="8">
+                        <TextBlock Classes="section" Text="其他选项"/>
+                        <CheckBox Content="默认使用永久删除(不经过回收站)"
+                                  IsChecked="{Binding DefaultPermanentDelete}"/>
+                        <CheckBox Content="显示高风险类目(例如旧系统备份)"
+                                  IsChecked="{Binding ShowHighRiskRules}"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

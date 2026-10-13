@@ -1,0 +1,60 @@
+using System.Text.Json;
+using broom.Core;
+
+namespace broom.Services;
+
+/// <summary>
+/// 读写 %APPDATA%\broom\settings.json(SpecialFolder.ApplicationData,跨平台自动落到对应目录)。
+/// 文件损坏时改名为 settings.bad.json 并回退默认值,保证应用始终能启动。
+/// </summary>
+public sealed class SettingsService
+{
+    private readonly string _directory;
+    private readonly string _filePath;
+
+    public SettingsService()
+    {
+        _directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "broom");
+        _filePath = Path.Combine(_directory, "settings.json");
+    }
+
+    public string FilePath => _filePath;
+
+    public BroomSettings Load()
+    {
+        try
+        {
+            if (!File.Exists(_filePath))
+            {
+                return new BroomSettings();
+            }
+
+            var json = File.ReadAllText(_filePath);
+            return JsonSerializer.Deserialize(json, BroomJsonContext.Default.BroomSettings) ?? new BroomSettings();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
+        {
+            TryBackupCorruptedFile();
+            return new BroomSettings();
+        }
+    }
+
+    public void Save(BroomSettings settings)
+    {
+        Directory.CreateDirectory(_directory);
+        var json = JsonSerializer.Serialize(settings, BroomJsonContext.Default.BroomSettings);
+        File.WriteAllText(_filePath, json);
+    }
+
+    private void TryBackupCorruptedFile()
+    {
+        try
+        {
+            File.Move(_filePath, Path.Combine(_directory, "settings.bad.json"), overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // 备份失败不影响回退默认值
+        }
+    }
+}

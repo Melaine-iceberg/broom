@@ -62,10 +62,15 @@
                 <TextBlock Classes="muted" TextWrapping="Wrap"
                            Text="扫描临时文件、缓存与残留。安全项默认勾选;删除默认移入回收站(可恢复),可切换为永久删除。"/>
             </StackPanel>
-            <Button Grid.Column="1" VerticalAlignment="Top" Content="以管理员身份重启"
-                    IsVisible="{Binding !IsElevated}" IsEnabled="{Binding !IsBusy}"
-                    Command="{Binding RestartElevatedCommand}"
-                    ToolTip.Tip="通过 UAC 以管理员身份重新启动,用于清理需要管理员权限的项目。"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+                <Button Content="以管理员身份重启"
+                        IsVisible="{Binding !IsElevated}" IsEnabled="{Binding !IsBusy}"
+                        Command="{Binding RestartElevatedCommand}"
+                        ToolTip.Tip="通过 UAC 以管理员身份重新启动,用于清理需要管理员权限的项目。"/>
+                <Button Content="设置" IsEnabled="{Binding !IsBusy}"
+                        Command="{Binding OpenSettingsCommand}"
+                        ToolTip.Tip="自定义清理目录、排除规则与默认选项。"/>
+            </StackPanel>
         </Grid>
 
         <Grid DockPanel.Dock="Top" Margin="0,14,0,0" ColumnDefinitions="Auto,Auto,Auto,Auto,*">

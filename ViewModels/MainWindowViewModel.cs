@@ -13,6 +13,7 @@ public partial class MainWindowViewModel : ObservableObject
 {
     private readonly Scanner _scanner = new();
     private readonly Cleaner _cleaner = new();
+    private readonly SettingsService _settingsService = new();
     private readonly IElevationService _elevation = PlatformServices.CreateElevationService();
     private readonly IRebootDeleteService _rebootDeletes = PlatformServices.CreateRebootDeleteService();
     private readonly List<DeleteFailure> _pendingRebootDeletes = [];
@@ -21,21 +22,25 @@ public partial class MainWindowViewModel : ObservableObject
 
     public MainWindowViewModel()
     {
+        Settings = _settingsService.Load();
         IsElevated = _elevation.IsElevated;
+        PermanentDelete = Settings.DefaultPermanentDelete;
 
-        Rules = new ObservableCollection<RuleViewModel>(WindowsRuleSet.Create().Select(rule => new RuleViewModel(rule)));
-        foreach (var rule in Rules)
-        {
-            rule.PropertyChanged += (_, _) => UpdateSummary();
-        }
-
+        Rules = new ObservableCollection<RuleViewModel>();
+        RebuildRules();
         UpdateSummary();
     }
 
     /// <summary>提权重启已成功启动新实例,视图收到后应退出当前进程。</summary>
     public event EventHandler? RestartRequested;
 
+    /// <summary>请求打开设置窗口(保存后由视图调用 <see cref="ApplySettings"/>)。</summary>
+    public event EventHandler? SettingsRequested;
+
     public ObservableCollection<RuleViewModel> Rules { get; }
+
+    /// <summary>当前生效的设置(设置页保存后整体替换)。</summary>
+    public BroomSettings Settings { get; private set; }
 
     /// <summary>当前进程是否以管理员身份运行(进程生命周期内不变)。</summary>
     public bool IsElevated { get; }
@@ -113,6 +118,17 @@ public partial class MainWindowViewModel : ObservableObject
         }
 
         RestartRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    [RelayCommand]
+    private void OpenSettings()
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        SettingsRequested?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>把清理报告中可登记的失败项交给系统重启队列(不静默堆积,由用户显式触发)。</summary>
@@ -246,7 +262,7 @@ public partial class MainWindowViewModel : ObservableObject
                     : $"正在扫描:{p.RuleName}";
             });
 
-            var results = await _scanner.ScanAsync(Rules.Select(r => r.Rule).ToList(), progress, cts.Token);
+            var results = await _scanner.ScanAsync(Rules.Select(r => r.Rule).ToList(), Settings.ExcludedPaths, progress, cts.Token);
             _lastScan = results;
             ApplyScanResults(results);
 
@@ -317,6 +333,69 @@ public partial class MainWindowViewModel : ObservableObject
 
         PendingRebootCount = _pendingRebootDeletes.Count;
     }
+
+    /// <summary>应用设置页保存的结果:持久化,并在规则集或排除项变化时要求重新扫描。</summary>
+    public void ApplySettings(BroomSettings settings)
+    {
+        var ruleSetChanged = Settings.ShowHighRiskRules != settings.ShowHighRiskRules
+            || !CustomRulesEqual(Settings.CustomRules, settings.CustomRules);
+        var excludesChanged = !Settings.ExcludedPaths.SequenceEqual(settings.ExcludedPaths);
+
+        Settings = settings;
+        PermanentDelete = settings.DefaultPermanentDelete;
+
+        string? saveError = null;
+        try
+        {
+            _settingsService.Save(settings);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            saveError = ex.Message;
+        }
+
+        if (ruleSetChanged)
+        {
+            RebuildRules();
+        }
+
+        if (ruleSetChanged || excludesChanged)
+        {
+            ResetScanState();
+            StatusText = saveError is null
+                ? "设置已保存,请重新扫描。"
+                : $"设置保存失败:{saveError}(本次会话内仍生效)。";
+        }
+        else
+        {
+            StatusText = saveError is null ? "设置已保存。" : $"设置保存失败:{saveError}";
+        }
+    }
+
+    private void ResetScanState()
+    {
+        _lastScan = null;
+        HasScanned = false;
+        foreach (var rule in Rules)
+        {
+            rule.SizeBytes = 0;
+            rule.HasFailures = false;
+            rule.StatusText = "尚未扫描";
+        }
+
+        UpdateSummary();
+    }
+
+    private static bool CustomRulesEqual(List<CustomRule> a, List<CustomRule> b)
+        => a.Count == b.Count && a.Zip(b).All(pair => SameRule(pair.First, pair.Second));
+
+    private static bool SameRule(CustomRule x, CustomRule y)
+        => x.Name == y.Name
+            && x.Path == y.Path
+            && x.Risk == y.Risk
+            && x.Recommended == y.Recommended
+            && x.IncludePatterns.SequenceEqual(y.IncludePatterns)
+            && x.ExcludePatterns.SequenceEqual(y.ExcludePatterns);
 
     private List<RuleScanResult> GetSelectedResults()
     {
@@ -406,5 +485,27 @@ public partial class MainWindowViewModel : ObservableObject
         var total = Rules.Sum(r => r.SizeBytes);
         var selected = Rules.Where(r => r.IsSelected).Sum(r => r.SizeBytes);
         SummaryText = $"共发现 {Formatting.FormatBytes(total)},已选择 {Formatting.FormatBytes(selected)}";
+    }
+
+    private void RebuildRules()
+    {
+        Rules.Clear();
+        foreach (var rule in CreateRules())
+        {
+            var viewModel = new RuleViewModel(rule);
+            viewModel.PropertyChanged += (_, _) => UpdateSummary();
+            Rules.Add(viewModel);
+        }
+    }
+
+    private IReadOnlyList<CleanupRule> CreateRules()
+    {
+        var rules = WindowsRuleSet.Create(Settings).AsEnumerable();
+        if (!Settings.ShowHighRiskRules)
+        {
+            rules = rules.Where(r => r.Risk != RiskLevel.High);
+        }
+
+        return rules.ToList();
     }
 }

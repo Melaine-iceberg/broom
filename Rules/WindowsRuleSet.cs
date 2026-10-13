@@ -10,7 +10,7 @@ public static class WindowsRuleSet
 {
     private const string DevHint = "下次构建或安装依赖时需要重新下载 / 重新编译。";
 
-    public static IReadOnlyList<CleanupRule> Create() =>
+    private static readonly CleanupRule[] BuiltInRules =
     [
         // ── A 级:可放心清理 ───────────────────────────────
         new CleanupRule
@@ -220,4 +220,33 @@ public static class WindowsRuleSet
             Risk = RiskLevel.Caution,
         },
     ];
+
+    /// <summary>内置规则 + 用户自定义规则(设置页维护)。</summary>
+    public static IReadOnlyList<CleanupRule> Create(BroomSettings? settings = null)
+    {
+        if (settings is null || settings.CustomRules.Count == 0)
+        {
+            return BuiltInRules;
+        }
+
+        var rules = new List<CleanupRule>(BuiltInRules);
+        foreach (var custom in settings.CustomRules)
+        {
+            rules.Add(ToCleanupRule(custom));
+        }
+
+        return rules;
+    }
+
+    private static CleanupRule ToCleanupRule(CustomRule custom) => new()
+    {
+        Id = $"custom-{custom.Path}",
+        DisplayName = string.IsNullOrWhiteSpace(custom.Name) ? $"自定义:{custom.Path}" : custom.Name,
+        Description = "来自设置的自定义目录。",
+        Paths = [custom.Path],
+        IncludePatterns = custom.IncludePatterns.Count > 0 ? [.. custom.IncludePatterns] : ["*"],
+        ExcludePatterns = [.. custom.ExcludePatterns],
+        Risk = custom.Risk,
+        Recommended = custom.Recommended,
+    };
 }
