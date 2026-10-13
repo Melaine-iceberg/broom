@@ -11,6 +11,7 @@ public interface IFileDeleter
     /// <summary>
     /// 删除给定文件,返回成功删除的数量;
     /// 每个失败的路径及原因写入 <paramref name="failures"/>。
+    /// 取消时停止处理剩余文件并返回已完成的部分(不抛异常)。
     /// </summary>
     int Delete(IReadOnlyList<string> paths, IDictionary<string, string> failures, CancellationToken ct = default);
 }

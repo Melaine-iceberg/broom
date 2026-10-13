@@ -6,6 +6,7 @@ namespace broom.Services;
 /// <summary>
 /// 执行清理:通过 <see cref="IFileDeleter"/> 删除扫描结果,并给出逐条失败原因。
 /// 对"整目录"规则,删除文件后顺带回收空目录(不删除扫描根目录本身)。
+/// 取消时停止处理并返回已完成的部分,未执行的规则记录在 <see cref="CleanupReport.SkippedRules"/>。
 /// </summary>
 public sealed class Cleaner
 {
@@ -25,7 +26,17 @@ public sealed class Cleaner
         var report = new CleanupReport();
         for (var i = 0; i < targets.Count; i++)
         {
-            ct.ThrowIfCancellationRequested();
+            if (ct.IsCancellationRequested)
+            {
+                report.WasCancelled = true;
+                for (var j = i; j < targets.Count; j++)
+                {
+                    report.SkippedRules.Add(targets[j].Rule);
+                }
+
+                break;
+            }
+
             var target = targets[i];
             progress?.Report(new CleanProgress(i, targets.Count, target.Rule.DisplayName));
 
@@ -103,7 +114,11 @@ public sealed class Cleaner
 
         foreach (var root in roots)
         {
-            ct.ThrowIfCancellationRequested();
+            if (ct.IsCancellationRequested)
+            {
+                return;
+            }
+
             try
             {
                 // 由深到浅处理,子目录删除后父目录才可能变为空
@@ -111,7 +126,11 @@ public sealed class Cleaner
                     .OrderByDescending(d => d.Count(c => c == Path.DirectorySeparatorChar));
                 foreach (var directory in directories)
                 {
-                    ct.ThrowIfCancellationRequested();
+                    if (ct.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
                     try
                     {
                         if (!Directory.EnumerateFileSystemEntries(directory).Any())

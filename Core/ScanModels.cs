@@ -43,10 +43,16 @@ public sealed class RuleCleanResult
     public List<DeleteFailure> Failures { get; } = [];
 }
 
-/// <summary>一次清理操作的完整报告。</summary>
+/// <summary>一次清理操作的报告。被取消时为已完成的部分。</summary>
 public sealed class CleanupReport
 {
     public List<RuleCleanResult> Results { get; } = [];
+
+    /// <summary>因取消而未执行的规则(保持选中顺序)。</summary>
+    public List<CleanupRule> SkippedRules { get; } = [];
+
+    /// <summary>清理是否被用户取消(剩余规则未执行)。</summary>
+    public bool WasCancelled { get; set; }
 
     public int TotalDeleted => Results.Sum(r => r.DeletedCount);
 

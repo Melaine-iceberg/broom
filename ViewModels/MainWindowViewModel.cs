@@ -14,6 +14,7 @@ public partial class MainWindowViewModel : ObservableObject
     private readonly Scanner _scanner = new();
     private readonly Cleaner _cleaner = new();
     private IReadOnlyList<RuleScanResult>? _lastScan;
+    private CancellationTokenSource? _cts;
 
     public MainWindowViewModel()
     {
@@ -71,6 +72,9 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void Cancel() => _cts?.Cancel();
+
+    [RelayCommand]
     private async Task CleanAsync()
     {
         if (IsBusy)
@@ -88,6 +92,9 @@ public partial class MainWindowViewModel : ObservableObject
         IsBusy = true;
         IsProgressVisible = true;
         ProgressValue = 0;
+        var cts = new CancellationTokenSource();
+        _cts = cts;
+        var cancelled = false;
         try
         {
             var (deleter, warning) = CreateDeleter();
@@ -97,9 +104,15 @@ public partial class MainWindowViewModel : ObservableObject
                 StatusText = $"正在清理:{p.RuleName}";
             });
 
-            var report = await _cleaner.CleanAsync(selected, deleter, progress);
+            var report = await _cleaner.CleanAsync(selected, deleter, progress, cts.Token);
             ReportText = BuildReport(report, deleter, warning);
-            StatusText = "清理完成。";
+            cancelled = report.WasCancelled;
+            StatusText = cancelled ? "已取消清理,报告中为已完成的部分。" : "清理完成。";
+        }
+        catch (OperationCanceledException)
+        {
+            cancelled = true;
+            StatusText = "已取消清理。";
         }
         catch (Exception ex)
         {
@@ -107,8 +120,15 @@ public partial class MainWindowViewModel : ObservableObject
         }
         finally
         {
+            _cts = null;
+            cts.Dispose();
             IsBusy = false;
             IsProgressVisible = false;
+        }
+
+        if (cancelled)
+        {
+            return;
         }
 
         // 清理后立即重扫,界面上的数字反映真实剩余(被占用 / 无权限的文件会重新出现)
@@ -120,6 +140,8 @@ public partial class MainWindowViewModel : ObservableObject
         IsBusy = true;
         IsProgressVisible = true;
         ProgressValue = 0;
+        var cts = new CancellationTokenSource();
+        _cts = cts;
         try
         {
             foreach (var rule in Rules)
@@ -136,28 +158,29 @@ public partial class MainWindowViewModel : ObservableObject
                     : $"正在扫描:{p.RuleName}";
             });
 
-            var results = await _scanner.ScanAsync(Rules.Select(r => r.Rule).ToList(), progress);
+            var results = await _scanner.ScanAsync(Rules.Select(r => r.Rule).ToList(), progress, cts.Token);
             _lastScan = results;
-
-            var byRule = results.ToDictionary(r => r.Rule);
-            foreach (var rule in Rules)
-            {
-                if (!byRule.TryGetValue(rule.Rule, out var result))
-                {
-                    continue;
-                }
-
-                rule.SizeBytes = result.TotalBytes;
-                rule.HasFailures = result.Errors.Count > 0;
-                rule.StatusText = result.ItemCount == 0
-                    ? "没有可清理的内容"
-                    : $"{result.ItemCount:N0} 个文件";
-            }
+            ApplyScanResults(results);
 
             HasScanned = true;
             ProgressValue = 100;
             StatusText = "扫描完成。";
-            UpdateSummary();
+        }
+        catch (OperationCanceledException)
+        {
+            // 丢弃半成品结果,恢复上一次完整结果(若有)
+            StatusText = _lastScan is null ? "已取消扫描。" : "已取消扫描,保留上一次的扫描结果。";
+            if (_lastScan is not null)
+            {
+                ApplyScanResults(_lastScan);
+            }
+            else
+            {
+                foreach (var rule in Rules)
+                {
+                    rule.StatusText = "尚未扫描";
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -165,9 +188,31 @@ public partial class MainWindowViewModel : ObservableObject
         }
         finally
         {
+            _cts = null;
+            cts.Dispose();
             IsBusy = false;
             IsProgressVisible = false;
         }
+    }
+
+    private void ApplyScanResults(IReadOnlyList<RuleScanResult> results)
+    {
+        var byRule = results.ToDictionary(r => r.Rule);
+        foreach (var rule in Rules)
+        {
+            if (!byRule.TryGetValue(rule.Rule, out var result))
+            {
+                continue;
+            }
+
+            rule.SizeBytes = result.TotalBytes;
+            rule.HasFailures = result.Errors.Count > 0;
+            rule.StatusText = result.ItemCount == 0
+                ? "没有可清理的内容"
+                : $"{result.ItemCount:N0} 个文件";
+        }
+
+        UpdateSummary();
     }
 
     private List<RuleScanResult> GetSelectedResults()
@@ -200,6 +245,11 @@ public partial class MainWindowViewModel : ObservableObject
     {
         var sb = new StringBuilder();
         sb.AppendLine($"{deleter.Name}:清理 {report.TotalDeleted:N0} 项,共 {Formatting.FormatBytes(report.TotalBytesRemoved)}。");
+        if (report.WasCancelled)
+        {
+            sb.AppendLine("清理已取消,以上为已完成的部分。");
+        }
+
         if (deleter is WindowsRecycleBinDeleter)
         {
             sb.AppendLine("提示:移入回收站的文件仍占用磁盘空间,清空回收站后才会真正释放。");
@@ -227,6 +277,11 @@ public partial class MainWindowViewModel : ObservableObject
             {
                 sb.AppendLine($"    …其余 {result.Failures.Count - 10} 项失败未列出");
             }
+        }
+
+        if (report.SkippedRules.Count > 0)
+        {
+            sb.AppendLine($"· 未执行的规则:{string.Join("、", report.SkippedRules.Select(r => r.DisplayName))}");
         }
 
         return sb.ToString().TrimEnd();

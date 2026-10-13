@@ -24,7 +24,11 @@ public sealed class WindowsRecycleBinDeleter : IFileDeleter
             var deleted = 0;
             for (var offset = 0; offset < paths.Count; offset += BatchSize)
             {
-                ct.ThrowIfCancellationRequested();
+                if (ct.IsCancellationRequested)
+                {
+                    break;
+                }
+
                 var chunk = paths.Skip(offset).Take(BatchSize).ToList();
                 deleted += DeleteChunk(chunk, failures);
             }

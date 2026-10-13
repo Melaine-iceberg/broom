@@ -10,7 +10,11 @@ public sealed class PermanentFileDeleter : IFileDeleter
         var deleted = 0;
         foreach (var path in paths)
         {
-            ct.ThrowIfCancellationRequested();
+            if (ct.IsCancellationRequested)
+            {
+                break;
+            }
+
             try
             {
                 // File.Delete 对不存在的文件不抛异常,视为已清理

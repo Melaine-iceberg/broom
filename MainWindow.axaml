@@ -57,14 +57,16 @@
                        Text="扫描临时文件、缓存与残留。安全项默认勾选;删除默认移入回收站(可恢复),可切换为永久删除。"/>
         </StackPanel>
 
-        <Grid DockPanel.Dock="Top" Margin="0,14,0,0" ColumnDefinitions="Auto,Auto,Auto,*">
+        <Grid DockPanel.Dock="Top" Margin="0,14,0,0" ColumnDefinitions="Auto,Auto,Auto,Auto,*">
             <Button Grid.Column="0" Content="开始扫描" Classes="accent"
                     Command="{Binding ScanCommand}" IsEnabled="{Binding !IsBusy}"/>
-            <Button Grid.Column="1" Margin="8,0,0,0" Content="清理选中"
+            <Button Grid.Column="1" Margin="8,0,0,0" Content="取消" IsVisible="{Binding IsBusy}"
+                    Command="{Binding CancelCommand}"/>
+            <Button Grid.Column="2" Margin="8,0,0,0" Content="清理选中"
                     Command="{Binding CleanCommand}" IsEnabled="{Binding CanClean}"/>
-            <CheckBox Grid.Column="2" Margin="16,0,0,0" Content="永久删除(不经过回收站)"
+            <CheckBox Grid.Column="3" Margin="16,0,0,0" Content="永久删除(不经过回收站)"
                       IsChecked="{Binding PermanentDelete}" IsEnabled="{Binding !IsBusy}"/>
-            <TextBlock Grid.Column="3" Classes="muted" HorizontalAlignment="Right" VerticalAlignment="Center"
+            <TextBlock Grid.Column="4" Classes="muted" HorizontalAlignment="Right" VerticalAlignment="Center"
                        Text="{Binding SummaryText}"/>
         </Grid>
 
