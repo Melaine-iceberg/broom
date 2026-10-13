@@ -20,6 +20,11 @@ public partial class MainWindowViewModel : ObservableObject
     private IReadOnlyList<RuleScanResult>? _lastScan;
     private CancellationTokenSource? _cts;
 
+    /// <summary>文件路径比较方式(Windows 不区分大小写),与扫描器的排除判定保持一致。</summary>
+    private static readonly StringComparer PathComparer = OperatingSystem.IsWindows()
+        ? StringComparer.OrdinalIgnoreCase
+        : StringComparer.Ordinal;
+
     public MainWindowViewModel()
     {
         Settings = _settingsService.Load();
@@ -230,6 +235,85 @@ public partial class MainWindowViewModel : ObservableObject
         UpdateSummary();
     }
 
+    /// <summary>把文件加入排除名单:持久化,并立即从当前扫描结果与界面中移除。</summary>
+    private void ExcludeFile(string path)
+    {
+        if (IsBusy)
+        {
+            StatusText = "请等待当前操作完成后再排除文件。";
+            return;
+        }
+
+        string? saveError = null;
+        if (!Settings.ExcludedFiles.Contains(path, PathComparer))
+        {
+            Settings.ExcludedFiles.Add(path);
+            SettingsEditor.AppendExcludedFile(path);
+            try
+            {
+                _settingsService.Save(Settings);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                saveError = ex.Message;
+            }
+        }
+
+        RemoveFileFromScan(path);
+
+        StatusText = saveError is null
+            ? $"已排除:{path}(可在设置页恢复)"
+            : $"已排除:{path},但设置保存失败:{saveError}(可在设置页恢复)";
+    }
+
+    /// <summary>在资源管理器中定位文件。</summary>
+    private void RevealFile(string path)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            StatusText = "当前平台暂不支持打开文件位置。";
+            return;
+        }
+
+        if (!WindowsShell.TryRevealInExplorer(path, out var error))
+        {
+            StatusText = $"无法打开文件位置:{error}";
+        }
+    }
+
+    /// <summary>从当前扫描数据与规则明细中移除已排除的文件(同一路径可能同时命中多条规则)。</summary>
+    private void RemoveFileFromScan(string path)
+    {
+        if (_lastScan is null)
+        {
+            return;
+        }
+
+        foreach (var result in _lastScan)
+        {
+            var removed = result.Files.RemoveAll(f => PathComparer.Equals(f.Path, path));
+            if (removed == 0)
+            {
+                continue;
+            }
+
+            result.TotalBytes = result.Files.Sum(f => f.Size);
+            result.ItemCount = result.Files.Count;
+
+            var rule = Rules.FirstOrDefault(r => r.Rule == result.Rule);
+            if (rule is not null)
+            {
+                rule.SizeBytes = result.TotalBytes;
+                rule.StatusText = result.ItemCount == 0
+                    ? "没有可清理的内容"
+                    : $"{result.ItemCount:N0} 个文件";
+                rule.RefreshFiles();
+            }
+        }
+
+        UpdateSummary();
+    }
+
     /// <summary>把清理报告中可登记的失败项交给系统重启队列(不静默堆积,由用户显式触发)。</summary>
     [RelayCommand(CanExecute = nameof(CanScheduleRebootDelete))]
     private void ScheduleRebootDelete()
@@ -361,7 +445,7 @@ public partial class MainWindowViewModel : ObservableObject
                     : $"正在扫描:{p.RuleName}";
             });
 
-            var results = await _scanner.ScanAsync(Rules.Select(r => r.Rule).ToList(), Settings.ExcludedPaths, progress, cts.Token);
+            var results = await _scanner.ScanAsync(Rules.Select(r => r.Rule).ToList(), Settings.ExcludedPaths, Settings.ExcludedFiles, progress, cts.Token);
             _lastScan = results;
             ApplyScanResults(results);
 
@@ -413,6 +497,7 @@ public partial class MainWindowViewModel : ObservableObject
             rule.StatusText = result.ItemCount == 0
                 ? "没有可清理的内容"
                 : $"{result.ItemCount:N0} 个文件";
+            rule.AttachScanResult(result);
         }
 
         UpdateSummary();
@@ -439,7 +524,8 @@ public partial class MainWindowViewModel : ObservableObject
     {
         var ruleSetChanged = Settings.ShowHighRiskRules != settings.ShowHighRiskRules
             || !CustomRulesEqual(Settings.CustomRules, settings.CustomRules);
-        var excludesChanged = !Settings.ExcludedPaths.SequenceEqual(settings.ExcludedPaths);
+        var excludesChanged = !Settings.ExcludedPaths.SequenceEqual(settings.ExcludedPaths)
+            || !Settings.ExcludedFiles.SequenceEqual(settings.ExcludedFiles);
 
         Settings = settings;
         PermanentDelete = settings.DefaultPermanentDelete;
@@ -481,6 +567,7 @@ public partial class MainWindowViewModel : ObservableObject
             rule.SizeBytes = 0;
             rule.HasFailures = false;
             rule.StatusText = "尚未扫描";
+            rule.AttachScanResult(null);
         }
 
         UpdateSummary();
@@ -675,7 +762,7 @@ public partial class MainWindowViewModel : ObservableObject
         Rules.Clear();
         foreach (var rule in CreateRules())
         {
-            var viewModel = new RuleViewModel(rule);
+            var viewModel = new RuleViewModel(rule, ExcludeFile, RevealFile);
             viewModel.PropertyChanged += (_, _) => UpdateSummary();
             Rules.Add(viewModel);
         }

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
@@ -117,6 +118,25 @@ internal static class WindowsShell
 
         error = "";
         return true;
+    }
+
+    /// <summary>在资源管理器中定位并选中指定文件。</summary>
+    public static bool TryRevealInExplorer(string path, out string error)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"")
+            {
+                UseShellExecute = true,
+            });
+            error = "";
+            return true;
+        }
+        catch (Win32Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
     }
 
     /// <summary>

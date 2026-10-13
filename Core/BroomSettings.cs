@@ -13,6 +13,9 @@ public sealed class BroomSettings
     /// <summary>全局排除路径:命中的文件在任何规则下都会被跳过。</summary>
     public List<string> ExcludedPaths { get; set; } = [];
 
+    /// <summary>全局排除文件:命中的单个文件在任何规则下都会被跳过。</summary>
+    public List<string> ExcludedFiles { get; set; } = [];
+
     /// <summary>工具栏“永久删除”的初始状态。</summary>
     public bool DefaultPermanentDelete { get; set; }
 

@@ -14,17 +14,20 @@ public sealed class Scanner
     public Task<IReadOnlyList<RuleScanResult>> ScanAsync(
         IReadOnlyList<CleanupRule> rules,
         IReadOnlyList<string>? excludedPaths = null,
+        IReadOnlyList<string>? excludedFiles = null,
         IProgress<ScanProgress>? progress = null,
         CancellationToken ct = default)
-        => Task.Run<IReadOnlyList<RuleScanResult>>(() => Scan(rules, excludedPaths, progress, ct), ct);
+        => Task.Run<IReadOnlyList<RuleScanResult>>(() => Scan(rules, excludedPaths, excludedFiles, progress, ct), ct);
 
     private static List<RuleScanResult> Scan(
         IReadOnlyList<CleanupRule> rules,
         IReadOnlyList<string>? excludedPaths,
+        IReadOnlyList<string>? excludedFiles,
         IProgress<ScanProgress>? progress,
         CancellationToken ct)
     {
         var excluded = NormalizeExcludedPaths(excludedPaths);
+        var excludedFileSet = NormalizeExcludedFiles(excludedFiles);
         var results = new List<RuleScanResult>(rules.Count);
         for (var i = 0; i < rules.Count; i++)
         {
@@ -34,7 +37,7 @@ public sealed class Scanner
 
             results.Add(rule.Kind == RuleKind.RecycleBin
                 ? ScanRecycleBin(rule, i, rules.Count, progress, ct)
-                : ScanPaths(rule, i, rules.Count, excluded, progress, ct));
+                : ScanPaths(rule, i, rules.Count, excluded, excludedFileSet, progress, ct));
         }
 
         return results;
@@ -45,6 +48,7 @@ public sealed class Scanner
         int index,
         int count,
         List<string> excluded,
+        HashSet<string> excludedFiles,
         IProgress<ScanProgress>? progress,
         CancellationToken ct)
     {
@@ -72,7 +76,11 @@ public sealed class Scanner
 
                 if (File.Exists(path))
                 {
-                    AddFile(result, path);
+                    if (!excludedFiles.Contains(path))
+                    {
+                        AddFile(result, path);
+                    }
+
                     continue;
                 }
 
@@ -81,7 +89,7 @@ public sealed class Scanner
                     foreach (var file in Directory.EnumerateFiles(path, "*", options))
                     {
                         ct.ThrowIfCancellationRequested();
-                        if (IsExcluded(file, excluded))
+                        if (IsExcluded(file, excluded) || excludedFiles.Contains(file))
                         {
                             continue;
                         }
@@ -199,6 +207,32 @@ public sealed class Scanner
         return normalized;
     }
 
+    /// <summary>排除的文件按完整路径与扫描结果比较;环境变量在此展开,与排除目录保持一致的写法。</summary>
+    private static HashSet<string> NormalizeExcludedFiles(IReadOnlyList<string>? excludedFiles)
+    {
+        var normalized = new HashSet<string>(PathComparer);
+        if (excludedFiles is null)
+        {
+            return normalized;
+        }
+
+        foreach (var raw in excludedFiles)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                continue;
+            }
+
+            var expanded = Environment.ExpandEnvironmentVariables(raw.Trim());
+            if (expanded.Length > 0)
+            {
+                normalized.Add(expanded);
+            }
+        }
+
+        return normalized;
+    }
+
     /// <summary>路径前缀匹配:排除项自身及其子项(按目录段边界比较,避免 C:\Temp 误伤 C:\Temp2)。</summary>
     private static bool IsExcluded(string path, List<string> prefixes)
     {
@@ -219,4 +253,8 @@ public sealed class Scanner
     private static readonly StringComparison PathComparison = OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase
         : StringComparison.Ordinal;
+
+    private static readonly StringComparer PathComparer = OperatingSystem.IsWindows()
+        ? StringComparer.OrdinalIgnoreCase
+        : StringComparer.Ordinal;
 }

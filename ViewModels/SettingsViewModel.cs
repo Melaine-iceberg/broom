@@ -13,6 +13,7 @@ public partial class SettingsViewModel : ObservableObject
         CustomRules = new ObservableCollection<CustomRuleViewModel>(
             settings.CustomRules.Select(rule => CreateRule(rule)));
         ExcludedPathsText = string.Join(Environment.NewLine, settings.ExcludedPaths);
+        ExcludedFilesText = string.Join(Environment.NewLine, settings.ExcludedFiles);
         DefaultPermanentDelete = settings.DefaultPermanentDelete;
         ShowHighRiskRules = settings.ShowHighRiskRules;
     }
@@ -24,6 +25,9 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private string _excludedPathsText;
+
+    [ObservableProperty]
+    private string _excludedFilesText;
 
     [ObservableProperty]
     private bool _defaultPermanentDelete;
@@ -72,11 +76,19 @@ public partial class SettingsViewModel : ObservableObject
         {
             CustomRules = rules,
             ExcludedPaths = ParseLines(ExcludedPathsText),
+            ExcludedFiles = ParseLines(ExcludedFilesText),
             DefaultPermanentDelete = DefaultPermanentDelete,
             ShowHighRiskRules = ShowHighRiskRules,
         };
         error = "";
         return true;
+    }
+
+    /// <summary>清理页排除文件后同步文本框,避免稍后保存设置时覆盖掉该排除项。</summary>
+    public void AppendExcludedFile(string path)
+    {
+        var text = ExcludedFilesText.TrimEnd();
+        ExcludedFilesText = text.Length == 0 ? path : $"{text}{Environment.NewLine}{path}";
     }
 
     private CustomRuleViewModel CreateRule(CustomRule rule) => new(rule, RemoveCustomRule);

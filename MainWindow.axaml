@@ -158,7 +158,7 @@
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:RuleViewModel">
                                                     <Border Classes="row" Margin="0,0,0,8">
-                                                        <Grid ColumnDefinitions="Auto,*,Auto">
+                                                        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto">
                                                             <CheckBox Grid.Column="0" Margin="0,2,12,0"
                                                                       VerticalAlignment="Top"
                                                                       IsChecked="{Binding IsSelected}"
@@ -183,6 +183,12 @@
                                                                             IsVisible="{Binding HasFailures}">
                                                                         <TextBlock Text="部分无法访问"/>
                                                                     </Border>
+                                                                    <Button Classes="ghost" Padding="8,2" FontSize="11"
+                                                                            VerticalAlignment="Center"
+                                                                            Content="{Binding FilesToggleText}"
+                                                                            Command="{Binding ToggleFilesCommand}"
+                                                                            IsVisible="{Binding HasFiles}"
+                                                                            ToolTip.Tip="预览本条规则命中的文件,可将个别文件排除。"/>
                                                                 </StackPanel>
                                                                 <TextBlock Text="{Binding Description}" FontSize="12"
                                                                            TextWrapping="Wrap"
@@ -195,6 +201,50 @@
                                                                            Foreground="{DynamicResource Brush.Text}"/>
                                                                 <TextBlock Classes="muted" TextAlignment="Right"
                                                                            Text="{Binding StatusText}"/>
+                                                            </StackPanel>
+                                                            <StackPanel Grid.Row="1" Grid.ColumnSpan="3"
+                                                                        Margin="32,2,0,0" Spacing="6"
+                                                                        IsVisible="{Binding IsFilesExpanded}">
+                                                                <ItemsControl ItemsSource="{Binding Files}">
+                                                                    <ItemsControl.ItemTemplate>
+                                                                        <DataTemplate x:DataType="vm:FileItemViewModel">
+                                                                            <Grid ColumnDefinitions="*,Auto,Auto"
+                                                                                  Margin="0,1">
+                                                                                <StackPanel Grid.Column="0" Spacing="1">
+                                                                                    <TextBlock Text="{Binding FileName}"
+                                                                                               FontSize="12"
+                                                                                               TextTrimming="CharacterEllipsis"
+                                                                                               Foreground="{DynamicResource Brush.Text}"
+                                                                                               ToolTip.Tip="{Binding FullPath}"/>
+                                                                                    <TextBlock Classes="muted"
+                                                                                               Text="{Binding DirectoryPath}"
+                                                                                               TextTrimming="CharacterEllipsis"
+                                                                                               ToolTip.Tip="{Binding FullPath}"/>
+                                                                                </StackPanel>
+                                                                                <TextBlock Grid.Column="1" Classes="muted"
+                                                                                           Margin="10,0" VerticalAlignment="Center"
+                                                                                           Text="{Binding SizeText}"/>
+                                                                                <StackPanel Grid.Column="2"
+                                                                                            Orientation="Horizontal"
+                                                                                            Spacing="4"
+                                                                                            VerticalAlignment="Center">
+                                                                                    <Button Classes="ghost" Padding="8,2"
+                                                                                            FontSize="11" Content="打开位置"
+                                                                                            Command="{Binding RevealCommand}"/>
+                                                                                    <Button Classes="ghost" Padding="8,2"
+                                                                                            FontSize="11" Content="排除"
+                                                                                            Command="{Binding ExcludeCommand}"
+                                                                                            ToolTip.Tip="加入排除名单:清理时跳过该文件,后续扫描不再列出。"/>
+                                                                                </StackPanel>
+                                                                            </Grid>
+                                                                        </DataTemplate>
+                                                                    </ItemsControl.ItemTemplate>
+                                                                </ItemsControl>
+                                                                <Button Classes="ghost" HorizontalAlignment="Left"
+                                                                        Padding="8,2" FontSize="11"
+                                                                        Content="{Binding ShowMoreText}"
+                                                                        Command="{Binding ShowMoreFilesCommand}"
+                                                                        IsVisible="{Binding HasMoreFiles}"/>
                                                             </StackPanel>
                                                         </Grid>
                                                     </Border>
@@ -311,6 +361,19 @@
                                      VerticalContentAlignment="Top"
                                      Text="{Binding SettingsEditor.ExcludedPathsText}"
                                      PlaceholderText="例如:C:\Users\me\AppData\Local\Temp\keep"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 排除的文件 -->
+                    <Border Classes="card">
+                        <StackPanel Spacing="12">
+                            <TextBlock Classes="h2" Text="排除的文件"/>
+                            <TextBlock Classes="muted" TextWrapping="Wrap"
+                                       Text="每行一个文件路径,命中的文件在任何规则下都会被跳过;在清理页的文件明细中点击“排除”会自动添加到这里。"/>
+                            <TextBox AcceptsReturn="True" MinHeight="90" TextWrapping="Wrap"
+                                     VerticalContentAlignment="Top"
+                                     Text="{Binding SettingsEditor.ExcludedFilesText}"
+                                     PlaceholderText="例如:C:\Users\me\AppData\Local\Temp\keep\important.tmp"/>
                         </StackPanel>
                     </Border>
 
