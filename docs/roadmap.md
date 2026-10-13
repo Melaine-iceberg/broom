@@ -2,6 +2,7 @@
 
 > 更新于 2026-10-13。记录四项计划功能的背景、方案、影响文件与验收标准;实现前先按本文档评审,实现时逐项落地。
 > 建议实施顺序:① 扫描/清理取消 → ② 管理员提权 → ③ 重启后删除 → ④ 设置页(依赖关系见文末)。
+> 实现状态(2026-10-13):四项已按建议顺序落地(取消 b34572d、提权 3b9b7e7、重启删除 08ae97c、设置 c0ecb96,取消边界补充 20d296c);引擎侧取消 / 排除前缀 / 设置持久化经临时校验程序验证,GUI 冒烟测试通过。
 
 ## 1. 扫描 / 清理取消
 
@@ -25,6 +26,8 @@
 - [ViewModels/MainWindowViewModel.cs](../ViewModels/MainWindowViewModel.cs)(主要)
 - [MainWindow.axaml](../MainWindow.axaml)(取消按钮)
 - 引擎层无需改动(令牌早已贯通)
+
+> 实现说明:为了让“部分清理报告”包含已删项,删除器与 [Cleaner](../Services/Cleaner.cs) 改为取消时优雅停止(不抛异常);在规则执行过程中(含最后一条规则)取消同样标记 `WasCancelled` 并列出未执行规则。
 
 **验收标准**
 
@@ -58,6 +61,9 @@
 
 - 新增 `Platform/IElevationService.cs`、`Platform/WindowsElevationService.cs`
 - [ViewModels/MainWindowViewModel.cs](../ViewModels/MainWindowViewModel.cs)、[MainWindow.axaml](../MainWindow.axaml)
+- 另有 `Platform/PlatformServices.cs`(平台工厂 + 非 Windows 占位实现)
+
+> 实现说明:Windows 侧用 `WindowsPrincipal.IsInRole` 检测提权;提权成功启动新实例后,由 [MainWindow](../MainWindow.axaml.cs) 关闭当前窗口退出(ShutdownMode.OnLastWindowClose)。
 
 **验收标准**
 
@@ -93,6 +99,8 @@
 - [Services/Cleaner.cs](../Services/Cleaner.cs)(把失败列表完整暴露给 VM)
 - [ViewModels/MainWindowViewModel.cs](../ViewModels/MainWindowViewModel.cs)、[MainWindow.axaml](../MainWindow.axaml)(报告区按钮)
 
+> 实现说明:只有完整路径的失败项进入登记队列(`<回收站>` 等伪路径跳过);登记失败的项保留在队列中并附带系统原因。
+
 **验收标准**
 
 - 对锁定文件(可用一个被记事本打开的文件模拟)点击按钮后,注册表 `PendingFileRenameOperations` 出现对应项;
@@ -121,9 +129,11 @@
 
 **影响文件**
 
-- 新增 `Core/BroomSettings.cs`、`Services/SettingsService.cs`、`ViewModels/SettingsViewModel.cs`、`SettingsWindow.axaml(.cs)`
+- 新增 `Core/BroomSettings.cs`、`Services/SettingsService.cs`、`ViewModels/SettingsViewModel.cs`、`ViewModels/CustomRuleViewModel.cs`、`SettingsWindow.axaml(.cs)`
 - [Rules/WindowsRuleSet.cs](../Rules/WindowsRuleSet.cs)(规则合并入口调整)、[Services/Scanner.cs](../Services/Scanner.cs)(排除前缀过滤)
 - [ViewModels/MainWindowViewModel.cs](../ViewModels/MainWindowViewModel.cs)、[MainWindow.axaml](../MainWindow.axaml)
+
+> 实现说明:排除前缀按目录段边界匹配(避免 `C:\Temp` 误伤 `C:\Temp2`)并支持 `%ENV%` 展开;设置窗口为模态对话框,保存后仅在规则集或排除项变化时重置扫描状态并提示重扫。
 
 **验收标准**
 
