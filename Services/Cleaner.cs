@@ -28,12 +28,7 @@ public sealed class Cleaner
         {
             if (ct.IsCancellationRequested)
             {
-                report.WasCancelled = true;
-                for (var j = i; j < targets.Count; j++)
-                {
-                    report.SkippedRules.Add(targets[j].Rule);
-                }
-
+                MarkCancelled(report, targets, i);
                 break;
             }
 
@@ -55,9 +50,25 @@ public sealed class Cleaner
             }
 
             report.Results.Add(result);
+
+            // 在规则处理过程中取消(含最后一条规则):已删项照常汇报,剩余规则标记为未执行
+            if (ct.IsCancellationRequested)
+            {
+                MarkCancelled(report, targets, i + 1);
+                break;
+            }
         }
 
         return report;
+    }
+
+    private static void MarkCancelled(CleanupReport report, IReadOnlyList<RuleScanResult> targets, int fromIndex)
+    {
+        report.WasCancelled = true;
+        for (var i = fromIndex; i < targets.Count; i++)
+        {
+            report.SkippedRules.Add(targets[i].Rule);
+        }
     }
 
     private static void EmptyRecycleBin(RuleScanResult target, RuleCleanResult result)
