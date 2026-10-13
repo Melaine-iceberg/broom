@@ -14,6 +14,8 @@ public partial class MainWindowViewModel : ObservableObject
     private readonly Scanner _scanner = new();
     private readonly Cleaner _cleaner = new();
     private readonly IElevationService _elevation = PlatformServices.CreateElevationService();
+    private readonly IRebootDeleteService _rebootDeletes = PlatformServices.CreateRebootDeleteService();
+    private readonly List<DeleteFailure> _pendingRebootDeletes = [];
     private IReadOnlyList<RuleScanResult>? _lastScan;
     private CancellationTokenSource? _cts;
 
@@ -65,9 +67,22 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private bool _permanentDelete;
 
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ScheduleRebootDeleteCommand))]
+    [NotifyPropertyChangedFor(nameof(HasPendingRebootDeletes))]
+    [NotifyPropertyChangedFor(nameof(ScheduleRebootDeleteText))]
+    private int _pendingRebootCount;
+
     public bool CanClean => HasScanned && !IsBusy;
 
     public bool HasReport => ReportText.Length > 0;
+
+    /// <summary>清理报告中是否存在可登记“重启后删除”的失败项。</summary>
+    public bool HasPendingRebootDeletes => PendingRebootCount > 0;
+
+    public bool CanScheduleRebootDelete => PendingRebootCount > 0 && IsElevated && _rebootDeletes.IsSupported;
+
+    public string ScheduleRebootDeleteText => $"安排重启后删除({PendingRebootCount})";
 
     [RelayCommand]
     private async Task ScanAsync()
@@ -98,6 +113,52 @@ public partial class MainWindowViewModel : ObservableObject
         }
 
         RestartRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>把清理报告中可登记的失败项交给系统重启队列(不静默堆积,由用户显式触发)。</summary>
+    [RelayCommand(CanExecute = nameof(CanScheduleRebootDelete))]
+    private void ScheduleRebootDelete()
+    {
+        if (IsBusy || _pendingRebootDeletes.Count == 0)
+        {
+            return;
+        }
+
+        var scheduled = 0;
+        var failures = new List<DeleteFailure>();
+        foreach (var item in _pendingRebootDeletes)
+        {
+            if (_rebootDeletes.TrySchedule(item.Path, out var error))
+            {
+                scheduled++;
+            }
+            else
+            {
+                failures.Add(new DeleteFailure(item.Path, error));
+            }
+        }
+
+        _pendingRebootDeletes.Clear();
+        _pendingRebootDeletes.AddRange(failures);
+        PendingRebootCount = _pendingRebootDeletes.Count;
+
+        if (failures.Count == 0)
+        {
+            StatusText = $"已安排 {scheduled} 项重启后删除,重启后生效。";
+        }
+        else if (scheduled == 0)
+        {
+            StatusText = "安排重启后删除失败,请确认已以管理员身份运行。";
+        }
+        else
+        {
+            StatusText = $"已安排 {scheduled} 项,{failures.Count} 项安排失败。";
+        }
+
+        if (scheduled > 0)
+        {
+            ReportText = $"{ReportText}{Environment.NewLine}✔ 已安排 {scheduled} 项重启后删除(重启后生效,重启前文件仍占用空间)。";
+        }
     }
 
     [RelayCommand]
@@ -132,6 +193,7 @@ public partial class MainWindowViewModel : ObservableObject
 
             var report = await _cleaner.CleanAsync(selected, deleter, progress, cts.Token);
             ReportText = BuildReport(report, deleter, warning);
+            SetPendingRebootDeletes(report);
             cancelled = report.WasCancelled;
             StatusText = cancelled ? "已取消清理,报告中为已完成的部分。" : "清理完成。";
         }
@@ -239,6 +301,21 @@ public partial class MainWindowViewModel : ObservableObject
         }
 
         UpdateSummary();
+    }
+
+    private void SetPendingRebootDeletes(CleanupReport report)
+    {
+        _pendingRebootDeletes.Clear();
+        foreach (var failure in report.Results.SelectMany(r => r.Failures))
+        {
+            // 只有真实文件路径可以登记重启后删除(跳过“<回收站>”等伪路径)
+            if (Path.IsPathFullyQualified(failure.Path))
+            {
+                _pendingRebootDeletes.Add(failure);
+            }
+        }
+
+        PendingRebootCount = _pendingRebootDeletes.Count;
     }
 
     private List<RuleScanResult> GetSelectedResults()

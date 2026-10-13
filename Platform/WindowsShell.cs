@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
@@ -5,7 +6,7 @@ using System.Runtime.Versioning;
 namespace broom.Platform;
 
 /// <summary>
-/// Windows Shell 互操作:移入回收站、清空回收站。
+/// Windows Shell 互操作:移入回收站、清空回收站、登记重启后删除。
 /// Shell API 约定在 STA 线程上调用,这里统一通过 <see cref="RunSta{T}"/> 切换到专用 STA 线程。
 /// </summary>
 [SupportedOSPlatform("windows")]
@@ -21,6 +22,8 @@ internal static class WindowsShell
     private const uint SHERB_NOCONFIRMATION = 0x00000001;
     private const uint SHERB_NOPROGRESSUI = 0x00000002;
     private const uint SHERB_NOSOUND = 0x00000004;
+
+    private const uint MOVEFILE_DELAY_UNTIL_REBOOT = 0x00000004;
 
     public static bool DeleteToRecycleBin(IReadOnlyList<string> paths, out string error)
     {
@@ -60,6 +63,22 @@ internal static class WindowsShell
 
         error = "";
         return true;
+    }
+
+    /// <summary>
+    /// 登记文件在下次重启时删除(写入注册表 PendingFileRenameOperations)。
+    /// 需要管理员权限;重启前文件不会被删除,也不释放空间。
+    /// </summary>
+    public static bool TryScheduleDeleteOnReboot(string path, out string error)
+    {
+        if (MoveFileExW(path, null, MOVEFILE_DELAY_UNTIL_REBOOT))
+        {
+            error = "";
+            return true;
+        }
+
+        error = new Win32Exception(Marshal.GetLastPInvokeError()).Message;
+        return false;
     }
 
     public static T RunSta<T>(Func<T> action)
@@ -111,4 +130,8 @@ internal static class WindowsShell
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
     private static extern int SHEmptyRecycleBinW(IntPtr hwnd, string? pszRootPath, uint dwFlags);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool MoveFileExW(string lpExistingFileName, string? lpNewFileName, uint dwFlags);
 }

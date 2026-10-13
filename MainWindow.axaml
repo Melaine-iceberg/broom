@@ -94,6 +94,13 @@
                 <ScrollViewer MaxHeight="140">
                     <TextBlock Text="{Binding ReportText}" TextWrapping="Wrap" FontSize="12"/>
                 </ScrollViewer>
+                <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasPendingRebootDeletes}">
+                    <Button Content="{Binding ScheduleRebootDeleteText}"
+                            Command="{Binding ScheduleRebootDeleteCommand}"
+                            ToolTip.Tip="登记到系统重启队列,重启后生效;重启前文件仍占用空间。"/>
+                    <TextBlock Classes="muted" VerticalAlignment="Center" IsVisible="{Binding !IsElevated}"
+                               Text="需要管理员权限 —— 请先以管理员身份重启。"/>
+                </StackPanel>
             </StackPanel>
         </Border>
 
