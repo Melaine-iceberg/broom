@@ -2,8 +2,124 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        xmlns:vm="using:broom.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="960" d:DesignHeight="680"
         x:Class="broom.MainWindow"
-        Title="broom">
-    Welcome to Avalonia!
+        x:DataType="vm:MainWindowViewModel"
+        Title="broom · 垃圾清理"
+        Width="960" Height="680"
+        MinWidth="760" MinHeight="520"
+        WindowStartupLocation="CenterScreen">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.h1">
+            <Setter Property="FontSize" Value="22"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="TextBlock.muted">
+            <Setter Property="Opacity" Value="0.65"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="#14808080"/>
+            <Setter Property="BorderBrush" Value="#22808080"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="12"/>
+        </Style>
+        <Style Selector="Border.badge">
+            <Setter Property="CornerRadius" Value="9"/>
+            <Setter Property="Padding" Value="8,1"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Background" Value="#22808080"/>
+        </Style>
+        <Style Selector="Border.badge.safe">
+            <Setter Property="Background" Value="#2E3DA35D"/>
+        </Style>
+        <Style Selector="Border.badge.caution">
+            <Setter Property="Background" Value="#2ED69A28"/>
+        </Style>
+        <Style Selector="Border.badge.high">
+            <Setter Property="Background" Value="#2ED7483A"/>
+        </Style>
+        <Style Selector="Border.badge.admin">
+            <Setter Property="Background" Value="#2E4A90D9"/>
+        </Style>
+        <Style Selector="Border.badge > TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+    </Window.Styles>
+
+    <DockPanel Margin="16">
+        <StackPanel DockPanel.Dock="Top" Spacing="4">
+            <TextBlock Classes="h1" Text="broom · 垃圾清理"/>
+            <TextBlock Classes="muted" TextWrapping="Wrap"
+                       Text="扫描临时文件、缓存与残留。安全项默认勾选;删除默认移入回收站(可恢复),可切换为永久删除。"/>
+        </StackPanel>
+
+        <Grid DockPanel.Dock="Top" Margin="0,14,0,0" ColumnDefinitions="Auto,Auto,Auto,*">
+            <Button Grid.Column="0" Content="开始扫描" Classes="accent"
+                    Command="{Binding ScanCommand}" IsEnabled="{Binding !IsBusy}"/>
+            <Button Grid.Column="1" Margin="8,0,0,0" Content="清理选中"
+                    Command="{Binding CleanCommand}" IsEnabled="{Binding CanClean}"/>
+            <CheckBox Grid.Column="2" Margin="16,0,0,0" Content="永久删除(不经过回收站)"
+                      IsChecked="{Binding PermanentDelete}" IsEnabled="{Binding !IsBusy}"/>
+            <TextBlock Grid.Column="3" Classes="muted" HorizontalAlignment="Right" VerticalAlignment="Center"
+                       Text="{Binding SummaryText}"/>
+        </Grid>
+
+        <ProgressBar DockPanel.Dock="Top" Margin="0,10,0,0" Height="4"
+                     Minimum="0" Maximum="100"
+                     Value="{Binding ProgressValue}" IsVisible="{Binding IsProgressVisible}"/>
+
+        <TextBlock DockPanel.Dock="Top" Margin="0,8,0,0" Classes="muted"
+                   Text="{Binding StatusText}" TextTrimming="CharacterEllipsis"/>
+
+        <Border DockPanel.Dock="Bottom" Classes="card" Margin="0,10,0,0" IsVisible="{Binding HasReport}">
+            <StackPanel Spacing="6">
+                <TextBlock Text="清理报告" FontWeight="SemiBold" FontSize="12"/>
+                <ScrollViewer MaxHeight="140">
+                    <TextBlock Text="{Binding ReportText}" TextWrapping="Wrap" FontSize="12"/>
+                </ScrollViewer>
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer Margin="0,12,0,0">
+            <ItemsControl ItemsSource="{Binding Rules}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:RuleViewModel">
+                        <Border Classes="card" Margin="0,0,0,8">
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <CheckBox Grid.Column="0" Margin="0,2,10,0" VerticalAlignment="Top"
+                                          IsChecked="{Binding IsSelected}"/>
+                                <StackPanel Grid.Column="1" Spacing="4">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        <Border Classes="badge"
+                                                Classes.safe="{Binding IsSafe}"
+                                                Classes.caution="{Binding IsCaution}"
+                                                Classes.high="{Binding IsHigh}">
+                                            <TextBlock Text="{Binding RiskText}"/>
+                                        </Border>
+                                        <Border Classes="badge admin" IsVisible="{Binding RequiresAdmin}">
+                                            <TextBlock Text="需要管理员"/>
+                                        </Border>
+                                        <Border Classes="badge high" IsVisible="{Binding HasFailures}">
+                                            <TextBlock Text="部分无法访问"/>
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Classes="muted" Text="{Binding Description}" TextWrapping="Wrap"/>
+                                    <TextBlock Classes="muted" Text="{Binding StatusText}"/>
+                                </StackPanel>
+                                <TextBlock Grid.Column="2" Margin="12,0,0,0" MinWidth="92"
+                                           VerticalAlignment="Center" TextAlignment="Right"
+                                           FontSize="20" FontWeight="SemiBold"
+                                           Text="{Binding SizeText}"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </DockPanel>
 </Window>
