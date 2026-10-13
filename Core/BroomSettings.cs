@@ -21,6 +21,12 @@ public sealed class BroomSettings
 
     /// <summary>是否显示高风险类目。</summary>
     public bool ShowHighRiskRules { get; set; } = true;
+
+    /// <summary>永久删除时先移入隔离区(可还原),而不是直接删除。</summary>
+    public bool QuarantineEnabled { get; set; } = true;
+
+    /// <summary>隔离区的保留天数(0 表示永久保留);超过保留天数的内容自动清理。</summary>
+    public int QuarantineRetentionDays { get; set; } = 7;
 }
 
 /// <summary>用户自定义的清理目录。</summary>

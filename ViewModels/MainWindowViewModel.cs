@@ -16,8 +16,10 @@ public partial class MainWindowViewModel : ObservableObject
     private readonly SettingsService _settingsService = new();
     private readonly IElevationService _elevation = PlatformServices.CreateElevationService();
     private readonly IRebootDeleteService _rebootDeletes = PlatformServices.CreateRebootDeleteService();
+    private readonly QuarantineService _quarantine = new();
     private readonly List<DeleteFailure> _pendingRebootDeletes = [];
     private IReadOnlyList<RuleScanResult>? _lastScan;
+    private QuarantineSession? _lastQuarantineSession;
     private CancellationTokenSource? _cts;
 
     /// <summary>文件路径比较方式(Windows 不区分大小写),与扫描器的排除判定保持一致。</summary>
@@ -35,6 +37,7 @@ public partial class MainWindowViewModel : ObservableObject
         RebuildRules();
         ResetSettingsEditor();
         UpdateSummary();
+        PurgeExpiredQuarantine(Settings.QuarantineRetentionDays);
     }
 
     /// <summary>提权重启已成功启动新实例,视图收到后应退出当前进程。</summary>
@@ -150,6 +153,16 @@ public partial class MainWindowViewModel : ObservableObject
 
     public bool HasReport => ReportText.Length > 0;
 
+    /// <summary>本次清理移入隔离区、可还原的条目数。</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasQuarantineEntries))]
+    [NotifyPropertyChangedFor(nameof(RestoreQuarantineText))]
+    private int _quarantineCount;
+
+    public bool HasQuarantineEntries => QuarantineCount > 0;
+
+    public string RestoreQuarantineText => $"还原本次隔离的 {QuarantineCount} 项";
+
     /// <summary>清理报告中是否存在可登记“重启后删除”的失败项。</summary>
     public bool HasPendingRebootDeletes => PendingRebootCount > 0;
 
@@ -200,6 +213,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
 
         IsCleanPage = false;
+        _ = RefreshQuarantineUsageAsync();
     }
 
     /// <summary>勾选当前筛选后可见的全部规则。</summary>
@@ -324,9 +338,26 @@ public partial class MainWindowViewModel : ObservableObject
         }
 
         var scheduled = 0;
+        var copies = 0;
         var failures = new List<DeleteFailure>();
+
+        // 登记重启后删除后原文件会消失:隔离区开启时先复制一份副本(移动会与登记冲突)
+        var session = Settings.QuarantineEnabled ? _lastQuarantineSession ??= _quarantine.CreateSession() : null;
         foreach (var item in _pendingRebootDeletes)
         {
+            if (session is not null)
+            {
+                if (session.TryCopyForPendingReboot(item.Path, out var copyError))
+                {
+                    copies++;
+                }
+                else
+                {
+                    failures.Add(new DeleteFailure(item.Path, $"未能复制到隔离区:{copyError}"));
+                    continue;
+                }
+            }
+
             if (_rebootDeletes.TrySchedule(item.Path, out var error))
             {
                 scheduled++;
@@ -343,11 +374,15 @@ public partial class MainWindowViewModel : ObservableObject
 
         if (failures.Count == 0)
         {
-            StatusText = $"已安排 {scheduled} 项重启后删除,重启后生效。";
+            StatusText = copies > 0
+                ? $"已安排 {scheduled} 项重启后删除,隔离区已保留副本,重启后生效。"
+                : $"已安排 {scheduled} 项重启后删除,重启后生效。";
         }
         else if (scheduled == 0)
         {
-            StatusText = "安排重启后删除失败,请确认已以管理员身份运行。";
+            StatusText = failures[0].Reason.StartsWith("未能复制到隔离区")
+                ? $"未能安排重启后删除:{failures[0].Reason}"
+                : "安排重启后删除失败,请确认已以管理员身份运行。";
         }
         else
         {
@@ -356,8 +391,107 @@ public partial class MainWindowViewModel : ObservableObject
 
         if (scheduled > 0)
         {
-            ReportText = $"{ReportText}{Environment.NewLine}✔ 已安排 {scheduled} 项重启后删除(重启后生效,重启前文件仍占用空间)。";
+            var copyNote = copies > 0 ? $",隔离区已保留 {copies} 份副本" : "";
+            ReportText = $"{ReportText}{Environment.NewLine}✔ 已安排 {scheduled} 项重启后删除(重启后生效,重启前文件仍占用空间{copyNote})。";
         }
+    }
+
+    /// <summary>把本次清理移入隔离区的文件移回原位置(原位置已有同名文件时跳过并给出原因)。</summary>
+    [RelayCommand]
+    private async Task RestoreQuarantineAsync()
+    {
+        if (IsBusy || _lastQuarantineSession is not { } session || QuarantineCount == 0)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        IsProgressVisible = true;
+        ProgressValue = 0;
+        var cts = new CancellationTokenSource();
+        _cts = cts;
+        var restored = 0;
+        var failures = new List<DeleteFailure>();
+        var cancelled = false;
+        try
+        {
+            var total = Math.Max(1, session.RestorableCount);
+            var progress = new Progress<int>(done =>
+            {
+                ProgressValue = done * 100.0 / total;
+                StatusText = $"正在还原:{done}/{total}";
+            });
+
+            (restored, failures, cancelled) = await Task.Run(() => RestoreEntries(session, progress, cts.Token));
+        }
+        finally
+        {
+            _cts = null;
+            cts.Dispose();
+            IsBusy = false;
+            IsProgressVisible = false;
+        }
+
+        QuarantineCount = session.RestorableCount;
+        if (cancelled)
+        {
+            StatusText = $"已取消还原,已还原 {restored} 项。";
+            return;
+        }
+
+        var sb = new StringBuilder();
+        if (restored > 0)
+        {
+            sb.AppendLine($"✔ 已还原 {restored} 项到原位置(可重新扫描以刷新列表)。");
+        }
+
+        foreach (var failure in failures.Take(5))
+        {
+            sb.AppendLine($"    ✗ 未还原 {failure.Path}({failure.Reason})");
+        }
+
+        if (failures.Count > 5)
+        {
+            sb.AppendLine($"    …其余 {failures.Count - 5} 项未还原");
+        }
+
+        if (sb.Length > 0)
+        {
+            ReportText = $"{ReportText}{Environment.NewLine}{sb.ToString().TrimEnd()}";
+        }
+
+        StatusText = failures.Count == 0
+            ? $"已还原 {restored} 项到原位置,可重新扫描以刷新列表。"
+            : $"已还原 {restored} 项,{failures.Count} 项失败:{failures[0].Reason}";
+    }
+
+    private static (int Restored, List<DeleteFailure> Failures, bool Cancelled) RestoreEntries(
+        QuarantineSession session,
+        IProgress<int> progress,
+        CancellationToken ct)
+    {
+        var restored = 0;
+        var failures = new List<DeleteFailure>();
+        foreach (var entry in session.RestorableEntries.ToList())
+        {
+            if (ct.IsCancellationRequested)
+            {
+                return (restored, failures, true);
+            }
+
+            if (session.TryRestore(entry, out var error))
+            {
+                restored++;
+            }
+            else
+            {
+                failures.Add(new DeleteFailure(entry.OriginalPath, error));
+            }
+
+            progress.Report(restored + failures.Count);
+        }
+
+        return (restored, failures, false);
     }
 
     [RelayCommand]
@@ -393,6 +527,7 @@ public partial class MainWindowViewModel : ObservableObject
             var report = await _cleaner.CleanAsync(selected, deleter, progress, cts.Token);
             ReportText = BuildReport(report, deleter, warning);
             SetPendingRebootDeletes(report);
+            QuarantineCount = _lastQuarantineSession?.RestorableCount ?? 0;
             cancelled = report.WasCancelled;
             StatusText = cancelled ? "已取消清理,报告中为已完成的部分。" : "清理完成。";
         }
@@ -526,9 +661,15 @@ public partial class MainWindowViewModel : ObservableObject
             || !CustomRulesEqual(Settings.CustomRules, settings.CustomRules);
         var excludesChanged = !Settings.ExcludedPaths.SequenceEqual(settings.ExcludedPaths)
             || !Settings.ExcludedFiles.SequenceEqual(settings.ExcludedFiles);
+        var retentionChanged = Settings.QuarantineRetentionDays != settings.QuarantineRetentionDays;
 
         Settings = settings;
         PermanentDelete = settings.DefaultPermanentDelete;
+
+        if (retentionChanged)
+        {
+            PurgeExpiredQuarantine(settings.QuarantineRetentionDays);
+        }
 
         string? saveError = null;
         try
@@ -597,14 +738,28 @@ public partial class MainWindowViewModel : ObservableObject
 
     private (IFileDeleter Deleter, string? Warning) CreateDeleter()
     {
+        _lastQuarantineSession = null;
         if (PermanentDelete)
         {
+            if (Settings.QuarantineEnabled)
+            {
+                // "永久删除"改为先移入隔离区:可在报告里还原,超过保留天数后自动清理
+                _lastQuarantineSession = _quarantine.CreateSession();
+                return (new QuarantineFileDeleter(_lastQuarantineSession), null);
+            }
+
             return (new PermanentFileDeleter(), null);
         }
 
         if (OperatingSystem.IsWindows())
         {
             return (new WindowsRecycleBinDeleter(), null);
+        }
+
+        if (Settings.QuarantineEnabled)
+        {
+            _lastQuarantineSession = _quarantine.CreateSession();
+            return (new QuarantineFileDeleter(_lastQuarantineSession), "当前平台暂不支持回收站,本次改为移入隔离区。");
         }
 
         return (new PermanentFileDeleter(), "当前平台暂不支持回收站,本次改为永久删除。");
@@ -622,6 +777,13 @@ public partial class MainWindowViewModel : ObservableObject
         if (deleter is WindowsRecycleBinDeleter)
         {
             sb.AppendLine("提示:移入回收站的文件仍占用磁盘空间,清空回收站后才会真正释放。");
+        }
+
+        if (deleter is QuarantineFileDeleter quarantineDeleter && quarantineDeleter.Session.RestorableCount > 0)
+        {
+            sb.AppendLine(Settings.QuarantineRetentionDays > 0
+                ? $"提示:隔离区中的文件仍占用磁盘空间,保留 {Settings.QuarantineRetentionDays} 天后自动删除;期间可在下方“还原”。"
+                : "提示:隔离区中的文件仍占用磁盘空间,会一直保留直到手动清空;期间可在下方“还原”。");
         }
 
         if (warning is not null)
@@ -739,7 +901,7 @@ public partial class MainWindowViewModel : ObservableObject
             SettingsEditor.CloseRequested -= OnSettingsEditorCloseRequested;
         }
 
-        SettingsEditor = new SettingsViewModel(Settings);
+        SettingsEditor = new SettingsViewModel(Settings, PurgeQuarantine, OpenQuarantine);
         SettingsEditor.CloseRequested += OnSettingsEditorCloseRequested;
     }
 
@@ -755,6 +917,57 @@ public partial class MainWindowViewModel : ObservableObject
         ApplySettings(settings);
         ResetSettingsEditor();
         IsCleanPage = true;
+    }
+
+    /// <summary>启动与保存设置时清理过期隔离内容;失败不影响应用运行。</summary>
+    private void PurgeExpiredQuarantine(int retentionDays) => Task.Run(() => _quarantine.PurgeExpired(retentionDays));
+
+    private string PurgeQuarantine()
+    {
+        if (!_quarantine.TryPurgeAll(out var items, out var bytes, out var error))
+        {
+            return $"清空隔离区未完成:{error}";
+        }
+
+        return items == 0
+            ? "隔离区本来就是空的。"
+            : $"已清空隔离区:{items:N0} 项 · {Formatting.FormatBytes(bytes)}。";
+    }
+
+    private string OpenQuarantine()
+    {
+        try
+        {
+            Directory.CreateDirectory(_quarantine.RootPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return $"无法创建隔离区目录:{ex.Message}";
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return $"当前平台暂不支持打开文件夹,隔离区位于:{_quarantine.RootPath}";
+        }
+
+        return WindowsShell.TryRevealInExplorer(_quarantine.RootPath, out var error)
+            ? $"已打开隔离区:{_quarantine.RootPath}"
+            : $"无法打开隔离区:{error}";
+    }
+
+    /// <summary>进入设置页时后台统计隔离区用量,避免大目录阻塞界面。</summary>
+    private async Task RefreshQuarantineUsageAsync()
+    {
+        var editor = SettingsEditor;
+        var (items, bytes) = await Task.Run(_quarantine.GetUsage);
+        if (!ReferenceEquals(editor, SettingsEditor))
+        {
+            return;
+        }
+
+        editor.QuarantineStatusText = items == 0
+            ? "隔离区当前为空。"
+            : $"隔离区当前:{items:N0} 项 · {Formatting.FormatBytes(bytes)}。";
     }
 
     private void RebuildRules()

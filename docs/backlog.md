@@ -1,36 +1,30 @@
 # broom 未完成功能清单(backlog)
 
-> 更新于 2026-10-13。基于当前代码基线的缺口评审整理。roadmap 第 1–5 项(扫描/清理取消、管理员提权、重启后删除、设置页、文件级预览与单文件排除)均已实现,不再列入本文档。
+> 更新于 2026-10-13。基于当前代码基线的缺口评审整理。roadmap 第 1–6 项(扫描/清理取消、管理员提权、重启后删除、设置页、文件级预览与单文件排除、隔离区与撤销)均已实现,不再列入本文档。
 > 使用方式:从本清单挑选条目 → 按 [roadmap](roadmap.md) 的模板补齐「背景 / 方案 / 影响文件 / 验收标准」→ 评审后实现,并在 roadmap 中记录状态。
 > 优先级为建议顺序;规模为粗略估计:S ≈ 半天以内,M ≈ 1–3 天,L ≈ 3 天以上(单人)。
 
 ## P1 · 安全与可控(建议优先)
 
-### 1. 隔离区与撤销
-- **动机**:永久删除后不可恢复;「清空回收站」场景连回收站兜底都没有,误删代价高。
-- **方案要点**:删除前把文件移动到 `%LOCALAPPDATA%\broom\quarantine\<时间戳>\<原路径>`;清理报告提供「还原」;设置页提供保留天数与「清空隔离区」;与「重启后删除」互斥时先复制再登记。
-- **涉及**:`Platform/IFileDeleter`(新增装饰器实现)、[Services/Cleaner.cs](../Services/Cleaner.cs)、[ViewModels/MainWindowViewModel.cs](../ViewModels/MainWindowViewModel.cs)、设置页。
-- **规模**:L · **风险**:额外占用磁盘空间(需自动过期);跨盘移动为复制+删除,较慢。
-
-### 2. 按文件时间 / 大小过滤
+### 1. 按文件时间 / 大小过滤
 - **动机**:临时目录里常有「最近仍在用」的文件;CCleaner 类工具支持「仅删除 N 天前的文件」。
 - **方案要点**:设置页全局选项「跳过最近 N 天内修改过的文件」(0 = 不启用),后续可支持规则级覆盖;在扫描阶段按 `LastWriteTime` 过滤。
 - **涉及**:[Core/BroomSettings.cs](../Core/BroomSettings.cs)、[Services/Scanner.cs](../Services/Scanner.cs)、设置页。
 - **规模**:M · **风险**:语义需在 UI 说明(按最后写入时间判断)。
 
-### 3. 排除操作增强
+### 2. 排除操作增强
 - **动机**:目前只能「排除单个文件」;想排除整个目录需到设置页手输前缀,不顺手;重复/无效排除项没有提示。
 - **方案要点**:文件明细行增加「排除所在文件夹」(写入 `ExcludedPaths`);保存设置时对排除项去重并做基本校验(绝对路径或含 `%ENV%`),重复项给出提示。
 - **涉及**:[ViewModels/FileItemViewModel.cs](../ViewModels/FileItemViewModel.cs)、[ViewModels/MainWindowViewModel.cs](../ViewModels/MainWindowViewModel.cs)、[ViewModels/SettingsViewModel.cs](../ViewModels/SettingsViewModel.cs)。
 - **规模**:S。
 
-### 4. 安全擦除(覆写删除)
+### 3. 安全擦除(覆写删除)
 - **动机**:敏感残留文件希望在永久删除时不可恢复。
 - **方案要点**:设置页增加「永久删除前覆写次数(0/1/3)」;[Platform/PermanentFileDeleter.cs](../Platform/PermanentFileDeleter.cs) 覆写后再删除;清理报告与设置页标注「对 SSD / 写时复制文件系统效果有限」。
 - **涉及**:[Platform/PermanentFileDeleter.cs](../Platform/PermanentFileDeleter.cs)、[Core/BroomSettings.cs](../Core/BroomSettings.cs)、设置页。
 - **规模**:M · **风险**:显著拖慢清理;在 SSD 上主要是安慰剂,必须明确告知。
 
-### 5. 清理前创建系统还原点
+### 4. 清理前创建系统还原点
 - **动机**:批量清理系统类目之前,提供一键回滚点。
 - **方案要点**:提权状态下通过 WMI / `Checkpoint-Computer` 创建还原点;失败(系统保护未开启)不阻塞清理,仅提示。
 - **涉及**:新增 Platform 服务、[ViewModels/MainWindowViewModel.cs](../ViewModels/MainWindowViewModel.cs)。
@@ -167,7 +161,7 @@
 
 ## 建议推进顺序
 
-1. P1 安全与可控(隔离区 → 时间/大小过滤 → 排除增强 → 擦除/还原点);
+1. P1 安全与可控(时间/大小过滤 → 排除增强 → 擦除/还原点);
 2. P2 规则扩充(按实际用户反馈挑选类目,注意第 7 项的聊天记录排除风险);
 3. P3 自动化(CLI 相对独立,可提前;历史统计是「空间对比」的前置);
 4. P4 体验与分发(打包分发建议在对外发布前完成);

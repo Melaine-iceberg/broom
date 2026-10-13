@@ -8,14 +8,22 @@ namespace broom.ViewModels;
 /// <summary>设置页状态:自定义目录、全局排除路径与其他默认选项。</summary>
 public partial class SettingsViewModel : ObservableObject
 {
-    public SettingsViewModel(BroomSettings settings)
+    private readonly Func<string> _purgeQuarantine;
+    private readonly Func<string> _openQuarantine;
+
+    public SettingsViewModel(BroomSettings settings, Func<string> purgeQuarantine, Func<string> openQuarantine)
     {
+        _purgeQuarantine = purgeQuarantine;
+        _openQuarantine = openQuarantine;
         CustomRules = new ObservableCollection<CustomRuleViewModel>(
             settings.CustomRules.Select(rule => CreateRule(rule)));
         ExcludedPathsText = string.Join(Environment.NewLine, settings.ExcludedPaths);
         ExcludedFilesText = string.Join(Environment.NewLine, settings.ExcludedFiles);
         DefaultPermanentDelete = settings.DefaultPermanentDelete;
         ShowHighRiskRules = settings.ShowHighRiskRules;
+        QuarantineEnabled = settings.QuarantineEnabled;
+        SelectedQuarantineRetention = QuarantineRetentionOptions.FirstOrDefault(o => o.Days == settings.QuarantineRetentionDays)
+            ?? QuarantineRetentionOptions[0];
     }
 
     /// <summary>保存结果已就绪时触发(参数为 null 表示取消),窗口据此关闭。</summary>
@@ -34,6 +42,51 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _showHighRiskRules;
+
+    /// <summary>隔离区保留天数选项(0 表示永久保留)。</summary>
+    public IReadOnlyList<RetentionOption> QuarantineRetentionOptions { get; } =
+    [
+        new(7, "7 天"),
+        new(1, "1 天"),
+        new(3, "3 天"),
+        new(14, "14 天"),
+        new(30, "30 天"),
+        new(0, "永久保留"),
+    ];
+
+    [ObservableProperty]
+    private bool _quarantineEnabled;
+
+    [ObservableProperty]
+    private RetentionOption _selectedQuarantineRetention;
+
+    /// <summary>隔离区操作(打开 / 清空 / 当前用量)的结果文案。</summary>
+    [ObservableProperty]
+    private string _quarantineStatusText = "";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PurgeQuarantineText))]
+    private bool _purgeConfirmed;
+
+    public string PurgeQuarantineText => PurgeConfirmed ? "确认清空(不可恢复)" : "清空隔离区";
+
+    [RelayCommand]
+    private void OpenQuarantine() => QuarantineStatusText = _openQuarantine();
+
+    /// <summary>两步确认,避免误点把隔离区里的恢复副本一并删掉。</summary>
+    [RelayCommand]
+    private void PurgeQuarantine()
+    {
+        if (!PurgeConfirmed)
+        {
+            PurgeConfirmed = true;
+            QuarantineStatusText = "再次点击确认清空 —— 该操作不可恢复。";
+            return;
+        }
+
+        PurgeConfirmed = false;
+        QuarantineStatusText = _purgeQuarantine();
+    }
 
     [ObservableProperty]
     private string _errorText = "";
@@ -79,6 +132,8 @@ public partial class SettingsViewModel : ObservableObject
             ExcludedFiles = ParseLines(ExcludedFilesText),
             DefaultPermanentDelete = DefaultPermanentDelete,
             ShowHighRiskRules = ShowHighRiskRules,
+            QuarantineEnabled = QuarantineEnabled,
+            QuarantineRetentionDays = SelectedQuarantineRetention.Days,
         };
         error = "";
         return true;
@@ -98,3 +153,6 @@ public partial class SettingsViewModel : ObservableObject
     private static List<string> ParseLines(string text) =>
         text.Split(['\r', '\n', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 }
+
+/// <summary>隔离区保留天数下拉项。</summary>
+public sealed record RetentionOption(int Days, string Label);

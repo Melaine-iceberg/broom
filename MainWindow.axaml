@@ -263,14 +263,25 @@
                         IsVisible="{Binding HasReport}">
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Top" Classes="h2" Text="清理报告"/>
-                        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8"
-                                    Margin="0,12,0,0" IsVisible="{Binding HasPendingRebootDeletes}">
-                            <Button Classes="secondary" Content="{Binding ScheduleRebootDeleteText}"
-                                    Command="{Binding ScheduleRebootDeleteCommand}"
-                                    ToolTip.Tip="登记到系统重启队列,重启后生效;重启前文件仍占用空间。"/>
-                            <TextBlock Classes="muted" VerticalAlignment="Center"
-                                       IsVisible="{Binding !IsElevated}"
-                                       Text="需要管理员权限 —— 请先以管理员身份重启。"/>
+                        <StackPanel DockPanel.Dock="Bottom" Spacing="8" Margin="0,12,0,0">
+                            <StackPanel Orientation="Horizontal" Spacing="8"
+                                        IsVisible="{Binding HasPendingRebootDeletes}">
+                                <Button Classes="secondary" Content="{Binding ScheduleRebootDeleteText}"
+                                        Command="{Binding ScheduleRebootDeleteCommand}"
+                                        ToolTip.Tip="登记到系统重启队列,重启后生效;重启前文件仍占用空间。"/>
+                                <TextBlock Classes="muted" VerticalAlignment="Center"
+                                           IsVisible="{Binding !IsElevated}"
+                                           Text="需要管理员权限 —— 请先以管理员身份重启。"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8"
+                                        IsVisible="{Binding HasQuarantineEntries}">
+                                <Button Classes="secondary" Content="{Binding RestoreQuarantineText}"
+                                        Command="{Binding RestoreQuarantineCommand}"
+                                        IsEnabled="{Binding !IsBusy}"
+                                        ToolTip.Tip="把本次清理移入隔离区的文件移回原位置;隔离区内容在保留天数后自动删除。"/>
+                                <TextBlock Classes="muted" VerticalAlignment="Center"
+                                           Text="还原到原位置;隔离区中的文件仍占用磁盘空间。"/>
+                            </StackPanel>
                         </StackPanel>
                         <ScrollViewer Margin="0,10,0,0">
                             <TextBlock Text="{Binding ReportText}" TextWrapping="Wrap" FontSize="12"
@@ -374,6 +385,39 @@
                                      VerticalContentAlignment="Top"
                                      Text="{Binding SettingsEditor.ExcludedFilesText}"
                                      PlaceholderText="例如:C:\Users\me\AppData\Local\Temp\keep\important.tmp"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 隔离区 -->
+                    <Border Classes="card">
+                        <StackPanel Spacing="12">
+                            <TextBlock Classes="h2" Text="隔离区"/>
+                            <TextBlock Classes="muted" TextWrapping="Wrap"
+                                       Text="开启后“永久删除”会先把文件移入隔离区,可在清理报告的“还原”中找回;超过保留天数的内容自动删除。"/>
+                            <CheckBox Content="永久删除时先移入隔离区(可还原)"
+                                      IsChecked="{Binding SettingsEditor.QuarantineEnabled}"/>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock Text="保留天数" VerticalAlignment="Center"/>
+                                <ComboBox Width="132" ItemsSource="{Binding SettingsEditor.QuarantineRetentionOptions}"
+                                          SelectedItem="{Binding SettingsEditor.SelectedQuarantineRetention}"
+                                          ToolTip.Tip="超过保留天数的隔离内容在启动应用时自动清理;“永久保留”需手动清空。">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:RetentionOption">
+                                            <TextBlock Text="{Binding Label}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Classes="secondary" Content="打开隔离区"
+                                        Command="{Binding SettingsEditor.OpenQuarantineCommand}"
+                                        ToolTip.Tip="在资源管理器中查看隔离区中的文件。"/>
+                                <Button Classes="secondary" Content="{Binding SettingsEditor.PurgeQuarantineText}"
+                                        Command="{Binding SettingsEditor.PurgeQuarantineCommand}"
+                                        ToolTip.Tip="永久删除隔离区中的全部内容,不可恢复。"/>
+                            </StackPanel>
+                            <TextBlock Classes="muted" TextWrapping="Wrap"
+                                       Text="{Binding SettingsEditor.QuarantineStatusText}"/>
                         </StackPanel>
                     </Border>
 
