@@ -35,6 +35,9 @@ public sealed record CleanupRule
     /// <summary>显示名称,例如 "用户临时文件"。</summary>
     public required string DisplayName { get; init; }
 
+    /// <summary>界面分组用的类别,例如 "系统临时与日志"。</summary>
+    public string Category { get; init; } = "其他";
+
     /// <summary>面向用户的说明,包含删除后果提示。</summary>
     public string Description { get; init; } = "";
 

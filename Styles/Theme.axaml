@@ -1,0 +1,83 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- 主题相关颜色:按系统深浅色自动切换(App.RequestedThemeVariant="Default") -->
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+            <Color x:Key="Color.Bg">#F4F6FA</Color>
+            <Color x:Key="Color.Surface">#FFFFFF</Color>
+            <Color x:Key="Color.SurfaceAlt">#EDF1F7</Color>
+            <Color x:Key="Color.SurfaceHover">#F2F5FA</Color>
+            <Color x:Key="Color.Border">#DDE4EE</Color>
+            <Color x:Key="Color.BorderStrong">#C6D0DE</Color>
+            <Color x:Key="Color.Text">#10192B</Color>
+            <Color x:Key="Color.TextSecondary">#4A5872</Color>
+            <Color x:Key="Color.TextMuted">#7C8AA3</Color>
+            <Color x:Key="Color.Accent">#2563EB</Color>
+            <Color x:Key="Color.AccentHover">#1D4ED8</Color>
+            <Color x:Key="Color.AccentSoft">#E4ECFF</Color>
+            <Color x:Key="Color.OnAccent">#FFFFFF</Color>
+            <Color x:Key="Color.Safe">#15803D</Color>
+            <Color x:Key="Color.SafeSoft">#E3F6E9</Color>
+            <Color x:Key="Color.Caution">#B45309</Color>
+            <Color x:Key="Color.CautionSoft">#FDF0D5</Color>
+            <Color x:Key="Color.High">#C62828</Color>
+            <Color x:Key="Color.HighSoft">#FBE4E4</Color>
+            <Color x:Key="Color.Admin">#2563EB</Color>
+            <Color x:Key="Color.AdminSoft">#E4ECFF</Color>
+            <Color x:Key="Color.Track">#E1E8F1</Color>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+            <Color x:Key="Color.Bg">#0D131E</Color>
+            <Color x:Key="Color.Surface">#141C29</Color>
+            <Color x:Key="Color.SurfaceAlt">#1A2432</Color>
+            <Color x:Key="Color.SurfaceHover">#1E293B</Color>
+            <Color x:Key="Color.Border">#253143</Color>
+            <Color x:Key="Color.BorderStrong">#35455C</Color>
+            <Color x:Key="Color.Text">#E8EEF8</Color>
+            <Color x:Key="Color.TextSecondary">#A6B4C8</Color>
+            <Color x:Key="Color.TextMuted">#7487A0</Color>
+            <Color x:Key="Color.Accent">#4F82FF</Color>
+            <Color x:Key="Color.AccentHover">#6B95FF</Color>
+            <Color x:Key="Color.AccentSoft">#16233F</Color>
+            <Color x:Key="Color.OnAccent">#FFFFFF</Color>
+            <Color x:Key="Color.Safe">#4ADE80</Color>
+            <Color x:Key="Color.SafeSoft">#12301F</Color>
+            <Color x:Key="Color.Caution">#F2B24C</Color>
+            <Color x:Key="Color.CautionSoft">#33240C</Color>
+            <Color x:Key="Color.High">#F27070</Color>
+            <Color x:Key="Color.HighSoft">#351618</Color>
+            <Color x:Key="Color.Admin">#6B95FF</Color>
+            <Color x:Key="Color.AdminSoft">#16233F</Color>
+            <Color x:Key="Color.Track">#253143</Color>
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+
+    <SolidColorBrush x:Key="Brush.Bg" Color="{DynamicResource Color.Bg}" />
+    <SolidColorBrush x:Key="Brush.Surface" Color="{DynamicResource Color.Surface}" />
+    <SolidColorBrush x:Key="Brush.SurfaceAlt" Color="{DynamicResource Color.SurfaceAlt}" />
+    <SolidColorBrush x:Key="Brush.SurfaceHover" Color="{DynamicResource Color.SurfaceHover}" />
+    <SolidColorBrush x:Key="Brush.Border" Color="{DynamicResource Color.Border}" />
+    <SolidColorBrush x:Key="Brush.BorderStrong" Color="{DynamicResource Color.BorderStrong}" />
+    <SolidColorBrush x:Key="Brush.Text" Color="{DynamicResource Color.Text}" />
+    <SolidColorBrush x:Key="Brush.TextSecondary" Color="{DynamicResource Color.TextSecondary}" />
+    <SolidColorBrush x:Key="Brush.TextMuted" Color="{DynamicResource Color.TextMuted}" />
+    <SolidColorBrush x:Key="Brush.Accent" Color="{DynamicResource Color.Accent}" />
+    <SolidColorBrush x:Key="Brush.AccentHover" Color="{DynamicResource Color.AccentHover}" />
+    <SolidColorBrush x:Key="Brush.AccentSoft" Color="{DynamicResource Color.AccentSoft}" />
+    <SolidColorBrush x:Key="Brush.OnAccent" Color="{DynamicResource Color.OnAccent}" />
+    <SolidColorBrush x:Key="Brush.Safe" Color="{DynamicResource Color.Safe}" />
+    <SolidColorBrush x:Key="Brush.SafeSoft" Color="{DynamicResource Color.SafeSoft}" />
+    <SolidColorBrush x:Key="Brush.Caution" Color="{DynamicResource Color.Caution}" />
+    <SolidColorBrush x:Key="Brush.CautionSoft" Color="{DynamicResource Color.CautionSoft}" />
+    <SolidColorBrush x:Key="Brush.High" Color="{DynamicResource Color.High}" />
+    <SolidColorBrush x:Key="Brush.HighSoft" Color="{DynamicResource Color.HighSoft}" />
+    <SolidColorBrush x:Key="Brush.Admin" Color="{DynamicResource Color.Admin}" />
+    <SolidColorBrush x:Key="Brush.AdminSoft" Color="{DynamicResource Color.AdminSoft}" />
+    <SolidColorBrush x:Key="Brush.Track" Color="{DynamicResource Color.Track}" />
+
+    <!-- 深浅色共用的尺寸变量 -->
+    <CornerRadius x:Key="Radius.Card">10</CornerRadius>
+    <CornerRadius x:Key="Radius.Control">6</CornerRadius>
+    <CornerRadius x:Key="Radius.Pill">100</CornerRadius>
+</ResourceDictionary>

@@ -28,16 +28,20 @@ public partial class MainWindowViewModel : ObservableObject
 
         Rules = new ObservableCollection<RuleViewModel>();
         RebuildRules();
+        ResetSettingsEditor();
         UpdateSummary();
     }
 
     /// <summary>提权重启已成功启动新实例,视图收到后应退出当前进程。</summary>
     public event EventHandler? RestartRequested;
 
-    /// <summary>请求打开设置窗口(保存后由视图调用 <see cref="ApplySettings"/>)。</summary>
-    public event EventHandler? SettingsRequested;
+    /// <summary>内嵌设置页状态(保存 / 放弃更改由 <see cref="SettingsViewModel"/> 触发)。</summary>
+    public SettingsViewModel SettingsEditor { get; private set; } = null!;
 
     public ObservableCollection<RuleViewModel> Rules { get; }
+
+    /// <summary>当前可见的规则,按类别分组(受搜索与风险筛选影响)。</summary>
+    public ObservableCollection<RuleGroupViewModel> RuleGroups { get; } = [];
 
     /// <summary>当前生效的设置(设置页保存后整体替换)。</summary>
     public BroomSettings Settings { get; private set; }
@@ -51,6 +55,8 @@ public partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanClean))]
+    [NotifyPropertyChangedFor(nameof(TotalSizeText))]
+    [NotifyPropertyChangedFor(nameof(ScanButtonText))]
     private bool _hasScanned;
 
     [ObservableProperty]
@@ -62,8 +68,65 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private bool _isProgressVisible;
 
+    /// <summary>风险等级筛选选项(Level 为 null 表示不过滤)。</summary>
+    public IReadOnlyList<RiskFilterOption> RiskFilters => RiskFilterOptions;
+
+    /// <summary>规则排序选项。</summary>
+    public IReadOnlyList<SortOption> SortOptions => SortOptionList;
+
+    private static readonly RiskFilterOption[] RiskFilterOptions =
+    [
+        new(null, "全部等级"),
+        new(RiskLevel.Safe, "安全"),
+        new(RiskLevel.Caution, "谨慎"),
+        new(RiskLevel.High, "高风险"),
+    ];
+
+    private static readonly SortOption[] SortOptionList =
+    [
+        new(RuleSort.SizeDescending, "按大小从大到小"),
+        new(RuleSort.SizeAscending, "按大小从小到大"),
+        new(RuleSort.Name, "按名称"),
+    ];
+
     [ObservableProperty]
-    private string _summaryText = "";
+    private RiskFilterOption _selectedRiskFilter = RiskFilterOptions[0];
+
+    [ObservableProperty]
+    private SortOption _selectedSortOption = SortOptionList[0];
+
+    [ObservableProperty]
+    private string _searchText = "";
+
+    /// <summary>当前处于"清理"页还是"设置"页。</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSettingsPage))]
+    private bool _isCleanPage = true;
+
+    public bool IsSettingsPage => !IsCleanPage;
+
+    /// <summary>扫描到的总量,界面上的大数字(尚未扫描时为占位符)。</summary>
+    public string TotalSizeText => HasScanned ? Formatting.FormatBytes(Rules.Sum(r => r.SizeBytes)) : "—";
+
+    /// <summary>已勾选的规则数与预计释放空间。</summary>
+    [ObservableProperty]
+    private string _selectedSummaryText = "尚未扫描";
+
+    [ObservableProperty]
+    private string _visibleCountText = "";
+
+    [ObservableProperty]
+    private bool _hasVisibleRules = true;
+
+    public string ScanButtonText => HasScanned ? "重新扫描" : "开始扫描";
+
+    public string CleanButtonText => $"清理选中({Rules.Count(r => r.IsSelected)})";
+
+    partial void OnSearchTextChanged(string value) => RefreshGroups();
+
+    partial void OnSelectedRiskFilterChanged(RiskFilterOption value) => RefreshGroups();
+
+    partial void OnSelectedSortOptionChanged(SortOption value) => RefreshGroups();
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasReport))]
@@ -121,14 +184,50 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void OpenSettings()
+    private void ShowClean() => IsCleanPage = true;
+
+    [RelayCommand]
+    private void ShowSettings()
     {
         if (IsBusy)
         {
             return;
         }
 
-        SettingsRequested?.Invoke(this, EventArgs.Empty);
+        IsCleanPage = false;
+    }
+
+    /// <summary>勾选当前筛选后可见的全部规则。</summary>
+    [RelayCommand]
+    private void SelectAllVisible() => SetVisibleSelection(true);
+
+    /// <summary>取消勾选当前筛选后可见的规则。</summary>
+    [RelayCommand]
+    private void SelectNoneVisible() => SetVisibleSelection(false);
+
+    /// <summary>只勾选安全项(推荐的清理范围)。</summary>
+    [RelayCommand]
+    private void SelectSafeOnly()
+    {
+        foreach (var rule in Rules)
+        {
+            rule.IsSelected = rule.IsSafe && MatchesFilter(rule);
+        }
+
+        UpdateSummary();
+    }
+
+    private void SetVisibleSelection(bool selected)
+    {
+        foreach (var rule in Rules)
+        {
+            if (MatchesFilter(rule))
+            {
+                rule.IsSelected = selected;
+            }
+        }
+
+        UpdateSummary();
     }
 
     /// <summary>把清理报告中可登记的失败项交给系统重启队列(不静默堆积,由用户显式触发)。</summary>
@@ -317,6 +416,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
 
         UpdateSummary();
+        RefreshGroups();
     }
 
     private void SetPendingRebootDeletes(CleanupReport report)
@@ -476,15 +576,98 @@ public partial class MainWindowViewModel : ObservableObject
 
     private void UpdateSummary()
     {
-        if (!HasScanned)
+        var selectedCount = Rules.Count(r => r.IsSelected);
+        var selectedBytes = Rules.Where(r => r.IsSelected).Sum(r => r.SizeBytes);
+        SelectedSummaryText = HasScanned
+            ? $"已勾选 {selectedCount} 项 · 预计释放 {Formatting.FormatBytes(selectedBytes)}"
+            : "尚未扫描 —— 点击“开始扫描”分析可清理的内容";
+
+        foreach (var group in RuleGroups)
         {
-            SummaryText = "尚未扫描";
+            group.Refresh();
+        }
+
+        OnPropertyChanged(nameof(TotalSizeText));
+        OnPropertyChanged(nameof(CleanButtonText));
+    }
+
+    /// <summary>按当前搜索与风险筛选重建分组,排序也在这里应用。</summary>
+    private void RefreshGroups()
+    {
+        var visible = Rules.Where(MatchesFilter).ToList();
+        var ordered = SelectedSortOption.Value switch
+        {
+            RuleSort.SizeDescending => visible.OrderByDescending(r => r.SizeBytes),
+            RuleSort.SizeAscending => visible.OrderBy(r => r.SizeBytes),
+            _ => visible.OrderBy(r => r.DisplayName),
+        };
+
+        RuleGroups.Clear();
+        foreach (var group in ordered.GroupBy(r => r.Rule.Category).OrderBy(g => CategoryRank(g.Key)))
+        {
+            RuleGroups.Add(new RuleGroupViewModel(group.Key, group.ToList()));
+        }
+
+        HasVisibleRules = visible.Count > 0;
+        VisibleCountText = visible.Count == Rules.Count
+            ? $"共 {Rules.Count} 项"
+            : $"显示 {visible.Count} / {Rules.Count} 项";
+    }
+
+    private bool MatchesFilter(RuleViewModel rule)
+    {
+        if (SelectedRiskFilter.Level is { } risk && rule.Rule.Risk != risk)
+        {
+            return false;
+        }
+
+        var query = SearchText.Trim();
+        if (query.Length == 0)
+        {
+            return true;
+        }
+
+        return rule.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase)
+            || rule.Description.Contains(query, StringComparison.OrdinalIgnoreCase)
+            || rule.Rule.Category.Contains(query, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int CategoryRank(string category)
+    {
+        var index = Array.IndexOf(CategoryOrder, category);
+        return index < 0 ? CategoryOrder.Length : index;
+    }
+
+    /// <summary>分组在界面上的先后顺序;不在名单里的类别排到最后。</summary>
+    private static readonly string[] CategoryOrder =
+    [
+        "系统临时与日志", "系统缓存", "浏览器缓存", "开发者缓存", "自定义目录", "回收站", "系统备份", "其他",
+    ];
+
+    /// <summary>从当前设置重建设置页状态(放弃未保存的更改)。</summary>
+    private void ResetSettingsEditor()
+    {
+        if (SettingsEditor is not null)
+        {
+            SettingsEditor.CloseRequested -= OnSettingsEditorCloseRequested;
+        }
+
+        SettingsEditor = new SettingsViewModel(Settings);
+        SettingsEditor.CloseRequested += OnSettingsEditorCloseRequested;
+    }
+
+    private void OnSettingsEditorCloseRequested(BroomSettings? settings)
+    {
+        if (settings is null)
+        {
+            ResetSettingsEditor();
+            StatusText = "已放弃未保存的设置更改。";
             return;
         }
 
-        var total = Rules.Sum(r => r.SizeBytes);
-        var selected = Rules.Where(r => r.IsSelected).Sum(r => r.SizeBytes);
-        SummaryText = $"共发现 {Formatting.FormatBytes(total)},已选择 {Formatting.FormatBytes(selected)}";
+        ApplySettings(settings);
+        ResetSettingsEditor();
+        IsCleanPage = true;
     }
 
     private void RebuildRules()
@@ -496,6 +679,8 @@ public partial class MainWindowViewModel : ObservableObject
             viewModel.PropertyChanged += (_, _) => UpdateSummary();
             Rules.Add(viewModel);
         }
+
+        RefreshGroups();
     }
 
     private IReadOnlyList<CleanupRule> CreateRules()

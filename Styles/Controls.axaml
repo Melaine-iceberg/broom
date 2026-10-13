@@ -1,0 +1,206 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ── 文字 ───────────────────────────────────────────── -->
+    <Style Selector="TextBlock.h1">
+        <Setter Property="FontSize" Value="20"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+    </Style>
+    <Style Selector="TextBlock.h2">
+        <Setter Property="FontSize" Value="15"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+    </Style>
+    <Style Selector="TextBlock.section">
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.TextSecondary}"/>
+    </Style>
+    <Style Selector="TextBlock.body">
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.TextSecondary}"/>
+    </Style>
+    <Style Selector="TextBlock.muted">
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}"/>
+    </Style>
+    <Style Selector="TextBlock.error">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.High}"/>
+    </Style>
+    <Style Selector="TextBlock.success">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Safe}"/>
+    </Style>
+
+    <!-- ── 容器 ───────────────────────────────────────────── -->
+    <Style Selector="Border.card">
+        <Setter Property="Background" Value="{DynamicResource Brush.Surface}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Card}"/>
+        <Setter Property="Padding" Value="16"/>
+    </Style>
+    <Style Selector="Border.hero">
+        <Setter Property="Background" Value="{DynamicResource Brush.Surface}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Card}"/>
+        <Setter Property="Padding" Value="20"/>
+    </Style>
+    <Style Selector="Border.divider">
+        <Setter Property="Background" Value="{DynamicResource Brush.Border}"/>
+        <Setter Property="Height" Value="1"/>
+        <Setter Property="Margin" Value="0,12"/>
+    </Style>
+
+    <!-- ── 徽章 ───────────────────────────────────────────── -->
+    <Style Selector="Border.badge">
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}"/>
+        <Setter Property="Padding" Value="8,2"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceAlt}"/>
+    </Style>
+    <Style Selector="Border.badge > TextBlock">
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.TextSecondary}"/>
+    </Style>
+    <Style Selector="Border.badge.safe">
+        <Setter Property="Background" Value="{DynamicResource Brush.SafeSoft}"/>
+    </Style>
+    <Style Selector="Border.badge.safe > TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Safe}"/>
+    </Style>
+    <Style Selector="Border.badge.caution">
+        <Setter Property="Background" Value="{DynamicResource Brush.CautionSoft}"/>
+    </Style>
+    <Style Selector="Border.badge.caution > TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Caution}"/>
+    </Style>
+    <Style Selector="Border.badge.high">
+        <Setter Property="Background" Value="{DynamicResource Brush.HighSoft}"/>
+    </Style>
+    <Style Selector="Border.badge.high > TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.High}"/>
+    </Style>
+    <Style Selector="Border.badge.admin">
+        <Setter Property="Background" Value="{DynamicResource Brush.AdminSoft}"/>
+    </Style>
+    <Style Selector="Border.badge.admin > TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Admin}"/>
+    </Style>
+
+    <!-- ── 按钮:强调 ─────────────────────────────────────── -->
+    <Style Selector="Button.accent">
+        <Setter Property="Background" Value="{DynamicResource Brush.Accent}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnAccent}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Control}"/>
+        <Setter Property="Padding" Value="18,9"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="Button.accent:pointerover">
+        <Setter Property="Background" Value="{DynamicResource Brush.AccentHover}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.AccentHover}"/>
+    </Style>
+    <Style Selector="Button.accent:pressed">
+        <Setter Property="Background" Value="{DynamicResource Brush.AccentHover}"/>
+        <Setter Property="Opacity" Value="0.85"/>
+    </Style>
+
+    <!-- ── 按钮:次要 / 幽灵 / 危险 ────────────────────────── -->
+    <Style Selector="Button.secondary">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceAlt}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderStrong}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Control}"/>
+        <Setter Property="Padding" Value="14,8"/>
+    </Style>
+    <Style Selector="Button.secondary:pointerover">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHover}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}"/>
+    </Style>
+    <Style Selector="Button.ghost">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.TextSecondary}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Control}"/>
+        <Setter Property="Padding" Value="10,6"/>
+    </Style>
+    <Style Selector="Button.ghost:pointerover">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHover}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+    </Style>
+    <Style Selector="Button.danger">
+        <Setter Property="Background" Value="{DynamicResource Brush.HighSoft}"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.High}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Control}"/>
+        <Setter Property="Padding" Value="10,6"/>
+    </Style>
+    <Style Selector="Button.danger:pointerover">
+        <Setter Property="Background" Value="{DynamicResource Brush.High}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.OnAccent}"/>
+    </Style>
+    <Style Selector="Button:disabled">
+        <Setter Property="Opacity" Value="0.45"/>
+    </Style>
+
+    <!-- ── 侧边栏导航项 ───────────────────────────────────── -->
+    <Style Selector="Button.nav">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.TextSecondary}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Control}"/>
+        <Setter Property="Padding" Value="12,10"/>
+        <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        <Setter Property="FontSize" Value="13"/>
+    </Style>
+    <Style Selector="Button.nav:pointerover">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHover}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+    </Style>
+    <Style Selector="Button.nav.active">
+        <Setter Property="Background" Value="{DynamicResource Brush.AccentSoft}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+
+    <!-- ── 列表行 ─────────────────────────────────────────── -->
+    <Style Selector="Border.row">
+        <Setter Property="Background" Value="{DynamicResource Brush.Surface}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Card}"/>
+        <Setter Property="Padding" Value="14,12"/>
+    </Style>
+    <Style Selector="Border.row:pointerover">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHover}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderStrong}"/>
+    </Style>
+
+    <!-- ── 输入控件 ───────────────────────────────────────── -->
+    <Style Selector="TextBox">
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Control}"/>
+        <Setter Property="MinHeight" Value="32"/>
+    </Style>
+    <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}"/>
+    </Style>
+    <Style Selector="ComboBox">
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Control}"/>
+        <Setter Property="MinHeight" Value="32"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="CheckBox">
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="ProgressBar">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}"/>
+        <Setter Property="Background" Value="{DynamicResource Brush.Track}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Pill}"/>
+        <Setter Property="Height" Value="6"/>
+    </Style>
+</Styles>

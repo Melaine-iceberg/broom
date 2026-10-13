@@ -3,6 +3,7 @@
 > 更新于 2026-10-13。记录四项计划功能的背景、方案、影响文件与验收标准;实现前先按本文档评审,实现时逐项落地。
 > 建议实施顺序:① 扫描/清理取消 → ② 管理员提权 → ③ 重启后删除 → ④ 设置页(依赖关系见文末)。
 > 实现状态(2026-10-13):四项已按建议顺序落地(取消 b34572d、提权 3b9b7e7、重启删除 08ae97c、设置 c0ecb96,取消边界补充 20d296c);引擎侧取消 / 排除前缀 / 设置持久化经临时校验程序验证,GUI 冒烟测试通过。
+> 界面重构(2026-10-13):主窗口改为「侧边栏 + 清理 / 设置两页」结构,规则按类别分组并支持搜索、风险筛选与排序;新增 `Styles/Theme.axaml`(深浅色双主题设计变量)与 `Styles/Controls.axaml`(卡片、徽章、按钮、导航样式),设置页并入主窗口,移除 `SettingsWindow`。
 
 ## 1. 扫描 / 清理取消
 
@@ -125,15 +126,15 @@
    - `bool DefaultPermanentDelete`、`bool ShowHighRiskRules`(显示/隐藏高风险类目)。
 2. 持久化:`Services/SettingsService` 读写 `%APPDATA%\broom\settings.json`(`Environment.SpecialFolder.ApplicationData`,跨平台自动落到对应目录);用 `System.Text.Json` + `JsonSerializerContext` 源生成(保持裁剪 / AOT 友好);解析失败时把坏文件改名为 `settings.bad.json` 后回退默认值。
 3. 规则合并:启动时"内置规则 + 自定义规则";扫描过滤阶段追加"全局排除前缀"判断(路径前缀匹配)。
-4. UI:工具栏"设置"按钮打开独立 `SettingsWindow`(桌面工具惯例,避免大改现有窗口结构),三个分组 —— 自定义目录(列表增删)、排除规则(多行文本)、其他选项(默认永久删除、显示高风险);保存 / 取消;保存后规则集合变化时提示或自动重扫。
+4. UI:侧边栏"设置"入口进入内嵌设置页(与"清理"页共用主窗口),三个分组 —— 自定义目录(列表增删)、排除规则(多行文本)、其他选项(默认永久删除、显示高风险);保存 / 放弃更改;保存后规则集合变化时提示或自动重扫。
 
 **影响文件**
 
-- 新增 `Core/BroomSettings.cs`、`Services/SettingsService.cs`、`ViewModels/SettingsViewModel.cs`、`ViewModels/CustomRuleViewModel.cs`、`SettingsWindow.axaml(.cs)`
+- 新增 `Core/BroomSettings.cs`、`Services/SettingsService.cs`、`ViewModels/SettingsViewModel.cs`、`ViewModels/CustomRuleViewModel.cs`
 - [Rules/WindowsRuleSet.cs](../Rules/WindowsRuleSet.cs)(规则合并入口调整)、[Services/Scanner.cs](../Services/Scanner.cs)(排除前缀过滤)
 - [ViewModels/MainWindowViewModel.cs](../ViewModels/MainWindowViewModel.cs)、[MainWindow.axaml](../MainWindow.axaml)
 
-> 实现说明:排除前缀按目录段边界匹配(避免 `C:\Temp` 误伤 `C:\Temp2`)并支持 `%ENV%` 展开;设置窗口为模态对话框,保存后仅在规则集或排除项变化时重置扫描状态并提示重扫。
+> 实现说明:排除前缀按目录段边界匹配(避免 `C:\Temp` 误伤 `C:\Temp2`)并支持 `%ENV%` 展开;设置页内嵌在主窗口侧边栏中(原先为模态对话框 `SettingsWindow`,界面重构时并入主窗口),保存后仅在规则集或排除项变化时重置扫描状态并提示重扫。
 
 **验收标准**
 

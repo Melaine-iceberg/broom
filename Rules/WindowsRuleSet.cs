@@ -16,6 +16,7 @@ public static class WindowsRuleSet
         new CleanupRule
         {
             Id = "user-temp",
+            Category = "系统临时与日志",
             DisplayName = "用户临时文件",
             Description = "当前用户的临时目录,程序正在使用的文件会自动跳过。",
             Paths = [@"%TEMP%"],
@@ -24,6 +25,7 @@ public static class WindowsRuleSet
         new CleanupRule
         {
             Id = "system-temp",
+            Category = "系统临时与日志",
             DisplayName = "系统临时文件",
             Description = @"C:\Windows\Temp 中的临时文件。",
             Paths = [@"%SystemRoot%\Temp"],
@@ -33,6 +35,7 @@ public static class WindowsRuleSet
         new CleanupRule
         {
             Id = "user-crash-dumps",
+            Category = "系统临时与日志",
             DisplayName = "应用崩溃转储",
             Description = "程序崩溃时生成的转储文件,仅用于事后诊断。",
             Paths = [@"%LOCALAPPDATA%\CrashDumps"],
@@ -41,6 +44,7 @@ public static class WindowsRuleSet
         new CleanupRule
         {
             Id = "system-crash-dumps",
+            Category = "系统临时与日志",
             DisplayName = "系统内存转储",
             Description = "系统蓝屏转储与内存转储文件,通常体积很大。",
             Paths = [@"%SystemRoot%\Minidump", @"%SystemRoot%\MEMORY.DMP"],
@@ -50,6 +54,7 @@ public static class WindowsRuleSet
         new CleanupRule
         {
             Id = "user-wer",
+            Category = "系统临时与日志",
             DisplayName = "Windows 错误报告(用户)",
             Description = "应用程序错误报告归档。",
             Paths = [@"%LOCALAPPDATA%\Microsoft\Windows\WER"],
@@ -58,6 +63,7 @@ public static class WindowsRuleSet
         new CleanupRule
         {
             Id = "system-wer",
+            Category = "系统临时与日志",
             DisplayName = "Windows 错误报告(系统)",
             Description = "系统级错误报告归档,与用户级互相独立。",
             Paths = [@"%ProgramData%\Microsoft\Windows\WER"],
@@ -67,6 +73,7 @@ public static class WindowsRuleSet
         new CleanupRule
         {
             Id = "inet-cache",
+            Category = "系统缓存",
             DisplayName = "Internet 临时文件",
             Description = "系统 Internet 临时文件缓存。",
             Paths = [@"%LOCALAPPDATA%\Microsoft\Windows\INetCache"],
@@ -75,6 +82,7 @@ public static class WindowsRuleSet
         new CleanupRule
         {
             Id = "thumbnail-cache",
+            Category = "系统缓存",
             DisplayName = "缩略图与图标缓存",
             Description = "资源管理器缩略图与图标缓存,删除后会自动重建。",
             Paths = [@"%LOCALAPPDATA%\Microsoft\Windows\Explorer"],
@@ -86,6 +94,7 @@ public static class WindowsRuleSet
         new CleanupRule
         {
             Id = "windows-update-cache",
+            Category = "系统缓存",
             DisplayName = "Windows 更新下载缓存",
             Description = "已下载的更新安装包缓存,删除后更新时可能需要重新下载。",
             Paths = [@"%SystemRoot%\SoftwareDistribution\Download"],
@@ -95,6 +104,7 @@ public static class WindowsRuleSet
         new CleanupRule
         {
             Id = "recycle-bin",
+            Category = "回收站",
             DisplayName = "回收站",
             Description = "清空回收站,清空后其中的文件将无法恢复。",
             Kind = RuleKind.RecycleBin,
@@ -103,6 +113,7 @@ public static class WindowsRuleSet
         new CleanupRule
         {
             Id = "browser-cache",
+            Category = "浏览器缓存",
             DisplayName = "浏览器网页缓存",
             Description = "Chrome / Edge / Firefox 的网页缓存,不涉及密码、Cookie 与书签。",
             Paths =
@@ -124,6 +135,7 @@ public static class WindowsRuleSet
         new CleanupRule
         {
             Id = "windows-old",
+            Category = "系统备份",
             DisplayName = "旧系统备份与升级残留",
             Description = "Windows.old 等升级残留,删除后无法回滚到升级前的系统。",
             Paths = [@"%SystemDrive%\Windows.old", @"%SystemDrive%\$WINDOWS.~BT", @"%SystemDrive%\$WINDOWS.~WS"],
@@ -133,6 +145,7 @@ public static class WindowsRuleSet
         new CleanupRule
         {
             Id = "windows-logs",
+            Category = "系统临时与日志",
             DisplayName = "Windows 组件日志",
             Description = "更新与组件安装过程产生的日志文件。",
             Paths =
@@ -150,6 +163,7 @@ public static class WindowsRuleSet
         new CleanupRule
         {
             Id = "dev-nuget",
+            Category = "开发者缓存",
             DisplayName = "开发者缓存 · NuGet",
             Description = DevHint,
             Paths = [@"%USERPROFILE%\.nuget\packages"],
@@ -158,6 +172,7 @@ public static class WindowsRuleSet
         new CleanupRule
         {
             Id = "dev-npm",
+            Category = "开发者缓存",
             DisplayName = "开发者缓存 · npm",
             Description = DevHint,
             Paths = [@"%LOCALAPPDATA%\npm-cache"],
@@ -166,6 +181,7 @@ public static class WindowsRuleSet
         new CleanupRule
         {
             Id = "dev-pip",
+            Category = "开发者缓存",
             DisplayName = "开发者缓存 · pip",
             Description = DevHint,
             Paths = [@"%LOCALAPPDATA%\pip\Cache"],
@@ -174,6 +190,7 @@ public static class WindowsRuleSet
         new CleanupRule
         {
             Id = "dev-yarn",
+            Category = "开发者缓存",
             DisplayName = "开发者缓存 · Yarn",
             Description = DevHint,
             Paths = [@"%LOCALAPPDATA%\Yarn\Cache"],
@@ -182,6 +199,7 @@ public static class WindowsRuleSet
         new CleanupRule
         {
             Id = "dev-pnpm",
+            Category = "开发者缓存",
             DisplayName = "开发者缓存 · pnpm",
             Description = DevHint,
             Paths = [@"%LOCALAPPDATA%\pnpm\store"],
@@ -190,6 +208,7 @@ public static class WindowsRuleSet
         new CleanupRule
         {
             Id = "dev-gradle",
+            Category = "开发者缓存",
             DisplayName = "开发者缓存 · Gradle",
             Description = DevHint,
             Paths = [@"%USERPROFILE%\.gradle\caches"],
@@ -198,6 +217,7 @@ public static class WindowsRuleSet
         new CleanupRule
         {
             Id = "dev-maven",
+            Category = "开发者缓存",
             DisplayName = "开发者缓存 · Maven",
             Description = DevHint,
             Paths = [@"%USERPROFILE%\.m2\repository"],
@@ -206,6 +226,7 @@ public static class WindowsRuleSet
         new CleanupRule
         {
             Id = "dev-go",
+            Category = "开发者缓存",
             DisplayName = "开发者缓存 · Go 构建缓存",
             Description = DevHint,
             Paths = [@"%LOCALAPPDATA%\go-build"],
@@ -214,6 +235,7 @@ public static class WindowsRuleSet
         new CleanupRule
         {
             Id = "dev-cargo",
+            Category = "开发者缓存",
             DisplayName = "开发者缓存 · Cargo",
             Description = DevHint,
             Paths = [@"%USERPROFILE%\.cargo\registry\cache"],
@@ -241,6 +263,7 @@ public static class WindowsRuleSet
     private static CleanupRule ToCleanupRule(CustomRule custom) => new()
     {
         Id = $"custom-{custom.Path}",
+        Category = "自定义目录",
         DisplayName = string.IsNullOrWhiteSpace(custom.Name) ? $"自定义:{custom.Path}" : custom.Name,
         Description = "来自设置的自定义目录。",
         Paths = [custom.Path],
