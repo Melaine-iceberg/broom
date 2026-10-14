@@ -6,6 +6,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- 发布元数据:exe 图标与文件属性(版本以这里为准,打包脚本从此处读取) -->
+    <ApplicationIcon>Assets\broom.ico</ApplicationIcon>
+    <Version>1.0.0</Version>
+    <Product>broom</Product>
+    <AssemblyTitle>broom</AssemblyTitle>
+    <Description>Windows 垃圾清理工具</Description>
+    <Company>broom</Company>
+    <Copyright>Copyright © 2026 broom</Copyright>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MSIX 打包清单模板。打包脚本(packaging/package.ps1)会替换占位符后放进包布局:
+    {{VERSION}}                包版本(四段式,如 1.0.0.0),取自 broom.csproj <Version>
+    {{PUBLISHER}}              Identity.Publisher,必须与签名证书主题完全一致
+    {{DISPLAY_NAME}}           显示名
+    {{PUBLISHER_DISPLAY_NAME}} 发布者显示名
+    {{DESCRIPTION}}            应用说明
+  徽标 PNG 由脚本从 Assets/broom.ico 生成到布局的 Assets\ 下(44 / 50 / 150 / 310 方形 + 310x150 宽)。
+-->
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+         xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+         xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+         IgnorableNamespaces="uap rescap">
+  <Identity Name="Broom.Desktop"
+            Publisher="{{PUBLISHER}}"
+            Version="{{VERSION}}" />
+  <Properties>
+    <DisplayName>{{DISPLAY_NAME}}</DisplayName>
+    <PublisherDisplayName>{{PUBLISHER_DISPLAY_NAME}}</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+  <Applications>
+    <!-- 桌面桥:Win32 应用入口 -->
+    <Application Id="broom" Executable="broom.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements DisplayName="{{DISPLAY_NAME}}"
+                          Description="{{DESCRIPTION}}"
+                          BackgroundColor="transparent"
+                          Square150x150Logo="Assets\Logo150.png"
+                          Square44x44Logo="Assets\Logo44.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310.png" Square310x310Logo="Assets\Logo310.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>

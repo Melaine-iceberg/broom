@@ -18,6 +18,7 @@
 > P2 收口(2026-10-14):「动作型规则」模型落地(本文档第 18 项),backlog 第 10、11 项与第 6 项遗留的事件日志 / DNS 类目随之实现;backlog 第 9 项(本文档第 19 项)以「清理后移除空目录」开关落地 —— **P2 全部完成**,仅 DriverStore 类目继续遗留。
 > P3 自动化(2026-10-14):backlog 第 12–14 项(本文档第 20–22 项)已落地 —— 定时自动清理 + 托盘常驻、命令行 / 无人值守、清理历史与累计统计;扫描 / 清理流程下沉为 `CleanupWorkflow`,GUI、CLI 与自动清理共用一条流水线。**P3 全部完成**;验证情况见各项实现说明。
 > 多语言(2026-10-14):backlog 第 18 项(本文档第 23 项)已落地 —— 中文 + 英文双语言,默认跟随系统语言;文案键即中文原文(gettext 风格),规则数据在创建时按语言解析;验证情况见该项实现说明。
+> 打包分发(2026-10-14):backlog 第 19 项(本文档第 24 项)已落地 —— exe 图标与版本信息、自包含单文件便携包与 MSIX 安装包(Windows SDK makeappx / signtool 打包签名)、便携模式与 GUI 单实例;**P4 全部完成**;验证情况见该项实现说明。
 
 ## 1. 扫描 / 清理取消
 
@@ -829,6 +830,43 @@
 - 新增文案:中文照常写在代码 / AXAML,并在两个 resx 同键补条目(测试校验英译完整性);
 - `dotnet test` 全部通过。
 
+## 24. 打包分发(图标 / 版本、便携包与 MSIX)
+
+> 来源:backlog 第 19 项(P4 · 体验与分发)。
+
+**目标**:除 `dotnet run` 外有可直接分发的产物 —— 带图标与版本信息的 exe、自包含单文件便携包与 MSIX 安装包,由一键脚本产出;附带便携模式与 GUI 单实例。
+
+**现状(实现前)**
+
+- 只能 `dotnet run` / 裸 `dotnet publish`:exe 无图标、无版本号,没有安装包;
+- 设置 / 历史固定写 `%APPDATA%\broom`,隔离区固定写 `%LOCALAPPDATA%\broom\quarantine`,拷走程序目录带不走数据;
+- GUI 可重复启动,开出多个主窗口与多个托盘实例。
+
+**方案**
+
+1. 图标与版本:[broom.csproj](../broom.csproj) 设 `ApplicationIcon`(Assets\broom.ico)与 `Version` / `Product` / `Company` / `Description` / `Copyright`,Win32 版本资源自动生成;[app.manifest](../app.manifest) 的 assemblyIdentity 版本与之同步;打包脚本从 `<Version>` 读版本号,单一来源;
+2. 便携模式:[Core/AppPaths.cs](../Core/AppPaths.cs) —— exe 同目录有 `portable.txt` 标记时,设置 / 清理历史写 exe 同目录 `data\`,隔离区写 `data\quarantine`;无标记时保持原路径不变。[SettingsService](../Services/SettingsService.cs) / [CleanupHistoryService](../Services/CleanupHistoryService.cs) / [QuarantineService](../Platform/QuarantineService.cs) 的默认目录统一走 `AppPaths`,显式注入目录(测试、调用方)行为不变;
+3. 单实例:[Core/SingleInstanceGuard.cs](../Core/SingleInstanceGuard.cs) 命名 Mutex(`Local\broom.SingleInstance`),[Program.cs](../Program.cs) 仅 GUI 路径抢锁,已有实例在跑时静默退出;命令行 / 无人值守不加锁,计划任务自动清理可与界面并行;
+4. 打包脚本:[packaging/package.ps1](../packaging/package.ps1) —— `dotnet publish` 自包含发布两份(单文件版 → 便携 zip,内带 `portable.txt` 便携标记;多文件版 → MSIX 包布局),从 ico 生成 MSIX 徽标 PNG(44 / 50 / 150 / 310 方形 + 310x150 宽),按 [packaging/msix/AppxManifest.xml](../packaging/msix/AppxManifest.xml) 模板生成清单(桌面桥 Win32 入口 + runFullTrust),`makeappx.exe` 打包、`signtool.exe` 签名并导出 `.cer`;缺省复用 / 生成 `CN=broom` 自签名开发证书,`-CertThumbprint` 可换正式代码签名证书;
+5. 本期不做(方案要点中的可选项):更新检查、Inno Setup 备选安装包 —— MSIX 已覆盖安装分发,有需要再补。
+
+**影响文件**
+
+- 新增 [Core/AppPaths.cs](../Core/AppPaths.cs)、[Core/SingleInstanceGuard.cs](../Core/SingleInstanceGuard.cs)、[packaging/package.ps1](../packaging/package.ps1)、[packaging/msix/AppxManifest.xml](../packaging/msix/AppxManifest.xml)
+- [broom.csproj](../broom.csproj)(图标与版本元数据)、[app.manifest](../app.manifest)(版本同步)、[Program.cs](../Program.cs)(单实例)
+- [Services/SettingsService.cs](../Services/SettingsService.cs)、[Services/CleanupHistoryService.cs](../Services/CleanupHistoryService.cs)、[Platform/QuarantineService.cs](../Platform/QuarantineService.cs)(默认目录走 AppPaths)
+- 新增 [broom.Tests/AppPathsTests.cs](../broom.Tests/AppPathsTests.cs)、[broom.Tests/SingleInstanceGuardTests.cs](../broom.Tests/SingleInstanceGuardTests.cs)
+
+> 实现说明:MSIX 直接用 Windows SDK 的 `makeappx.exe` / `signtool.exe` 打包签名,脚本自动在 Windows Kits 里定位,不需要第三方打包工具。清单校验揪出一条硬规则 —— `Square310x310Logo` 与 `Wide310x150Logo` 必须成对出现,徽标据此补齐 310x150 宽图;徽标由脚本从现有 32px ico 帧放大生成,观感偏软,后续补高分辨率图标源即可整体替换。验证环境非管理员:`.msix` 签名经 `signtool verify /pa` 验证通过;安装路径用开发者模式 `Add-AppxPackage -Register` 注册包布局验证(`Get-AppxPackage` 显示 Broom.Desktop 1.0.0.0 状态 Ok,包内 exe 冒烟通过),完整 `Add-AppxPackage -Path *.msix` 安装留在有信任权限的机器执行 —— 部署服务只认本机证书库,自签名证书需管理员导入 `Cert:\LocalMachine\TrustedPeople`(README 已写明步骤),正式代码签名证书无此步骤。单文件便携包 CLI 冒烟(`--help`)与 GUI 冒烟(启动存活、二次启动被单实例拦截)通过。验证:180 项测试全绿(新增便携路径解析 5 项、单实例互斥 4 项)。
+
+**验收标准**
+
+- `packaging\package.ps1` 一键产出便携 zip 与 MSIX(附 `.cer`),exe 带图标与版本信息(1.0.0.0);
+- 便携包解压即用:`portable.txt` 在场时设置 / 历史 / 隔离区都写 exe 同目录 `data\`,拷走目录数据跟随;无标记时数据仍在用户配置目录原路径;
+- GUI 单实例:重复启动静默退出;命令行不受限,可与界面并行;
+- MSIX 清单合法(makeappx 校验通过)、签名有效;开发者模式注册成功、包内应用可运行;
+- `dotnet test` 全部通过。
+
 ## 依赖关系与建议顺序
 
 | 顺序 | 项 | 理由 |
@@ -856,5 +894,6 @@
 | 21 | 命令行 CLI / 无人值守 | 先把扫描 / 清理流程从 ViewModel 下沉为服务,是第 20 项自动清理的前置 |
 | 22 | 清理历史与累计统计 | 只加历史服务与清理页统计;第 20、21 项的清理结果同样写入 |
 | 23 | 多语言(i18n) | 全局文案改造,独立于功能项;在其余项稳定后落地,避免大面积冲突 |
+| 24 | 打包分发 | 只加版本元数据、数据目录解析、单实例与打包脚本;依赖各功能项稳定后再冻结产物 |
 
 各项相互独立,可单独交付;建议每项完成后跑一次「扫描 → 清理 → 报告」全流程,外加一次 GUI 冒烟测试(启动应用、确认窗口创建、关闭)。

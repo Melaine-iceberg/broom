@@ -2,6 +2,7 @@
 using System;
 using System.Threading;
 using broom.Cli;
+using broom.Core;
 using broom.Localization;
 
 namespace broom;
@@ -29,6 +30,13 @@ class Program
             };
 
             return CliRunner.Run(args, Console.Out, Console.Error, ct: cts.Token);
+        }
+
+        // GUI 单实例:已有实例在跑时静默退出(命令行 / 无人值守不受限,可与界面并行)
+        using var singleInstance = SingleInstanceGuard.TryAcquire();
+        if (singleInstance is null)
+        {
+            return 0;
         }
 
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);

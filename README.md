@@ -20,6 +20,7 @@ Windows 磁盘清理工具:把「什么是垃圾」写成纯数据规则,先扫�
 - **自动化与托盘**:每周 / 每月 / 每天定时自动清理(范围可预期:仅安全项或上次勾选,一律走回收站),托盘常驻、可关闭窗口后继续运行;磁盘可用空间低于阈值时弹出提醒
 - **清理历史**:每次清理(含自动清理与命令行)计入 `%APPDATA%\broom\history.json`,界面展示「本次释放 / 累计释放」与最近记录
 - **中英双语**:文案跟随系统语言(中文系统显示中文,其余显示英文);界面、规则、报告与命令行输出全部本地化,资源见 [Localization](Localization/Strings.resx)
+- **安装与便携**:一键打包脚本产出 MSIX 安装包与自包含单文件便携包(带图标与版本信息);便携模式数据跟随程序目录,GUI 单实例不重复启动
 
 ## 构建与运行
 
@@ -29,10 +30,35 @@ Windows 磁盘清理工具:把「什么是垃圾」写成纯数据规则,先扫�
 dotnet run                      # 开发运行(默认普通权限)
 dotnet build -c Release         # 构建
 dotnet test broom.slnx          # 全量单元测试
-dotnet publish -c Release       # 发布(打包分发方案见 backlog 第 19 项)
+powershell -File packaging\package.ps1   # 发布打包:便携 zip + MSIX(产物在 artifacts\)
 ```
 
 默认以普通权限运行;清理系统目录(如 `C:\Windows\Temp`、Prefetch)需要管理员权限,清理失败时应用会提示一键重启提权。
+
+## 发布打包
+
+[packaging/package.ps1](packaging/package.ps1) 一键产出两种分发物,版本号以 [broom.csproj](broom.csproj) 的 `<Version>` 为准:
+
+| 产物 | 说明 |
+|---|---|
+| `artifacts/broom-<版本>-win-x64-portable.zip` | 自包含单文件便携包,解压即用、无需安装 .NET 运行时;内带 `portable.txt` 便携模式标记 |
+| `artifacts/broom-<版本>-win-x64.msix` | MSIX 安装包(exe 带图标与版本信息),附 `.cer` 公钥证书 |
+
+打 MSIX 需要 Windows SDK 的 `makeappx.exe` / `signtool.exe`(脚本在已安装的 Windows Kits 里自动定位)。常用参数:`-Runtime win-arm64|win-x86` 换架构、`-CertThumbprint <指纹>` 用正式代码签名证书、`-SkipMsix` / `-SkipPortable` 只打一种。
+
+**MSIX 安装**:签名链必须终结在受信任的根。正式代码签名证书直接安装;自签名开发证书(脚本缺省生成 / 复用 `CurrentUser\My` 下主题 `CN=broom` 的证书)需先以管理员建立信任:
+
+```powershell
+Import-Certificate -FilePath artifacts\broom-<版本>-win-x64.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople
+Add-AppxPackage -Path artifacts\broom-<版本>-win-x64.msix
+Get-AppxPackage Broom.Desktop | Remove-AppxPackage   # 卸载
+```
+
+开发者模式(设置 → 面向开发人员)下可免证书信任,直接注册包布局试用:`Add-AppxPackage -Register artifacts\msix-layout\AppxManifest.xml`。
+
+**便携模式**:便携 zip 解压目录已带 `portable.txt`;手工分发也可以在 `broom.exe` 同目录放一个 `portable.txt`。此时设置、清理历史与隔离区都写入同目录的 `data\`,整个目录可直接拷走;删除该文件即恢复常规模式(数据回用户配置目录)。
+
+**单实例**:GUI 同时只运行一个实例,重复启动静默退出;命令行 / 无人值守不受限,可与界面并行执行。
 
 ## 命令行与自动化
 
@@ -87,6 +113,8 @@ broom --clean all --yes                   # 清理全部规则(含谨慎与高�
 | 隔离区(永久删除暂存、可还原) | `%LOCALAPPDATA%\broom\quarantine`,按清理会话分目录,按保留天数自动清理 |
 | 重启后删除登记 | 由系统在下次启动时处理,无需人工干预 |
 
+便携模式下(broom.exe 同目录存在 `portable.txt`):设置与历史改存 `<exe目录>\data\`,隔离区改存 `<exe目录>\data\quarantine`,其余不变。
+
 ## 项目结构
 
 ```
@@ -99,6 +127,7 @@ Platform/   Windows 能力:回收站、提权、隔离区、重删、还原点�
 ViewModels/ MVVM 视图模型(CommunityToolkit.Mvvm)
 Styles/     主题变量与控件样式(深浅色双主题)
 broom.Tests/ xUnit 单元测试
+packaging/  发布打包:便携 zip + MSIX 脚本与 MSIX 清单模板
 docs/       roadmap(已设计 / 已实现)与 backlog(未实现清单)
 ```
 

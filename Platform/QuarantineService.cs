@@ -1,20 +1,21 @@
 using System.Globalization;
+using broom.Core;
 
 namespace broom.Platform;
 
 /// <summary>
-/// 隔离区存储:%LOCALAPPDATA%\broom\quarantine。每次清理建一个时间戳会话目录,文件按原路径暂存在其中,
+/// 隔离区存储:默认 %LOCALAPPDATA%\broom\quarantine(便携模式见 <see cref="AppPaths"/>:exe 同目录 data\quarantine)。
+/// 每次清理建一个时间戳会话目录,文件按原路径暂存在其中,
 /// 这里负责会话创建、用量统计、过期清理与整体清空;会话内的移动 / 还原见 <see cref="QuarantineSession"/>。
 /// </summary>
 public sealed class QuarantineService
 {
     private readonly string _rootPath;
 
-    /// <param name="rootPath">隔离区根目录;留空时使用 %LOCALAPPDATA%\broom\quarantine。</param>
+    /// <param name="rootPath">隔离区根目录;留空时使用 <see cref="AppPaths.QuarantineDirectory"/>。</param>
     public QuarantineService(string? rootPath = null)
     {
-        _rootPath = rootPath ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "broom", "quarantine");
+        _rootPath = rootPath ?? AppPaths.QuarantineDirectory;
     }
 
     public string RootPath => _rootPath;

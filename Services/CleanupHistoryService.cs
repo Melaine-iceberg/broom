@@ -4,7 +4,8 @@ using broom.Core;
 namespace broom.Services;
 
 /// <summary>
-/// 清理历史:每次清理向 %APPDATA%\broom\history.json 追加一条记录(时间、来源、条目数、字节数、逐条规则)。
+/// 清理历史:每次清理向 history.json(目录见 <see cref="AppPaths.DataDirectory"/>)追加一条记录
+/// (时间、来源、条目数、字节数、逐条规则)。
 /// 文件损坏时改名为 history.bad.json 并从空历史重新开始,不影响清理本身。
 /// 超过 <see cref="MaxEntries"/> 条时丢弃最旧的记录,避免文件无限增长。
 /// </summary>
@@ -18,10 +19,10 @@ public sealed class CleanupHistoryService
     private readonly string _directory;
     private readonly string _filePath;
 
-    /// <param name="directory">历史目录;留空时使用 %APPDATA%\broom(测试可注入临时目录隔离)。</param>
+    /// <param name="directory">历史目录;留空时使用 <see cref="AppPaths.DataDirectory"/>(测试可注入临时目录隔离)。</param>
     public CleanupHistoryService(string? directory = null)
     {
-        _directory = directory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "broom");
+        _directory = directory ?? AppPaths.DataDirectory;
         _filePath = Path.Combine(_directory, "history.json");
     }
 
