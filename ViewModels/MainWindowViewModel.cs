@@ -980,7 +980,7 @@ public partial class MainWindowViewModel : ObservableObject
     /// <summary>分组在界面上的先后顺序;不在名单里的类别排到最后。</summary>
     private static readonly string[] CategoryOrder =
     [
-        "系统临时与日志", "系统缓存", "浏览器缓存", "开发者缓存", "自定义目录", "回收站", "系统备份", "其他",
+        "系统临时与日志", "系统缓存", "使用痕迹", "浏览器缓存", "浏览器隐私", "应用缓存", "开发者缓存", "自定义目录", "回收站", "系统备份", "其他",
     ];
 
     /// <summary>从当前设置重建设置页状态(放弃未保存的更改)。</summary>

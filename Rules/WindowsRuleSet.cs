@@ -10,6 +10,34 @@ public static class WindowsRuleSet
 {
     private const string DevHint = "下次构建或安装依赖时需要重新下载 / 重新编译。";
 
+    /// <summary>Chromium 系浏览器的缓存子目录名;各版本大同小异,不存在的会被自然跳过。</summary>
+    private static readonly string[] ChromiumCacheFolders = ["Cache", "Code Cache", "GPUCache", "ShaderCache", "GrShaderCache", "DawnCache"];
+
+    /// <summary>
+    /// Chromium 系浏览器的配置档案根目录,缓存规则与隐私规则共用同一份覆盖面。
+    /// Opera 没有 User Data 层,配置根即缓存所在目录。
+    /// </summary>
+    private static readonly string[] ChromiumProfileRoots =
+    [
+        @"%LOCALAPPDATA%\Google\Chrome\User Data\*",
+        @"%LOCALAPPDATA%\Microsoft\Edge\User Data\*",
+        @"%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\*",
+        @"%LOCALAPPDATA%\Vivaldi\User Data\*",
+        @"%LOCALAPPDATA%\Opera Software\Opera Stable",
+        @"%LOCALAPPDATA%\Opera Software\Opera GX Stable",
+        @"%LOCALAPPDATA%\360Chrome\Chrome\User Data\*",
+        @"%LOCALAPPDATA%\360se6\User Data\*",
+        @"%APPDATA%\360se6\User Data\*",
+        @"%LOCALAPPDATA%\Tencent\QQBrowser\User Data\*",
+    ];
+
+    /// <summary>Firefox 配置档案根目录:标准位于 Roaming,部分便携 / 企业部署放在 Local。</summary>
+    private static readonly string[] FirefoxProfileRoots =
+    [
+        @"%APPDATA%\Mozilla\Firefox\Profiles\*",
+        @"%LOCALAPPDATA%\Mozilla\Firefox\Profiles\*",
+    ];
+
     private static readonly CleanupRule[] BuiltInRules =
     [
         // ── A 级:可放心清理 ───────────────────────────────
@@ -89,6 +117,23 @@ public static class WindowsRuleSet
             IncludePatterns = ["thumbcache_*.db", "iconcache_*.db"],
             Recommended = true,
         },
+        new CleanupRule
+        {
+            Id = "user-font-cache",
+            Category = "系统缓存",
+            DisplayName = "字体缓存(用户)",
+            Description = "当前用户的字体缓存,删除后系统自动重建;重建完成前个别应用的字体渲染可能短暂异常。",
+            Paths = [@"%LOCALAPPDATA%\Microsoft\Windows\FontCache"],
+        },
+        new CleanupRule
+        {
+            Id = "system-font-cache",
+            Category = "系统缓存",
+            DisplayName = "字体缓存(系统)",
+            Description = "系统服务使用的字体缓存,删除后自动重建。",
+            Paths = [@"%SystemRoot%\ServiceProfiles\LocalService\AppData\Local\FontCache"],
+            RequiresAdmin = true,
+        },
 
         // ── B 级:需谨慎,默认不勾选 ────────────────────────
         new CleanupRule
@@ -100,6 +145,45 @@ public static class WindowsRuleSet
             Paths = [@"%SystemRoot%\SoftwareDistribution\Download"],
             Risk = RiskLevel.Caution,
             RequiresAdmin = true,
+        },
+        new CleanupRule
+        {
+            Id = "system-prefetch",
+            Category = "系统缓存",
+            DisplayName = "预读取文件(Prefetch)",
+            Description = "Windows 为程序启动生成的预读记录;删除后系统会重建,近期应用首次启动可能略慢。",
+            Paths = [@"%SystemRoot%\Prefetch"],
+            Risk = RiskLevel.Caution,
+            RequiresAdmin = true,
+        },
+        new CleanupRule
+        {
+            Id = "delivery-optimization",
+            Category = "系统缓存",
+            DisplayName = "传递优化文件",
+            Description = "Windows 更新经 P2P 分发留下的下载缓存;需要时会重新下载。",
+            Paths = [@"%SystemRoot%\ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization\Cache"],
+            Risk = RiskLevel.Caution,
+            RequiresAdmin = true,
+        },
+        new CleanupRule
+        {
+            Id = "upgrade-residue",
+            Category = "系统临时与日志",
+            DisplayName = "系统升级残留与安装日志",
+            Description = @"$WinREAgent、C:\Windows\Panther 等升级 / 安装日志与临时残留;删除后无法再查看安装日志,不影响已安装的系统。",
+            Paths = [@"%SystemDrive%\$WinREAgent", @"%SystemRoot%\Panther", @"%SystemRoot%\Logs\MoSetup"],
+            Risk = RiskLevel.Caution,
+            RequiresAdmin = true,
+        },
+        new CleanupRule
+        {
+            Id = "usage-traces",
+            Category = "使用痕迹",
+            DisplayName = "最近使用的文档与跳转列表",
+            Description = "资源管理器「最近使用」与任务栏跳转列表(含固定项)的记录;不影响文档本身,列表从头开始重新积累。",
+            Paths = [@"%APPDATA%\Microsoft\Windows\Recent"],
+            Risk = RiskLevel.Caution,
         },
         new CleanupRule
         {
@@ -115,22 +199,38 @@ public static class WindowsRuleSet
             Id = "browser-cache",
             Category = "浏览器缓存",
             DisplayName = "浏览器网页缓存",
-            Description = "Chrome / Edge / Firefox 的网页缓存,不涉及密码、Cookie 与书签。",
-            Paths =
-            [
-                @"%LOCALAPPDATA%\Google\Chrome\User Data\*\Cache",
-                @"%LOCALAPPDATA%\Google\Chrome\User Data\*\Code Cache",
-                @"%LOCALAPPDATA%\Google\Chrome\User Data\*\GPUCache",
-                @"%LOCALAPPDATA%\Google\Chrome\User Data\*\ShaderCache",
-                @"%LOCALAPPDATA%\Google\Chrome\User Data\*\GrShaderCache",
-                @"%LOCALAPPDATA%\Microsoft\Edge\User Data\*\Cache",
-                @"%LOCALAPPDATA%\Microsoft\Edge\User Data\*\Code Cache",
-                @"%LOCALAPPDATA%\Microsoft\Edge\User Data\*\GPUCache",
-                @"%LOCALAPPDATA%\Microsoft\Edge\User Data\*\ShaderCache",
-                @"%LOCALAPPDATA%\Microsoft\Edge\User Data\*\GrShaderCache",
-                @"%LOCALAPPDATA%\Mozilla\Firefox\Profiles\*\cache2",
-            ],
+            Description = "Chrome / Edge / Brave / Opera / Vivaldi / 360 / QQ 浏览器 / Firefox 的网页缓存,不涉及密码、Cookie 与书签。",
+            Paths = BrowserCachePaths(),
             Risk = RiskLevel.Caution,
+        },
+        new CleanupRule
+        {
+            Id = "browser-privacy-cookies",
+            Category = "浏览器隐私",
+            DisplayName = "浏览器 Cookie 与登录状态",
+            Description = "删除各浏览器保存的 Cookie(不含已保存的密码);所有网站的登录状态都会丢失,需要重新登录,网银等站点可能要求重新验证身份。浏览器运行中被占用的文件会跳过,建议先退出浏览器。",
+            Paths = BrowserProfilePaths(),
+            IncludePatterns = ["Cookies", "Cookies-journal", "cookies.sqlite", "cookies.sqlite-wal", "cookies.sqlite-shm"],
+            Risk = RiskLevel.High,
+        },
+        new CleanupRule
+        {
+            Id = "browser-privacy-history",
+            Category = "浏览器隐私",
+            DisplayName = "浏览器历史与会话",
+            Description = "删除浏览历史、常访问站点与标签页会话记录(不含书签与已保存的密码);自动补全的网址建议随之消失,且不可恢复(除非浏览器已开启同步)。",
+            Paths = BrowserProfilePaths(),
+            IncludePatterns =
+            [
+                "History", "History-journal", "Visited Links",
+                "Top Sites", "Top Sites-journal", "Favicons", "Favicons-journal",
+                "Shortcuts", "Shortcuts-journal",
+                "Current Session", "Current Tabs", "Last Session", "Last Tabs", "Session_*",
+                "places.sqlite", "places.sqlite-wal", "places.sqlite-shm",
+                "favicons.sqlite", "favicons.sqlite-wal", "favicons.sqlite-shm",
+                "sessionstore.jsonlz4", "recovery.jsonlz4", "previous.jsonlz4", "upgrade.jsonlz4*",
+            ],
+            Risk = RiskLevel.High,
         },
         new CleanupRule
         {
@@ -157,6 +257,115 @@ public static class WindowsRuleSet
             ],
             Risk = RiskLevel.Caution,
             RequiresAdmin = true,
+        },
+
+        // ── 应用缓存:可重建但需重新下载;聊天类只清缓存子目录 ──
+        new CleanupRule
+        {
+            Id = "chat-wechat",
+            Category = "应用缓存",
+            DisplayName = "应用缓存 · 微信",
+            Description = "只清微信 FileStorage 下的 Cache / Temp 缓存子目录;聊天记录数据库与图片 / 视频 / 文件原目录不在清理范围内,缺失的缓存内容联网后重新加载。",
+            Paths =
+            [
+                @"%USERPROFILE%\Documents\WeChat Files\*\FileStorage\Cache",
+                @"%USERPROFILE%\Documents\WeChat Files\*\FileStorage\Temp",
+                @"%USERPROFILE%\Documents\xwechat_files\*\FileStorage\Cache",
+                @"%USERPROFILE%\Documents\xwechat_files\*\FileStorage\Temp",
+            ],
+            Risk = RiskLevel.Caution,
+        },
+        new CleanupRule
+        {
+            Id = "chat-qq",
+            Category = "应用缓存",
+            DisplayName = "应用缓存 · QQ",
+            Description = "只清 Tencent Files 下的 Cache / Temp 缓存子目录;聊天记录数据库(Msg3.0.db / nt_msg.db 等)、FileRecv 接收文件与图片 / 视频原目录不在清理范围内。",
+            Paths =
+            [
+                @"%USERPROFILE%\Documents\Tencent Files\*\FileStorage\Cache",
+                @"%USERPROFILE%\Documents\Tencent Files\*\FileStorage\Temp",
+            ],
+            Risk = RiskLevel.Caution,
+        },
+        new CleanupRule
+        {
+            Id = "chat-dingtalk",
+            Category = "应用缓存",
+            DisplayName = "应用缓存 · 钉钉",
+            Description = "只清表情 / 头像 / 聊天图片缓存目录;聊天记录与收发的文件不清理,缓存内容联网后重新加载。",
+            Paths =
+            [
+                @"%APPDATA%\DingTalk\defEmotion",
+                @"%APPDATA%\DingTalk\*\AvatarFiles",
+                @"%APPDATA%\DingTalk\*\ImageFiles",
+            ],
+            Risk = RiskLevel.Caution,
+        },
+        new CleanupRule
+        {
+            Id = "collab-cache",
+            Category = "应用缓存",
+            DisplayName = "应用缓存 · Teams / Discord / Slack",
+            Description = "Teams / Discord / Slack 的网页与渲染缓存;设置、登录令牌与本地数据库不清理。新版 Teams 按微软文档清缓存,清理后可能需要重新登录。",
+            Paths =
+            [
+                @"%APPDATA%\Microsoft\Teams\Cache",
+                @"%APPDATA%\Microsoft\Teams\Code Cache",
+                @"%APPDATA%\Microsoft\Teams\GPUCache",
+                @"%APPDATA%\Microsoft\Teams\blob_storage",
+                @"%APPDATA%\Microsoft\Teams\tmp",
+                @"%APPDATA%\discord\Cache",
+                @"%APPDATA%\discord\Code Cache",
+                @"%APPDATA%\discord\GPUCache",
+                @"%APPDATA%\discord\blob_storage",
+                @"%APPDATA%\discord\DawnCache",
+                @"%APPDATA%\Slack\Cache",
+                @"%APPDATA%\Slack\Code Cache",
+                @"%APPDATA%\Slack\GPUCache",
+                @"%APPDATA%\Slack\blob_storage",
+                @"%APPDATA%\Slack\Service Worker\CacheStorage",
+                @"%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams",
+            ],
+            Risk = RiskLevel.Caution,
+        },
+        new CleanupRule
+        {
+            Id = "office-onedrive",
+            Category = "应用缓存",
+            DisplayName = "应用缓存 · Office / OneDrive",
+            Description = "Office 文档协同编辑缓存与 OneDrive 客户端 / 安装日志;不影响云端与本地已同步的文件,重新打开文档时可能需要重新下载。",
+            Paths =
+            [
+                @"%LOCALAPPDATA%\Microsoft\Office\16.0\OfficeFileCache",
+                @"%LOCALAPPDATA%\Microsoft\Office\OTele",
+                @"%LOCALAPPDATA%\Microsoft\OneDrive\logs",
+                @"%LOCALAPPDATA%\Microsoft\OneDrive\setup\logs",
+            ],
+            Risk = RiskLevel.Caution,
+        },
+        new CleanupRule
+        {
+            Id = "media-spotify",
+            Category = "应用缓存",
+            DisplayName = "应用缓存 · Spotify",
+            Description = "Spotify 的歌曲与界面缓存;离线下载的音乐需要重新缓存。",
+            Paths = [@"%LOCALAPPDATA%\Spotify\Storage", @"%LOCALAPPDATA%\Spotify\Data"],
+            Risk = RiskLevel.Caution,
+        },
+        new CleanupRule
+        {
+            Id = "uwp-localcache",
+            Category = "应用缓存",
+            DisplayName = "应用缓存 · 商店应用(UWP)",
+            Description = "商店应用 LocalCache 下的缓存(磁盘紧张时系统本就可能清除);不触碰 LocalState / RoamingState 中的应用数据,个别应用可能需要重新下载资源。",
+            Paths =
+            [
+                @"%LOCALAPPDATA%\Packages\*\LocalCache\Local",
+                @"%LOCALAPPDATA%\Packages\*\LocalCache\Low",
+                @"%LOCALAPPDATA%\Packages\*\LocalCache\Roaming",
+            ],
+            Risk = RiskLevel.Caution,
         },
 
         // ── 开发者缓存:可重建,但代价是重新下载 ────────────
@@ -258,6 +467,35 @@ public static class WindowsRuleSet
         }
 
         return rules;
+    }
+
+    /// <summary>各浏览器配置档案下的缓存目录全集。</summary>
+    private static string[] BrowserCachePaths()
+    {
+        var paths = new List<string>(ChromiumProfileRoots.Length * ChromiumCacheFolders.Length + FirefoxProfileRoots.Length);
+        foreach (var root in ChromiumProfileRoots)
+        {
+            foreach (var folder in ChromiumCacheFolders)
+            {
+                paths.Add($@"{root}\{folder}");
+            }
+        }
+
+        foreach (var root in FirefoxProfileRoots)
+        {
+            paths.Add($@"{root}\cache2");
+        }
+
+        return [.. paths];
+    }
+
+    /// <summary>各浏览器配置档案根目录,隐私规则按文件名模式在其下精确匹配。</summary>
+    private static string[] BrowserProfilePaths()
+    {
+        var paths = new List<string>(ChromiumProfileRoots.Length + FirefoxProfileRoots.Length);
+        paths.AddRange(ChromiumProfileRoots);
+        paths.AddRange(FirefoxProfileRoots);
+        return [.. paths];
     }
 
     private static CleanupRule ToCleanupRule(CustomRule custom) => new()

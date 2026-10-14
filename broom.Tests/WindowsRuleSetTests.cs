@@ -95,4 +95,84 @@ public class WindowsRuleSetTests
 
         Assert.Equal(merged.Count, merged.Select(r => r.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());
     }
+
+    [Theory]
+    [InlineData("chat-wechat")]
+    [InlineData("chat-qq")]
+    [InlineData("chat-dingtalk")]
+    public void ChatCacheRules_OnlyCleanCacheSubdirectories(string ruleId)
+    {
+        // 聊天类应用的缓存与聊天记录同处一个数据根,规则必须精确落在缓存子目录,绝不能指向账号根或整目录
+        string[] allowedLeaves = ["Cache", "Temp", "defEmotion", "AvatarFiles", "ImageFiles"];
+
+        var rule = Assert.Single(WindowsRuleSet.Create(), r => r.Id == ruleId);
+
+        Assert.NotEmpty(rule.Paths);
+        Assert.All(rule.Paths, p => Assert.Contains(Path.GetFileName(p), allowedLeaves, StringComparer.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData("browser-privacy-cookies")]
+    [InlineData("browser-privacy-history")]
+    public void BrowserPrivacyRules_AreHighRiskAndUnchecked(string ruleId)
+    {
+        var rule = Assert.Single(WindowsRuleSet.Create(), r => r.Id == ruleId);
+
+        Assert.Equal(RiskLevel.High, rule.Risk);
+        Assert.False(rule.Recommended);
+        Assert.Equal("浏览器隐私", rule.Category);
+    }
+
+    [Fact]
+    public void BrowserPrivacyRules_NeverTouchSavedPasswords()
+    {
+        var rules = WindowsRuleSet.Create().Where(r => r.Category == "浏览器隐私").ToList();
+
+        Assert.NotEmpty(rules);
+        Assert.All(rules, r => Assert.DoesNotContain(r.IncludePatterns, p =>
+            p.Contains("Login Data", StringComparison.OrdinalIgnoreCase)
+            || p.Contains("Web Data", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    [Fact]
+    public void BrowserCacheRule_CoversAllSupportedBrowsers()
+    {
+        var rule = Assert.Single(WindowsRuleSet.Create(), r => r.Id == "browser-cache");
+
+        foreach (var marker in new[] { "Chrome", "Edge", "Firefox", "Brave", "Vivaldi", "Opera", "360Chrome", "360se6", "QQBrowser" })
+        {
+            Assert.Contains(rule.Paths, p => p.Contains(marker, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    [Fact]
+    public void P2ExpansionRules_ExistAndAreOptIn()
+    {
+        string[] expandedIds =
+        [
+            "system-prefetch", "delivery-optimization", "upgrade-residue",
+            "user-font-cache", "system-font-cache", "usage-traces",
+            "chat-wechat", "chat-qq", "chat-dingtalk", "collab-cache",
+            "office-onedrive", "media-spotify", "uwp-localcache",
+            "browser-privacy-cookies", "browser-privacy-history",
+        ];
+
+        var rules = WindowsRuleSet.Create();
+        var expanded = expandedIds.Select(id => Assert.Single(rules, r => r.Id == id)).ToList();
+
+        // 新扩充的类目一律默认不勾选,由用户逐项确认
+        Assert.All(expanded, r => Assert.False(r.Recommended));
+    }
+
+    [Fact]
+    public void UwpCacheRule_DoesNotTouchAppData()
+    {
+        var rule = Assert.Single(WindowsRuleSet.Create(), r => r.Id == "uwp-localcache");
+
+        Assert.All(rule.Paths, p =>
+        {
+            Assert.DoesNotContain("LocalState", p, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("RoamingState", p, StringComparison.OrdinalIgnoreCase);
+        });
+    }
 }

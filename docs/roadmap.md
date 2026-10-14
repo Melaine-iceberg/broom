@@ -13,6 +13,7 @@
 > 清理前创建还原点(2026-10-14):backlog P1 第 4 项(本文档第 11 项)已实现 —— **P1「安全与可控」四项全部完成**;验证情况见该项实现说明。
 > 单元测试项目(2026-10-14):backlog 第 25 项(本文档第 12 项)已落地 —— `broom.Tests` 64 个测试覆盖扫描 / 清理 / 设置 / 规则不变量与 P1 已交付能力,根目录 `dotnet test` 全量回归;详见该项实现说明。
 > CI(2026-10-14):backlog 第 26 项(本文档第 13 项)已落地并真实运行验证 —— 首次运行变红(暴露测试的环境假设)、修复后全绿(run 38529460180);工程基础(#25 测试、#26 CI)就绪。
+> P2 规则扩充(2026-10-14):backlog 第 6–8 项(本文档第 14 项)已落地 —— 系统垃圾 / 应用缓存 / 浏览器覆盖共新增 15 条规则;聊天类只清缓存子目录、浏览器隐私独立成组且默认不勾选;动作型类目(事件日志 / DNS / DriverStore)留待「动作型规则」模型,见第 14 项。
 
 ## 1. 扫描 / 清理取消
 
@@ -479,6 +480,42 @@
 - 工作流只带 `contents: read` 最小权限;
 - 本地按同一组 Release 命令执行与 CI 一致且通过。
 
+## 14. P2 规则扩充(系统垃圾 / 应用缓存 / 浏览器覆盖)
+
+> 来源:backlog 第 6–8 项(P2 · 清理覆盖面)。
+
+**目标**:把三类高频缺口一次补齐 —— 系统垃圾(预读取、传递优化、升级残留、字体缓存、使用痕迹)、常用应用缓存(微信 / QQ / 钉钉、Teams / Discord / Slack、Office / OneDrive、Spotify、商店应用)、浏览器覆盖(Brave / Opera / Vivaldi / 360 / QQ 浏览器,以及可选的隐私数据);新增类目一律默认不勾选,由用户逐项确认。
+
+**现状(实现前)**
+
+- 规则集只有 22 条:系统临时 / 缓存、Chrome / Edge / Firefox 缓存、开发者缓存、回收站等;应用缓存完全空白,小众与国产浏览器不覆盖;
+- 聊天类应用的缓存与聊天记录同处一个数据根,误清聊天记录不可接受(backlog 第 7 项风险),必须精确到缓存子目录;
+- 浏览器隐私数据(历史 / Cookie / 会话)清理语义敏感,需要独立分组、默认不勾选并明确后果(backlog 第 8 项风险)。
+
+**方案**
+
+1. 系统垃圾(backlog 第 6 项,只做纯文件类目):新增 `system-prefetch`(Prefetch)、`delivery-optimization`(传递优化下载缓存)、`upgrade-residue`(`$WinREAgent` / `Panther` / `MoSetup` 升级残留与安装日志)、`user-font-cache` / `system-font-cache`(字体缓存,删除后自动重建)、`usage-traces`(最近使用的文档与跳转列表,含固定项)。**动作型类目范围外**:事件日志清空(API)、DNS 缓存刷新(`ipconfig /flushdns`)、DriverStore 旧驱动包(`pnputil`)需要引擎新增「动作型规则」模型与失败处理,与第 10 / 11 项的 VSS / DISM 一并设计;
+2. 应用缓存(backlog 第 7 项):新增 `chat-wechat` / `chat-qq` / `chat-dingtalk` / `collab-cache` / `office-onedrive` / `media-spotify` / `uwp-localcache`。**聊天类只清缓存子目录**:微信 / QQ 精确到 `FileStorage\Cache` / `FileStorage\Temp`(账号目录用通配段展开),钉钉只清 `defEmotion` / `AvatarFiles` / `ImageFiles`;聊天记录数据库、FileRecv 与图片 / 视频 / 文件原目录不进扫描范围。UWP 只清 `LocalCache\Local|Low|Roaming`,不触碰 `LocalState` / `RoamingState` 中的应用数据;Teams / Discord / Slack 只清网页与渲染缓存,设置、登录令牌与本地数据库不进范围;
+3. 浏览器覆盖(backlog 第 8 项):`browser-cache` 覆盖面从 Chrome / Edge / Firefox 扩到 Brave / Opera(含 GX)/ Vivaldi / 360 / QQ 浏览器,并补上 Chromium 系通用缓存目录(`DawnCache`)与 Firefox 的 Roaming 配置位置(原路径只有 `%LOCALAPPDATA%`,标准部署在 `%APPDATA%`);隐私数据不并入缓存规则,新增独立的 `browser-privacy-cookies` 与 `browser-privacy-history`,按文件名模式在配置档案下精确匹配,明确不碰已保存的密码(`Login Data` / `Web Data`);
+4. 新类别「使用痕迹」「浏览器隐私」「应用缓存」进入界面分组排序([MainWindowViewModel](../ViewModels/MainWindowViewModel.cs) 的 `CategoryOrder`),沿用搜索与风险筛选;
+5. 浏览器覆盖面(配置档案根 + 缓存子目录)抽成 [WindowsRuleSet](../Rules/WindowsRuleSet.cs) 内的共享数据,缓存规则与隐私规则共用,避免两处漂移。
+
+**影响文件**
+
+- [Rules/WindowsRuleSet.cs](../Rules/WindowsRuleSet.cs)(新增 15 条规则、浏览器配置档案根 / 缓存子目录共用数据)
+- [ViewModels/MainWindowViewModel.cs](../ViewModels/MainWindowViewModel.cs)(分组排序)
+- [broom.Tests/WindowsRuleSetTests.cs](../broom.Tests/WindowsRuleSetTests.cs)(新不变量测试)
+
+> 实现说明:15 条新规则全部是纯数据、默认不勾选;浏览器覆盖面集中在 `ChromiumProfileRoots` / `FirefoxProfileRoots` 与 `ChromiumCacheFolders` 三份共享数据上,`browser-cache` 与两条隐私规则共用,顺带给 Chromium 系补 `DawnCache`、把 Firefox 缓存位置从只有 `%LOCALAPPDATA%` 扩到标准的 `%APPDATA%`。隐私规则用 `IncludePatterns` 在配置档案下按文件名精确匹配(`Login Data` / `Web Data` 明确不列入);聊天类规则的路径模板一律以 `Cache` / `Temp`(钉钉为 `defEmotion` / `AvatarFiles` / `ImageFiles`)结尾,由测试 `ChatCacheRules_OnlyCleanCacheSubdirectories` 锁死,防止后续改动误把账号根目录放进扫描范围。验证:新增 9 个测试(缓存子目录精确性、隐私规则高风险且不勾选、不碰已保存的密码、浏览器覆盖标记、UWP 不碰 LocalState / RoamingState、15 条新规则存在且默认不勾选),`dotnet test` 73/73 通过并重复运行稳定;临时校验程序在真实机器上对含 `browser-cache` 在内的 16 条规则做只读全量扫描,0 报错 —— 未安装的类目为 0(本机未装浏览器 / 微信等,符合预期),已安装的类目命中(Panther 4 项、Recent 353 项、Office / OneDrive 日志 62 项、UWP LocalCache 42 个根 1892 个文件约 988MB);非提权下 Prefetch 与系统字体缓存目录按 `IgnoreInaccessible` 静默跳过,提权后可清;GUI 冒烟通过(启动 12 秒无异常后正常退出)。
+
+**验收标准**
+
+- 规则列表出现「使用痕迹」「浏览器隐私」「应用缓存」三个新分组,15 条新规则全部默认不勾选;
+- 未安装的类目(路径不存在)扫描为 0 且无报错;已安装的类目能扫出并可清理;
+- 微信 / QQ 的扫描根只落在 `FileStorage\Cache` / `FileStorage\Temp`,清理后聊天记录数据库与文件原目录完好(测试断言 + 人工抽查);
+- 勾选「浏览器 Cookie 与登录状态」清理后各浏览器需重新登录;「浏览器历史与会话」不影响书签与已保存的密码;
+- 根目录 `dotnet test` 全部通过,GUI 冒烟通过。
+
 ## 依赖关系与建议顺序
 
 | 顺序 | 项 | 理由 |
@@ -496,5 +533,6 @@
 | 11 | 清理前创建系统还原点 | 只动清理前置步骤与设置项,新增平台服务,与其余各项独立 |
 | 12 | 单元测试项目 | 工程基础,不改产品行为(SettingsService 仅加可注入目录);其余各项的回归防线 |
 | 13 | CI(构建 + 测试) | 工程基础,依赖第 12 项的 `dotnet test` 入口 |
+| 14 | P2 规则扩充(系统垃圾 / 应用缓存 / 浏览器覆盖) | 纯规则数据 + 分组排序,不改引擎;动作型类目留待「动作型规则」模型(第 10 / 11 项的前置) |
 
 各项相互独立,可单独交付;建议每项完成后跑一次「扫描 → 清理 → 报告」全流程,外加一次 GUI 冒烟测试(启动应用、确认窗口创建、关闭)。
