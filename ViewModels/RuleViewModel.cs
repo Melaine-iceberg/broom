@@ -78,6 +78,24 @@ public partial class RuleViewModel : ObservableObject
         _ => "高风险",
     };
 
+    /// <summary>文件明细的大小筛选选项(仅影响展示,不改变清理范围)。</summary>
+    public IReadOnlyList<SizeFilterOption> SizeFilters => SizeFilterList;
+
+    private static readonly SizeFilterOption[] SizeFilterList =
+    [
+        new(0, "全部大小"),
+        new(1L << 20, "≥ 1 MB"),
+        new(10L << 20, "≥ 10 MB"),
+        new(100L << 20, "≥ 100 MB"),
+        new(1L << 30, "≥ 1 GB"),
+    ];
+
+    [ObservableProperty]
+    private SizeFilterOption _selectedSizeFilter = SizeFilterList[0];
+
+    /// <summary>扫描结果里有文件,但当前筛选下明细为空(例如规则里没有大文件)。</summary>
+    public bool ShowEmptyHint => IsFilesExpanded && Files.Count == 0 && HasFiles;
+
     public string SizeText => Formatting.FormatBytes(SizeBytes);
 
     /// <summary>扫描结果更新后绑定(传 null 表示回到"尚未扫描"),并重置文件预览。</summary>
@@ -129,8 +147,11 @@ public partial class RuleViewModel : ObservableObject
             return;
         }
 
-        // 按体积降序,优先看到占用最大的文件
-        _orderedFiles ??= _scanResult.Files.OrderByDescending(f => f.Size).ToList();
+        // 按体积降序,优先看到占用最大的文件;大小筛选只影响展示,先过滤再排序
+        _orderedFiles ??= _scanResult.Files
+            .Where(f => f.Size >= SelectedSizeFilter.MinBytes)
+            .OrderByDescending(f => f.Size)
+            .ToList();
         var end = Math.Min(_shownFiles + FilePreviewPageSize, _orderedFiles.Count);
         for (var i = _shownFiles; i < end; i++)
         {
@@ -149,11 +170,27 @@ public partial class RuleViewModel : ObservableObject
         Files.Clear();
     }
 
+    /// <summary>大小筛选变化:重置分页,按新条件重新加载明细。</summary>
+    partial void OnSelectedSizeFilterChanged(SizeFilterOption value)
+    {
+        ResetFiles();
+        if (IsFilesExpanded && HasFiles)
+        {
+            ShowMoreFiles();
+        }
+
+        NotifyFilesChanged();
+    }
+
     private void NotifyFilesChanged()
     {
         OnPropertyChanged(nameof(HasFiles));
         OnPropertyChanged(nameof(FilesToggleText));
         OnPropertyChanged(nameof(HasMoreFiles));
         OnPropertyChanged(nameof(ShowMoreText));
+        OnPropertyChanged(nameof(ShowEmptyHint));
     }
 }
+
+/// <summary>文件明细的大小筛选下拉项;只影响展示,不改变清理范围。</summary>
+public sealed record SizeFilterOption(long MinBytes, string Label);

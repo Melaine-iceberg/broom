@@ -205,6 +205,20 @@
                                                             <StackPanel Grid.Row="1" Grid.ColumnSpan="3"
                                                                         Margin="32,2,0,0" Spacing="6"
                                                                         IsVisible="{Binding IsFilesExpanded}">
+                                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                                    <TextBlock Classes="muted" VerticalAlignment="Center"
+                                                                               Text="仅显示"/>
+                                                                    <ComboBox Width="112"
+                                                                              ItemsSource="{Binding SizeFilters}"
+                                                                              SelectedItem="{Binding SelectedSizeFilter}"
+                                                                              ToolTip.Tip="只影响明细的显示,不改变清理范围;被筛掉的文件清理时仍会删除。">
+                                                                        <ComboBox.ItemTemplate>
+                                                                            <DataTemplate x:DataType="vm:SizeFilterOption">
+                                                                                <TextBlock Text="{Binding Label}"/>
+                                                                            </DataTemplate>
+                                                                        </ComboBox.ItemTemplate>
+                                                                    </ComboBox>
+                                                                </StackPanel>
                                                                 <ItemsControl ItemsSource="{Binding Files}">
                                                                     <ItemsControl.ItemTemplate>
                                                                         <DataTemplate x:DataType="vm:FileItemViewModel">
@@ -249,6 +263,9 @@
                                                                         Content="{Binding ShowMoreText}"
                                                                         Command="{Binding ShowMoreFilesCommand}"
                                                                         IsVisible="{Binding HasMoreFiles}"/>
+                                                                <TextBlock Classes="muted"
+                                                                           Text="没有符合当前筛选的文件。"
+                                                                           IsVisible="{Binding ShowEmptyHint}"/>
                                                             </StackPanel>
                                                         </Grid>
                                                     </Border>
