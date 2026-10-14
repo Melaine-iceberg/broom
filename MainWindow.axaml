@@ -232,6 +232,10 @@
                                                                                             FontSize="11" Content="打开位置"
                                                                                             Command="{Binding RevealCommand}"/>
                                                                                     <Button Classes="ghost" Padding="8,2"
+                                                                                            FontSize="11" Content="排除文件夹"
+                                                                                            Command="{Binding ExcludeDirectoryCommand}"
+                                                                                            ToolTip.Tip="排除该文件所在的整个目录:清理时跳过该目录下的所有文件,后续扫描不再列出。"/>
+                                                                                    <Button Classes="ghost" Padding="8,2"
                                                                                             FontSize="11" Content="排除"
                                                                                             Command="{Binding ExcludeCommand}"
                                                                                             ToolTip.Tip="加入排除名单:清理时跳过该文件,后续扫描不再列出。"/>
@@ -429,6 +433,20 @@
                                       IsChecked="{Binding SettingsEditor.DefaultPermanentDelete}"/>
                             <CheckBox Content="显示高风险类目(例如旧系统备份)"
                                       IsChecked="{Binding SettingsEditor.ShowHighRiskRules}"/>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock Text="跳过最近修改的文件" VerticalAlignment="Center"/>
+                                <ComboBox Width="132" ItemsSource="{Binding SettingsEditor.SkipRecentOptions}"
+                                          SelectedItem="{Binding SettingsEditor.SelectedSkipRecent}"
+                                          ToolTip.Tip="扫描与清理时跳过最近 N 天内修改过的文件,避免误删仍在使用的临时文件。">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:DayOption">
+                                            <TextBlock Text="{Binding Label}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
+                            <TextBlock Classes="muted" TextWrapping="Wrap"
+                                       Text="“跳过最近修改”按文件的最后写入时间判断,清理前会再次校验;对“清空回收站”不生效。"/>
                         </StackPanel>
                     </Border>
 

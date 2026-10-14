@@ -27,6 +27,9 @@ public sealed class BroomSettings
 
     /// <summary>隔离区的保留天数(0 表示永久保留);超过保留天数的内容自动清理。</summary>
     public int QuarantineRetentionDays { get; set; } = 7;
+
+    /// <summary>跳过最近 N 天内修改过的文件(0 = 不启用);按最后写入时间判断,扫描与删除前都会校验。</summary>
+    public int SkipRecentDays { get; set; }
 }
 
 /// <summary>用户自定义的清理目录。</summary>

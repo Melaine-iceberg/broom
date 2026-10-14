@@ -16,18 +16,21 @@ public sealed class Scanner
         IReadOnlyList<string>? excludedPaths = null,
         IReadOnlyList<string>? excludedFiles = null,
         IProgress<ScanProgress>? progress = null,
-        CancellationToken ct = default)
-        => Task.Run<IReadOnlyList<RuleScanResult>>(() => Scan(rules, excludedPaths, excludedFiles, progress, ct), ct);
+        CancellationToken ct = default,
+        int skipRecentDays = 0)
+        => Task.Run<IReadOnlyList<RuleScanResult>>(() => Scan(rules, excludedPaths, excludedFiles, skipRecentDays, progress, ct), ct);
 
     private static List<RuleScanResult> Scan(
         IReadOnlyList<CleanupRule> rules,
         IReadOnlyList<string>? excludedPaths,
         IReadOnlyList<string>? excludedFiles,
+        int skipRecentDays,
         IProgress<ScanProgress>? progress,
         CancellationToken ct)
     {
         var excluded = NormalizeExcludedPaths(excludedPaths);
         var excludedFileSet = NormalizeExcludedFiles(excludedFiles);
+        var protectModifiedAfter = skipRecentDays > 0 ? DateTime.UtcNow.AddDays(-skipRecentDays) : (DateTime?)null;
         var results = new List<RuleScanResult>(rules.Count);
         for (var i = 0; i < rules.Count; i++)
         {
@@ -37,7 +40,7 @@ public sealed class Scanner
 
             results.Add(rule.Kind == RuleKind.RecycleBin
                 ? ScanRecycleBin(rule, i, rules.Count, progress, ct)
-                : ScanPaths(rule, i, rules.Count, excluded, excludedFileSet, progress, ct));
+                : ScanPaths(rule, i, rules.Count, excluded, excludedFileSet, protectModifiedAfter, progress, ct));
         }
 
         return results;
@@ -49,6 +52,7 @@ public sealed class Scanner
         int count,
         List<string> excluded,
         HashSet<string> excludedFiles,
+        DateTime? protectModifiedAfter,
         IProgress<ScanProgress>? progress,
         CancellationToken ct)
     {
@@ -78,7 +82,7 @@ public sealed class Scanner
                 {
                     if (!excludedFiles.Contains(path))
                     {
-                        AddFile(result, path);
+                        AddFile(result, path, protectModifiedAfter);
                     }
 
                     continue;
@@ -100,7 +104,7 @@ public sealed class Scanner
                             continue;
                         }
 
-                        AddFile(result, file);
+                        AddFile(result, file, protectModifiedAfter);
                         if (result.ItemCount % ProgressInterval == 0)
                         {
                             progress?.Report(new ScanProgress(index, count, rule.DisplayName, file));
@@ -152,13 +156,18 @@ public sealed class Scanner
         return result;
     }
 
-    private static void AddFile(RuleScanResult result, string path)
+    private static void AddFile(RuleScanResult result, string path, DateTime? protectModifiedAfter)
     {
         try
         {
-            var size = new FileInfo(path).Length;
-            result.Files.Add(new ScannedFile(path, size));
-            result.TotalBytes += size;
+            var info = new FileInfo(path);
+            if (protectModifiedAfter is not null && info.LastWriteTimeUtc > protectModifiedAfter.Value)
+            {
+                return;
+            }
+
+            result.Files.Add(new ScannedFile(path, info.Length));
+            result.TotalBytes += info.Length;
             result.ItemCount++;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

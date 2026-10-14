@@ -14,16 +14,19 @@ public sealed class Cleaner
         IReadOnlyList<RuleScanResult> targets,
         IFileDeleter deleter,
         IProgress<CleanProgress>? progress = null,
-        CancellationToken ct = default)
-        => Task.Run(() => Clean(targets, deleter, progress, ct), ct);
+        CancellationToken ct = default,
+        int skipRecentDays = 0)
+        => Task.Run(() => Clean(targets, deleter, skipRecentDays, progress, ct), ct);
 
     private static CleanupReport Clean(
         IReadOnlyList<RuleScanResult> targets,
         IFileDeleter deleter,
+        int skipRecentDays,
         IProgress<CleanProgress>? progress,
         CancellationToken ct)
     {
         var report = new CleanupReport();
+        var protectModifiedAfter = skipRecentDays > 0 ? DateTime.UtcNow.AddDays(-skipRecentDays) : (DateTime?)null;
         for (var i = 0; i < targets.Count; i++)
         {
             if (ct.IsCancellationRequested)
@@ -42,7 +45,7 @@ public sealed class Cleaner
             }
             else
             {
-                DeleteFiles(target, deleter, result, ct);
+                DeleteFiles(target, deleter, result, protectModifiedAfter, ct);
                 if (target.Rule.IsWholeDirectory)
                 {
                     RemoveEmptyDirectories(target.Roots, ct);
@@ -91,15 +94,27 @@ public sealed class Cleaner
         }
     }
 
-    private static void DeleteFiles(RuleScanResult target, IFileDeleter deleter, RuleCleanResult result, CancellationToken ct)
+    private static void DeleteFiles(RuleScanResult target, IFileDeleter deleter, RuleCleanResult result, DateTime? protectModifiedAfter, CancellationToken ct)
     {
         if (target.Files.Count == 0)
         {
             return;
         }
 
-        var paths = new List<string>(target.Files.Count);
+        // 删除前复核:扫描之后被重新写入的文件同样跳过,"跳过最近修改"的承诺在删除时刻依然成立
+        var candidates = new List<ScannedFile>(target.Files.Count);
         foreach (var file in target.Files)
+        {
+            if (protectModifiedAfter is not null && File.GetLastWriteTimeUtc(file.Path) > protectModifiedAfter.Value)
+            {
+                continue;
+            }
+
+            candidates.Add(file);
+        }
+
+        var paths = new List<string>(candidates.Count);
+        foreach (var file in candidates)
         {
             paths.Add(file.Path);
         }
@@ -111,8 +126,8 @@ public sealed class Cleaner
             result.Failures.Add(new DeleteFailure(path, reason));
         }
 
-        // 只统计真正删除成功的文件体积
-        result.BytesRemoved = target.Files.Where(f => !failures.ContainsKey(f.Path)).Sum(f => f.Size);
+        // 只统计真正删除成功的文件体积(跳过的文件不计入释放量)
+        result.BytesRemoved = candidates.Where(f => !failures.ContainsKey(f.Path)).Sum(f => f.Size);
     }
 
     private static void RemoveEmptyDirectories(IEnumerable<string> roots, CancellationToken ct)

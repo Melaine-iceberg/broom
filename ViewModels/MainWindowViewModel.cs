@@ -280,6 +280,44 @@ public partial class MainWindowViewModel : ObservableObject
             : $"已排除:{path},但设置保存失败:{saveError}(可在设置页恢复)";
     }
 
+    /// <summary>把文件所在目录加入全局排除名单:持久化,并立即从当前扫描结果中移除该目录下的所有文件。</summary>
+    private void ExcludeDirectory(string directory)
+    {
+        if (IsBusy)
+        {
+            StatusText = "请等待当前操作完成后再排除文件夹。";
+            return;
+        }
+
+        var normalized = directory.TrimEnd('\\', '/');
+        if (normalized.Length == 0)
+        {
+            StatusText = "无法排除该文件所在的目录。";
+            return;
+        }
+
+        string? saveError = null;
+        if (!Settings.ExcludedPaths.Contains(normalized, PathComparer))
+        {
+            Settings.ExcludedPaths.Add(normalized);
+            SettingsEditor.AppendExcludedPath(normalized);
+            try
+            {
+                _settingsService.Save(Settings);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                saveError = ex.Message;
+            }
+        }
+
+        RemoveDirectoryFromScan(normalized);
+
+        StatusText = saveError is null
+            ? $"已排除目录:{normalized}(可在设置页恢复)"
+            : $"已排除目录:{normalized},但设置保存失败:{saveError}(可在设置页恢复)";
+    }
+
     /// <summary>在资源管理器中定位文件。</summary>
     private void RevealFile(string path)
     {
@@ -296,7 +334,15 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     /// <summary>从当前扫描数据与规则明细中移除已排除的文件(同一路径可能同时命中多条规则)。</summary>
-    private void RemoveFileFromScan(string path)
+    private void RemoveFileFromScan(string path) => RemoveFromScan(file => PathComparer.Equals(file, path));
+
+    /// <summary>目录排除按目录段边界匹配,与扫描器的前缀排除一致(避免 C:\Temp 误伤 C:\Temp2)。</summary>
+    private void RemoveDirectoryFromScan(string directory) =>
+        RemoveFromScan(file => file.Length > directory.Length
+            && PathComparer.Equals(file[..directory.Length], directory)
+            && (file[directory.Length] == '\\' || file[directory.Length] == '/'));
+
+    private void RemoveFromScan(Func<string, bool> shouldRemove)
     {
         if (_lastScan is null)
         {
@@ -305,7 +351,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         foreach (var result in _lastScan)
         {
-            var removed = result.Files.RemoveAll(f => PathComparer.Equals(f.Path, path));
+            var removed = result.Files.RemoveAll(f => shouldRemove(f.Path));
             if (removed == 0)
             {
                 continue;
@@ -524,7 +570,7 @@ public partial class MainWindowViewModel : ObservableObject
                 StatusText = $"正在清理:{p.RuleName}";
             });
 
-            var report = await _cleaner.CleanAsync(selected, deleter, progress, cts.Token);
+            var report = await _cleaner.CleanAsync(selected, deleter, progress, cts.Token, Settings.SkipRecentDays);
             ReportText = BuildReport(report, deleter, warning);
             SetPendingRebootDeletes(report);
             QuarantineCount = _lastQuarantineSession?.RestorableCount ?? 0;
@@ -580,7 +626,7 @@ public partial class MainWindowViewModel : ObservableObject
                     : $"正在扫描:{p.RuleName}";
             });
 
-            var results = await _scanner.ScanAsync(Rules.Select(r => r.Rule).ToList(), Settings.ExcludedPaths, Settings.ExcludedFiles, progress, cts.Token);
+            var results = await _scanner.ScanAsync(Rules.Select(r => r.Rule).ToList(), Settings.ExcludedPaths, Settings.ExcludedFiles, progress, cts.Token, Settings.SkipRecentDays);
             _lastScan = results;
             ApplyScanResults(results);
 
@@ -661,6 +707,7 @@ public partial class MainWindowViewModel : ObservableObject
             || !CustomRulesEqual(Settings.CustomRules, settings.CustomRules);
         var excludesChanged = !Settings.ExcludedPaths.SequenceEqual(settings.ExcludedPaths)
             || !Settings.ExcludedFiles.SequenceEqual(settings.ExcludedFiles);
+        var filterChanged = Settings.SkipRecentDays != settings.SkipRecentDays;
         var retentionChanged = Settings.QuarantineRetentionDays != settings.QuarantineRetentionDays;
 
         Settings = settings;
@@ -686,7 +733,7 @@ public partial class MainWindowViewModel : ObservableObject
             RebuildRules();
         }
 
-        if (ruleSetChanged || excludesChanged)
+        if (ruleSetChanged || excludesChanged || filterChanged)
         {
             ResetScanState();
             StatusText = saveError is null
@@ -914,7 +961,13 @@ public partial class MainWindowViewModel : ObservableObject
             return;
         }
 
+        var notice = SettingsEditor.SaveNotice;
         ApplySettings(settings);
+        if (notice.Length > 0)
+        {
+            StatusText = $"{StatusText}{notice}";
+        }
+
         ResetSettingsEditor();
         IsCleanPage = true;
     }
@@ -975,7 +1028,7 @@ public partial class MainWindowViewModel : ObservableObject
         Rules.Clear();
         foreach (var rule in CreateRules())
         {
-            var viewModel = new RuleViewModel(rule, ExcludeFile, RevealFile);
+            var viewModel = new RuleViewModel(rule, ExcludeFile, ExcludeDirectory, RevealFile);
             viewModel.PropertyChanged += (_, _) => UpdateSummary();
             Rules.Add(viewModel);
         }

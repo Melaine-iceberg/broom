@@ -12,16 +12,18 @@ public partial class RuleViewModel : ObservableObject
     private const int FilePreviewPageSize = 100;
 
     private readonly Action<string> _excludeFile;
+    private readonly Action<string> _excludeDirectory;
     private readonly Action<string> _revealFile;
     private RuleScanResult? _scanResult;
     private List<ScannedFile>? _orderedFiles;
     private int _shownFiles;
 
-    public RuleViewModel(CleanupRule rule, Action<string> excludeFile, Action<string> revealFile)
+    public RuleViewModel(CleanupRule rule, Action<string> excludeFile, Action<string> excludeDirectory, Action<string> revealFile)
     {
         Rule = rule;
         IsSelected = rule.Recommended;
         _excludeFile = excludeFile;
+        _excludeDirectory = excludeDirectory;
         _revealFile = revealFile;
     }
 
@@ -132,7 +134,7 @@ public partial class RuleViewModel : ObservableObject
         var end = Math.Min(_shownFiles + FilePreviewPageSize, _orderedFiles.Count);
         for (var i = _shownFiles; i < end; i++)
         {
-            Files.Add(new FileItemViewModel(_orderedFiles[i], _excludeFile, _revealFile));
+            Files.Add(new FileItemViewModel(_orderedFiles[i], _excludeFile, _excludeDirectory, _revealFile));
         }
 
         _shownFiles = end;
