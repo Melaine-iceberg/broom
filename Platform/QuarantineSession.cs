@@ -1,7 +1,8 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 using broom.Core;
 
+using broom.Localization;
 namespace broom.Platform;
 
 /// <summary>
@@ -71,7 +72,7 @@ public sealed class QuarantineSession
         error = "";
         if (!File.Exists(path))
         {
-            error = "文件不存在";
+            error = Strings.T("文件不存在");
             return false;
         }
 
@@ -112,19 +113,19 @@ public sealed class QuarantineSession
     {
         if (entry.PendingReboot)
         {
-            error = "已登记重启后删除,无法在原位置还原;如需保留请从隔离区复制副本。";
+            error = Strings.T("已登记重启后删除,无法在原位置还原;如需保留请从隔离区复制副本。");
             return false;
         }
 
         if (!File.Exists(entry.QuarantinePath))
         {
-            error = "隔离区中的副本已不存在(可能已被清理)。";
+            error = Strings.T("隔离区中的副本已不存在(可能已被清理)。");
             return false;
         }
 
         if (File.Exists(entry.OriginalPath))
         {
-            error = "原位置已存在同名文件,未覆盖。";
+            error = Strings.T("原位置已存在同名文件,未覆盖。");
             return false;
         }
 

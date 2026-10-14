@@ -1,0 +1,1323 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="    …其余 {0} 项失败未列出" xml:space="preserve">
+    <value>    …{0} more failures not listed</value>
+  </data>
+  <data name="    …其余 {0} 项未还原" xml:space="preserve">
+    <value>    …{0} more items not restored</value>
+  </data>
+  <data name="    ✗ {0}:{1} 处无法访问" xml:space="preserve">
+    <value>    ✗ {0}: {1} locations inaccessible</value>
+  </data>
+  <data name="    ✗ 未还原 {0}({1})" xml:space="preserve">
+    <value>    ✗ Not restored {0} ({1})</value>
+  </data>
+  <data name=" · {0:N0} 项失败" xml:space="preserve">
+    <value> · {0:N0} failed</value>
+  </data>
+  <data name=" · 已取消" xml:space="preserve">
+    <value> · Cancelled</value>
+  </data>
+  <data name="$WinREAgent、C:\Windows\Panther 等升级 / 安装日志与临时残留;删除后无法再查看安装日志,不影响已安装的系统。" xml:space="preserve">
+    <value>Upgrade / setup logs and temporary leftovers such as $WinREAgent and C:\Windows\Panther; setup logs cannot be reviewed afterwards, the installed system is unaffected.</value>
+  </data>
+  <data name="({0:N0} 项失败)" xml:space="preserve">
+    <value>({0:N0} failed)</value>
+  </data>
+  <data name=",含动作型规则(不可逆)" xml:space="preserve">
+    <value>, including action rules (irreversible)</value>
+  </data>
+  <data name=",隔离区已保留 {0} 份副本" xml:space="preserve">
+    <value>, {0} copies kept in the quarantine</value>
+  </data>
+  <data name="--report 需要指定报告文件路径。" xml:space="preserve">
+    <value>--report requires a report file path.</value>
+  </data>
+  <data name="--scan 与 --clean 只能指定一个。" xml:space="preserve">
+    <value>Specify either --scan or --clean, not both.</value>
+  </data>
+  <data name="1 天" xml:space="preserve">
+    <value>1 day</value>
+  </data>
+  <data name="14 天" xml:space="preserve">
+    <value>14 days</value>
+  </data>
+  <data name="3 天" xml:space="preserve">
+    <value>3 days</value>
+  </data>
+  <data name="30 天" xml:space="preserve">
+    <value>30 days</value>
+  </data>
+  <data name="7 天" xml:space="preserve">
+    <value>7 days</value>
+  </data>
+  <data name="&lt;事件日志:{0}&gt;" xml:space="preserve">
+    <value>&lt;Event log: {0}&gt;</value>
+  </data>
+  <data name="&lt;卷影副本:{0}&gt;" xml:space="preserve">
+    <value>&lt;Shadow copy: {0}&gt;</value>
+  </data>
+  <data name="&lt;回收站&gt;" xml:space="preserve">
+    <value>&lt;Recycle Bin&gt;</value>
+  </data>
+  <data name="&lt;回收站&gt;: {0}" xml:space="preserve">
+    <value>&lt;Recycle Bin&gt;: {0}</value>
+  </data>
+  <data name="C:\Windows\Temp 中的临时文件。" xml:space="preserve">
+    <value>Temporary files in C:\Windows\Temp.</value>
+  </data>
+  <data name="CSV 文件(Excel)" xml:space="preserve">
+    <value>CSV file (Excel)</value>
+  </data>
+  <data name="Chrome / Edge / Brave / Opera / Vivaldi / 360 / QQ 浏览器 / Firefox 的网页缓存,不涉及密码、Cookie 与书签。" xml:space="preserve">
+    <value>Web caches of Chrome / Edge / Brave / Opera / Vivaldi / 360 / QQ Browser / Firefox; passwords, cookies and bookmarks are not touched.</value>
+  </data>
+  <data name="DISM 组件清理,移除已被取代的旧组件;耗时较长(可能十几分钟),执行后无法卸载被取代的更新;释放量以清理后的磁盘对比为准。" xml:space="preserve">
+    <value>DISM component cleanup removing superseded components; it can take a long time (ten minutes or more), superseded updates cannot be uninstalled afterwards, and freed space is measured by the disk comparison.</value>
+  </data>
+  <data name="DNS 解析缓存" xml:space="preserve">
+    <value>DNS resolver cache</value>
+  </data>
+  <data name="Internet 临时文件" xml:space="preserve">
+    <value>Internet temporary files</value>
+  </data>
+  <data name="Office 文档协同编辑缓存与 OneDrive 客户端 / 安装日志;不影响云端与本地已同步的文件,重新打开文档时可能需要重新下载。" xml:space="preserve">
+    <value>Office document co-authoring caches and OneDrive client / setup logs; files synced locally or in the cloud are unaffected and documents may need to download again when reopened.</value>
+  </data>
+  <data name="Shell 错误码 0x{0:X8}" xml:space="preserve">
+    <value>Shell error code 0x{0:X8}</value>
+  </data>
+  <data name="Spotify 的歌曲与界面缓存;离线下载的音乐需要重新缓存。" xml:space="preserve">
+    <value>Spotify song and UI caches; offline downloads need to be re-cached.</value>
+  </data>
+  <data name="Teams / Discord / Slack 的网页与渲染缓存;设置、登录令牌与本地数据库不清理。新版 Teams 按微软文档清缓存,清理后可能需要重新登录。" xml:space="preserve">
+    <value>Web and rendering caches of Teams / Discord / Slack; settings, sign-in tokens and local databases are not touched. New Teams clears caches per Microsoft’s documentation and may require signing in again.</value>
+  </data>
+  <data name="Windows 为程序启动生成的预读记录;删除后系统会重建,近期应用首次启动可能略慢。" xml:space="preserve">
+    <value>Prefetch records Windows creates for faster app startup; rebuilt automatically and recently used apps may start a little slower at first.</value>
+  </data>
+  <data name="Windows 事件日志" xml:space="preserve">
+    <value>Windows event logs</value>
+  </data>
+  <data name="Windows 更新下载缓存" xml:space="preserve">
+    <value>Windows Update download cache</value>
+  </data>
+  <data name="Windows 更新经 P2P 分发留下的下载缓存;需要时会重新下载。" xml:space="preserve">
+    <value>Download cache left behind by Windows Update P2P delivery; re-downloaded when needed.</value>
+  </data>
+  <data name="Windows 组件日志" xml:space="preserve">
+    <value>Windows component logs</value>
+  </data>
+  <data name="Windows 错误报告(用户)" xml:space="preserve">
+    <value>Windows Error Reporting (user)</value>
+  </data>
+  <data name="Windows 错误报告(系统)" xml:space="preserve">
+    <value>Windows Error Reporting (system)</value>
+  </data>
+  <data name="Windows.old 等升级残留,删除后无法回滚到升级前的系统。" xml:space="preserve">
+    <value>Upgrade leftovers such as Windows.old; after deletion you cannot roll back to the previous system.</value>
+  </data>
+  <data name="[{0}/{1}] 扫描 {2}" xml:space="preserve">
+    <value>[{0}/{1}] Scanning {2}</value>
+  </data>
+  <data name="[{0}/{1}] 清理 {2}" xml:space="preserve">
+    <value>[{0}/{1}] Cleaning {2}</value>
+  </data>
+  <data name="broom · 垃圾清理" xml:space="preserve">
+    <value>broom · Disk cleanup</value>
+  </data>
+  <data name="broom 命令行 · {0:yyyy-MM-dd HH:mm} · {1} 条规则 · {2}" xml:space="preserve">
+    <value>broom CLI · {0:yyyy-MM-dd HH:mm} · {1} rules · {2}</value>
+  </data>
+  <data name="broom 扫描报告 · {0:yyyy-MM-dd HH:mm} · 只读,未删除任何文件" xml:space="preserve">
+    <value>broom scan report · {0:yyyy-MM-dd HH:mm} · read-only, nothing deleted</value>
+  </data>
+  <data name="broom 清理前还原点({0:yyyy-MM-dd HH:mm})" xml:space="preserve">
+    <value>broom pre-cleanup restore point ({0:yyyy-MM-dd HH:mm})</value>
+  </data>
+  <data name="broom 自动清理" xml:space="preserve">
+    <value>broom auto clean</value>
+  </data>
+  <data name="broom 通知" xml:space="preserve">
+    <value>broom notification</value>
+  </data>
+  <data name="cli.usage" xml:space="preserve">
+    <value>Usage:
+  broom --scan [options]               Scan and list cleanable content (read-only, no deletion)
+  broom --clean [safe|all] [options]   Clean up (safe items only by default; &#x27;all&#x27; includes cautious and high-risk items)
+
+Options:
+  --dry-run        Scan and print the report only; do not delete (use with --clean as a preview)
+  --report &lt;path&gt;  Save the report to a text file
+  --yes            Unattended mode: skip confirmation (required for scheduled tasks / scripts)
+  -h, --help       Show this help
+
+Exit codes:
+  0 success; 1 failures or runtime error; 2 invalid arguments; 3 not confirmed or cancelled
+
+Examples:
+  broom --scan --report scan.txt
+  broom --clean safe --yes --report clean.txt</value>
+  </data>
+  <data name="{0:N0} 个文件" xml:space="preserve">
+    <value>{0:N0} files</value>
+  </data>
+  <data name="{0:N0} 项 / {1}" xml:space="preserve">
+    <value>{0:N0} items / {1}</value>
+  </data>
+  <data name="{0:N0} 项 · {1}" xml:space="preserve">
+    <value>{0:N0} items · {1}</value>
+  </data>
+  <data name="{0} 日" xml:space="preserve">
+    <value>Day {0}</value>
+  </data>
+  <data name="{0} 项" xml:space="preserve">
+    <value>{0} items</value>
+  </data>
+  <data name="{0}:清理 {1:N0} 项,共 {2}。" xml:space="preserve">
+    <value>{0}: {1:N0} items cleaned, {2} in total.</value>
+  </data>
+  <data name="{0}{1}✔ 已安排 {2} 项重启后删除(重启后生效,重启前文件仍占用空间{3})。" xml:space="preserve">
+    <value>{0}{1}✔ Scheduled {2} items for deletion on reboot (takes effect after restart, files keep using space until then{3}).</value>
+  </data>
+  <data name="{0}失败(退出码 {1}){2}" xml:space="preserve">
+    <value>{0} failed (exit code {1}){2}</value>
+  </data>
+  <data name="{0}完成" xml:space="preserve">
+    <value>{0} finished</value>
+  </data>
+  <data name="{0}无法执行:{1}" xml:space="preserve">
+    <value>{0} could not run: {1}</value>
+  </data>
+  <data name="· {0}:{1:N0} 项 · {2}" xml:space="preserve">
+    <value>· {0}: {1:N0} items · {2}</value>
+  </data>
+  <data name="· 动作型规则 {0} 条:{1}(执行时生效,不计大小)" xml:space="preserve">
+    <value>· {0} action rules: {1} (take effect when executed, no size counted)</value>
+  </data>
+  <data name="· 另回收空目录 {0:N0} 个。" xml:space="preserve">
+    <value>· Also removed {0:N0} empty directories.</value>
+  </data>
+  <data name="· 未执行的规则:{0}" xml:space="preserve">
+    <value>· Rules not executed: {0}</value>
+  </data>
+  <data name="· 磁盘 {0} 可用空间:{1} → {2}({3})" xml:space="preserve">
+    <value>· Drive {0} free space: {1} → {2} ({3})</value>
+  </data>
+  <data name="“跳过最近修改”按文件的最后写入时间判断,清理前会再次校验;对“清空回收站”不生效。" xml:space="preserve">
+    <value>“Skip recently modified” uses the file’s last write time and is verified again before deletion; it does not apply to “Empty Recycle Bin”.</value>
+  </data>
+  <data name="✔ 已还原 {0} 项到原位置(可重新扫描以刷新列表)。" xml:space="preserve">
+    <value>✔ Restored {0} items to their original locations (scan again to refresh the list).</value>
+  </data>
+  <data name="上次勾选的项目" xml:space="preserve">
+    <value>Last selected items</value>
+  </data>
+  <data name="下次构建或安装依赖时需要重新下载 / 重新编译。" xml:space="preserve">
+    <value>They will be downloaded / rebuilt on the next build or dependency install.</value>
+  </data>
+  <data name="不启用" xml:space="preserve">
+    <value>Off</value>
+  </data>
+  <data name="不提醒" xml:space="preserve">
+    <value>No alerts</value>
+  </data>
+  <data name="不覆写" xml:space="preserve">
+    <value>No overwrite</value>
+  </data>
+  <data name="丢弃本次未保存的修改,恢复到当前生效的设置。" xml:space="preserve">
+    <value>Discard unsaved changes and revert to the settings currently in effect.</value>
+  </data>
+  <data name="仅安全" xml:space="preserve">
+    <value>Safe only</value>
+  </data>
+  <data name="仅安全项" xml:space="preserve">
+    <value>Safe items only</value>
+  </data>
+  <data name="仅安全项(推荐)" xml:space="preserve">
+    <value>Safe items only (recommended)</value>
+  </data>
+  <data name="仅对启用了系统保护的卷有效(通常为系统盘),创建需要数秒到数十秒,Windows 对创建频率另有限制。注意:勾选「旧还原点与卷影副本」类目会删除这些回滚点,两者语义互斥。" xml:space="preserve">
+    <value>Only works on volumes with system protection enabled (usually the system drive). Creation takes from seconds to tens of seconds and Windows limits how often restore points can be created. Note: cleaning “Old restore points and shadow copies” deletes these rollback points — the two are mutually exclusive.</value>
+  </data>
+  <data name="仅显示" xml:space="preserve">
+    <value>Show only</value>
+  </data>
+  <data name="仍有 {0:N0} 项未能清空(可能被占用)。" xml:space="preserve">
+    <value>{0:N0} items could not be emptied (possibly in use).</value>
+  </data>
+  <data name="以管理员身份重启" xml:space="preserve">
+    <value>Restart as administrator</value>
+  </data>
+  <data name="传递优化文件" xml:space="preserve">
+    <value>Delivery Optimization files</value>
+  </data>
+  <data name="低于 10 GB" xml:space="preserve">
+    <value>Below 10 GB</value>
+  </data>
+  <data name="低于 100 GB" xml:space="preserve">
+    <value>Below 100 GB</value>
+  </data>
+  <data name="低于 20 GB" xml:space="preserve">
+    <value>Below 20 GB</value>
+  </data>
+  <data name="低于 50 GB" xml:space="preserve">
+    <value>Below 50 GB</value>
+  </data>
+  <data name="使用痕迹" xml:space="preserve">
+    <value>Usage traces</value>
+  </data>
+  <data name="例如:C:\Users\me\AppData\Local\Temp\keep" xml:space="preserve">
+    <value>e.g. C:\Users\me\AppData\Local\Temp\keep</value>
+  </data>
+  <data name="例如:C:\Users\me\AppData\Local\Temp\keep\important.tmp" xml:space="preserve">
+    <value>e.g. C:\Users\me\AppData\Local\Temp\keep\important.tmp</value>
+  </data>
+  <data name="例如:我的下载缓存" xml:space="preserve">
+    <value>e.g. My download cache</value>
+  </data>
+  <data name="保存设置" xml:space="preserve">
+    <value>Save settings</value>
+  </data>
+  <data name="保留天数" xml:space="preserve">
+    <value>Retention (days)</value>
+  </data>
+  <data name="全不选" xml:space="preserve">
+    <value>Select none</value>
+  </data>
+  <data name="全选" xml:space="preserve">
+    <value>Select all</value>
+  </data>
+  <data name="全部大小" xml:space="preserve">
+    <value>All sizes</value>
+  </data>
+  <data name="全部等级" xml:space="preserve">
+    <value>All levels</value>
+  </data>
+  <data name="全部规则(只读)" xml:space="preserve">
+    <value>All rules (read-only)</value>
+  </data>
+  <data name="全部规则(含高风险)" xml:space="preserve">
+    <value>All rules (including high risk)</value>
+  </data>
+  <data name="共 {0:N0} 次清理" xml:space="preserve">
+    <value>{0:N0} cleanups total</value>
+  </data>
+  <data name="共 {0} 项" xml:space="preserve">
+    <value>{0} items total</value>
+  </data>
+  <data name="关闭" xml:space="preserve">
+    <value>Off</value>
+  </data>
+  <data name="关闭主窗口时最小化到托盘(保持后台定时清理)" xml:space="preserve">
+    <value>Minimize to tray when the main window is closed (keeps scheduled cleanup running)</value>
+  </data>
+  <data name="其他" xml:space="preserve">
+    <value>Other</value>
+  </data>
+  <data name="其他选项" xml:space="preserve">
+    <value>Other options</value>
+  </data>
+  <data name="再次点击确认清空 —— 该操作不可恢复。" xml:space="preserve">
+    <value>Click again to confirm the purge — this cannot be undone.</value>
+  </data>
+  <data name="删除" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="删除 {0} 的旧卷影副本({1}/{2})…" xml:space="preserve">
+    <value>Deleting old shadow copies on {0} ({1}/{2})…</value>
+  </data>
+  <data name="删除各浏览器保存的 Cookie(不含已保存的密码);所有网站的登录状态都会丢失,需要重新登录,网银等站点可能要求重新验证身份。浏览器运行中被占用的文件会跳过,建议先退出浏览器。" xml:space="preserve">
+    <value>Deletes cookies stored by browsers (saved passwords are never touched); you will be signed out of every website and need to sign in again, and banking sites may ask you to re-verify your identity. Files in use by a running browser are skipped — quit the browser first.</value>
+  </data>
+  <data name="删除浏览历史、常访问站点与标签页会话记录(不含书签与已保存的密码);自动补全的网址建议随之消失,且不可恢复(除非浏览器已开启同步)。" xml:space="preserve">
+    <value>Deletes browsing history, frequently visited sites and tab sessions (bookmarks and saved passwords are untouched); URL autocomplete suggestions disappear and cannot be recovered (unless the browser is syncing).</value>
+  </data>
+  <data name="删除系统还原点 / 卷影副本,每个卷保留最新一个;释放量通常很大,但删除后无法回滚到更早的系统状态。" xml:space="preserve">
+    <value>Deletes system restore points / shadow copies, keeping the newest per volume; usually frees a lot of space but you cannot roll back to an earlier system state afterwards.</value>
+  </data>
+  <data name="删除默认移入回收站,可恢复" xml:space="preserve">
+    <value>Deleted items go to the Recycle Bin by default and can be recovered</value>
+  </data>
+  <data name="刷新 DNS 解析缓存失败:{0}" xml:space="preserve">
+    <value>Failed to flush the DNS resolver cache: {0}</value>
+  </data>
+  <data name="刷新 DNS 解析缓存失败。" xml:space="preserve">
+    <value>Failed to flush the DNS resolver cache.</value>
+  </data>
+  <data name="刷新系统的域名解析缓存;不影响正常使用,个别域名解析可能短暂变慢,随后自动重建。" xml:space="preserve">
+    <value>Flushes the system DNS resolver cache; harmless for normal use, individual lookups may briefly slow down before it rebuilds.</value>
+  </data>
+  <data name="加入排除名单:清理时跳过该文件,后续扫描不再列出。" xml:space="preserve">
+    <value>Add to the exclusion list: this file is skipped and no longer listed in scans.</value>
+  </data>
+  <data name="动作已取消" xml:space="preserve">
+    <value>Action cancelled</value>
+  </data>
+  <data name="勾选 / 取消勾选本组全部清理项" xml:space="preserve">
+    <value>Select / deselect all items in this group</value>
+  </data>
+  <data name="勾选后参与本次清理" xml:space="preserve">
+    <value>Checked items take part in this cleanup</value>
+  </data>
+  <data name="包含模式(逗号分隔)" xml:space="preserve">
+    <value>Include patterns (comma separated)</value>
+  </data>
+  <data name="即将清理 {0:N0} 项 · {1}{2},是否继续?" xml:space="preserve">
+    <value>About to clean {0:N0} items · {1}{2}. Continue?</value>
+  </data>
+  <data name="原位置已存在同名文件,未覆盖。" xml:space="preserve">
+    <value>A file with the same name already exists at the original location; nothing was overwritten.</value>
+  </data>
+  <data name="取消" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="只影响明细的显示,不改变清理范围;被筛掉的文件清理时仍会删除。" xml:space="preserve">
+    <value>Only affects the detail view, not the cleanup scope; filtered-out files are still deleted.</value>
+  </data>
+  <data name="只清 Tencent Files 下的 Cache / Temp 缓存子目录;聊天记录数据库(Msg3.0.db / nt_msg.db 等)、FileRecv 接收文件与图片 / 视频原目录不在清理范围内。" xml:space="preserve">
+    <value>Only cleans the Cache / Temp subfolders under Tencent Files; chat history databases (Msg3.0.db / nt_msg.db, etc.), FileRecv received files and original picture / video folders are out of scope.</value>
+  </data>
+  <data name="只清微信 FileStorage 下的 Cache / Temp 缓存子目录;聊天记录数据库与图片 / 视频 / 文件原目录不在清理范围内,缺失的缓存内容联网后重新加载。" xml:space="preserve">
+    <value>Only cleans the Cache / Temp subfolders under WeChat’s FileStorage; chat history databases and original picture / video / file folders are out of scope and missing cache is re-downloaded when online.</value>
+  </data>
+  <data name="只清表情 / 头像 / 聊天图片缓存目录;聊天记录与收发的文件不清理,缓存内容联网后重新加载。" xml:space="preserve">
+    <value>Only cleans the emoji / avatar / chat image cache folders; chat history and exchanged files are not touched and missing cache is re-downloaded when online.</value>
+  </data>
+  <data name="可用不增反减 {0},可能受其他程序活动影响" xml:space="preserve">
+    <value>free space dropped by {0}, possibly due to other programs</value>
+  </data>
+  <data name="可释放空间" xml:space="preserve">
+    <value>Space that can be freed</value>
+  </data>
+  <data name="合计:可清理 {0:N0} 项 · {1}({2} 条规则)" xml:space="preserve">
+    <value>Total: {0:N0} cleanable items · {1} ({2} rules)</value>
+  </data>
+  <data name="名称(可留空)" xml:space="preserve">
+    <value>Name (optional)</value>
+  </data>
+  <data name="周一" xml:space="preserve">
+    <value>Monday</value>
+  </data>
+  <data name="周三" xml:space="preserve">
+    <value>Wednesday</value>
+  </data>
+  <data name="周二" xml:space="preserve">
+    <value>Tuesday</value>
+  </data>
+  <data name="周五" xml:space="preserve">
+    <value>Friday</value>
+  </data>
+  <data name="周六" xml:space="preserve">
+    <value>Saturday</value>
+  </data>
+  <data name="周四" xml:space="preserve">
+    <value>Thursday</value>
+  </data>
+  <data name="周日" xml:space="preserve">
+    <value>Sunday</value>
+  </data>
+  <data name="命令行" xml:space="preserve">
+    <value>Command line</value>
+  </data>
+  <data name="商店应用 LocalCache 下的缓存(磁盘紧张时系统本就可能清除);不触碰 LocalState / RoamingState 中的应用数据,个别应用可能需要重新下载资源。" xml:space="preserve">
+    <value>Caches under Store apps’ LocalCache (Windows may clear these when disk space runs low anyway); app data in LocalState / RoamingState is not touched and some apps may need to re-download resources.</value>
+  </data>
+  <data name="回收站" xml:space="preserve">
+    <value>Recycle Bin</value>
+  </data>
+  <data name="固定磁盘可用空间低于阈值时弹出通知;每块盘只提醒一次,恢复后再次跌破会再提醒。" xml:space="preserve">
+    <value>Show a notification when free space on a fixed drive drops below the threshold; each drive alerts once and re-arms after it recovers.</value>
+  </data>
+  <data name="在资源管理器中查看隔离区中的文件。" xml:space="preserve">
+    <value>View quarantined files in File Explorer.</value>
+  </data>
+  <data name="垃圾清理与磁盘瘦身" xml:space="preserve">
+    <value>Disk cleanup and space saving</value>
+  </data>
+  <data name="复制报告" xml:space="preserve">
+    <value>Copy report</value>
+  </data>
+  <data name="字体缓存(用户)" xml:space="preserve">
+    <value>Font cache (user)</value>
+  </data>
+  <data name="字体缓存(系统)" xml:space="preserve">
+    <value>Font cache (system)</value>
+  </data>
+  <data name="安全" xml:space="preserve">
+    <value>Safe</value>
+  </data>
+  <data name="安全擦除(永久删除前覆写)" xml:space="preserve">
+    <value>Secure erase (overwrite before permanent deletion)</value>
+  </data>
+  <data name="安排重启后删除({0})" xml:space="preserve">
+    <value>Delete on reboot ({0})</value>
+  </data>
+  <data name="安排重启后删除失败,请确认已以管理员身份运行。" xml:space="preserve">
+    <value>Failed to schedule deletion on reboot; make sure broom runs as administrator.</value>
+  </data>
+  <data name="对 SSD / NVMe 与写时复制文件系统(ReFS、Dev Drive)效果有限。只作用于真正销毁文件的路径:回收站删除与“重启后删除”不覆写,移入隔离区的文件在隔离区清理时才覆写删除;覆写失败的文件保留并计入失败列表。" xml:space="preserve">
+    <value>Limited effectiveness on SSD / NVMe and copy-on-write file systems (ReFS, Dev Drive). Only applies where files are truly destroyed: Recycle Bin deletion and “delete on reboot” are not overwritten; quarantined files are overwritten when the quarantine is purged; files that fail to overwrite are kept and listed as failures.</value>
+  </data>
+  <data name="导出失败:{0}" xml:space="preserve">
+    <value>Export failed: {0}</value>
+  </data>
+  <data name="导出扫描结果" xml:space="preserve">
+    <value>Export scan results</value>
+  </data>
+  <data name="导出明细" xml:space="preserve">
+    <value>Export details</value>
+  </data>
+  <data name="尚未扫描" xml:space="preserve">
+    <value>Not scanned yet</value>
+  </data>
+  <data name="尚未扫描 —— 点击“开始扫描”分析可清理的内容" xml:space="preserve">
+    <value>Not scanned yet — click “Start scan” to analyze what can be cleaned</value>
+  </data>
+  <data name="已下载的更新安装包缓存,删除后更新时可能需要重新下载。" xml:space="preserve">
+    <value>Cached update installers; updates may need to download again after deletion.</value>
+  </data>
+  <data name="已以管理员身份运行" xml:space="preserve">
+    <value>Running as administrator</value>
+  </data>
+  <data name="已创建系统还原点:{0}。" xml:space="preserve">
+    <value>System restore point created: {0}.</value>
+  </data>
+  <data name="已删除 {0:N0} 个旧还原点 / 卷影副本(每个卷保留最新一个)" xml:space="preserve">
+    <value>Deleted {0:N0} old restore points / shadow copies (keeping the newest per volume)</value>
+  </data>
+  <data name="已刷新 DNS 解析缓存。" xml:space="preserve">
+    <value>DNS resolver cache flushed.</value>
+  </data>
+  <data name="已勾选 {0} 项 · 预计释放 {1}" xml:space="preserve">
+    <value>{0} selected · up to {1} freed</value>
+  </data>
+  <data name="已取消:未确认清理(无人值守请加 --yes)。" xml:space="preserve">
+    <value>Cancelled: cleanup not confirmed (add --yes for unattended runs).</value>
+  </data>
+  <data name="已取消。" xml:space="preserve">
+    <value>Cancelled.</value>
+  </data>
+  <data name="已取消扫描,保留上一次的扫描结果。" xml:space="preserve">
+    <value>Scan cancelled; the previous scan results are kept.</value>
+  </data>
+  <data name="已取消扫描。" xml:space="preserve">
+    <value>Scan cancelled.</value>
+  </data>
+  <data name="已取消提权。" xml:space="preserve">
+    <value>Elevation cancelled.</value>
+  </data>
+  <data name="已取消清理,报告中为已完成的部分。" xml:space="preserve">
+    <value>Cleanup cancelled; the report covers the completed part.</value>
+  </data>
+  <data name="已取消清理。" xml:space="preserve">
+    <value>Cleanup cancelled.</value>
+  </data>
+  <data name="已取消还原,已还原 {0} 项。" xml:space="preserve">
+    <value>Restore cancelled; {0} items restored.</value>
+  </data>
+  <data name="已安排 {0} 项,{1} 项安排失败。" xml:space="preserve">
+    <value>Scheduled {0} items; {1} failed to schedule.</value>
+  </data>
+  <data name="已安排 {0} 项重启后删除,重启后生效。" xml:space="preserve">
+    <value>Scheduled {0} items for deletion on reboot; takes effect after restart.</value>
+  </data>
+  <data name="已安排 {0} 项重启后删除,隔离区已保留副本,重启后生效。" xml:space="preserve">
+    <value>Scheduled {0} items for deletion on reboot, copies kept in the quarantine; takes effect after restart.</value>
+  </data>
+  <data name="已导出扫描结果:{0}。" xml:space="preserve">
+    <value>Scan results exported: {0}.</value>
+  </data>
+  <data name="已打开隔离区:{0}" xml:space="preserve">
+    <value>Quarantine opened: {0}</value>
+  </data>
+  <data name="已排除:{0}(可在设置页恢复)" xml:space="preserve">
+    <value>Excluded: {0} (can be restored on the settings page)</value>
+  </data>
+  <data name="已排除:{0},但设置保存失败:{1}(可在设置页恢复)" xml:space="preserve">
+    <value>Excluded: {0}, but saving settings failed: {1} (can be restored on the settings page)</value>
+  </data>
+  <data name="已排除目录:{0}(可在设置页恢复)" xml:space="preserve">
+    <value>Excluded folder: {0} (can be restored on the settings page)</value>
+  </data>
+  <data name="已排除目录:{0},但设置保存失败:{1}(可在设置页恢复)" xml:space="preserve">
+    <value>Excluded folder: {0}, but saving settings failed: {1} (can be restored on the settings page)</value>
+  </data>
+  <data name="已放弃未保存的设置更改。" xml:space="preserve">
+    <value>Unsaved settings changes discarded.</value>
+  </data>
+  <data name="已有清理正在进行,本次跳过。" xml:space="preserve">
+    <value>A cleanup is already running; this one is skipped.</value>
+  </data>
+  <data name="已清空 {0:N0} 个事件日志(共 {1:N0} 条记录)" xml:space="preserve">
+    <value>Cleared {0:N0} event logs ({1:N0} entries in total)</value>
+  </data>
+  <data name="已清空隔离区:{0:N0} 项 · {1}。" xml:space="preserve">
+    <value>Quarantine purged: {0:N0} items · {1}.</value>
+  </data>
+  <data name="已登记重启后删除,无法在原位置还原;如需保留请从隔离区复制副本。" xml:space="preserve">
+    <value>Registered for deletion on reboot, so it cannot be restored in place; copy it from the quarantine if you need to keep it.</value>
+  </data>
+  <data name="已还原 {0} 项,{1} 项失败:{2}" xml:space="preserve">
+    <value>Restored {0} items; {1} failed: {2}</value>
+  </data>
+  <data name="已还原 {0} 项到原位置,可重新扫描以刷新列表。" xml:space="preserve">
+    <value>Restored {0} items to their original locations; scan again to refresh the list.</value>
+  </data>
+  <data name="应用崩溃转储" xml:space="preserve">
+    <value>Application crash dumps</value>
+  </data>
+  <data name="应用程序错误报告归档。" xml:space="preserve">
+    <value>Archived application error reports.</value>
+  </data>
+  <data name="应用缓存" xml:space="preserve">
+    <value>App caches</value>
+  </data>
+  <data name="应用缓存 · Office / OneDrive" xml:space="preserve">
+    <value>App cache · Office / OneDrive</value>
+  </data>
+  <data name="应用缓存 · QQ" xml:space="preserve">
+    <value>App cache · QQ</value>
+  </data>
+  <data name="应用缓存 · Spotify" xml:space="preserve">
+    <value>App cache · Spotify</value>
+  </data>
+  <data name="应用缓存 · Teams / Discord / Slack" xml:space="preserve">
+    <value>App cache · Teams / Discord / Slack</value>
+  </data>
+  <data name="应用缓存 · 商店应用(UWP)" xml:space="preserve">
+    <value>App cache · Store apps (UWP)</value>
+  </data>
+  <data name="应用缓存 · 微信" xml:space="preserve">
+    <value>App cache · WeChat</value>
+  </data>
+  <data name="应用缓存 · 钉钉" xml:space="preserve">
+    <value>App cache · DingTalk</value>
+  </data>
+  <data name="开发者缓存" xml:space="preserve">
+    <value>Developer caches</value>
+  </data>
+  <data name="开发者缓存 · Cargo" xml:space="preserve">
+    <value>Developer cache · Cargo</value>
+  </data>
+  <data name="开发者缓存 · Go 构建缓存" xml:space="preserve">
+    <value>Developer cache · Go build cache</value>
+  </data>
+  <data name="开发者缓存 · Gradle" xml:space="preserve">
+    <value>Developer cache · Gradle</value>
+  </data>
+  <data name="开发者缓存 · Maven" xml:space="preserve">
+    <value>Developer cache · Maven</value>
+  </data>
+  <data name="开发者缓存 · NuGet" xml:space="preserve">
+    <value>Developer cache · NuGet</value>
+  </data>
+  <data name="开发者缓存 · Yarn" xml:space="preserve">
+    <value>Developer cache · Yarn</value>
+  </data>
+  <data name="开发者缓存 · npm" xml:space="preserve">
+    <value>Developer cache · npm</value>
+  </data>
+  <data name="开发者缓存 · pip" xml:space="preserve">
+    <value>Developer cache · pip</value>
+  </data>
+  <data name="开发者缓存 · pnpm" xml:space="preserve">
+    <value>Developer cache · pnpm</value>
+  </data>
+  <data name="开启后“永久删除”会先把文件移入隔离区,可在清理报告的“还原”中找回;超过保留天数的内容自动删除。" xml:space="preserve">
+    <value>When enabled, “Delete permanently” first moves files into the quarantine where they can be restored from the cleanup report; content is deleted after the retention period.</value>
+  </data>
+  <data name="开启后在每次清理前尝试创建 Windows 系统还原点,为系统类目的清理提供一键回滚;失败不会阻塞清理,原因写进清理报告。" xml:space="preserve">
+    <value>When enabled, broom tries to create a Windows system restore point before each cleanup, giving system items one-click rollback; failure never blocks a cleanup and the reason goes into the report.</value>
+  </data>
+  <data name="开启自动清理后 broom 常驻托盘,到点按下面的范围清理;一律移入回收站(不永久删除),结果计入清理历史并弹出通知。" xml:space="preserve">
+    <value>With auto clean enabled broom stays in the tray and cleans on schedule within the scope below; everything goes to the Recycle Bin (never permanent deletion), results are recorded in history and shown as a notification.</value>
+  </data>
+  <data name="开始扫描" xml:space="preserve">
+    <value>Start scan</value>
+  </data>
+  <data name="当前平台暂不支持以管理员身份重启。" xml:space="preserve">
+    <value>Restarting as administrator is not supported on this platform.</value>
+  </data>
+  <data name="当前平台暂不支持回收站,本次改为永久删除。" xml:space="preserve">
+    <value>The Recycle Bin is not supported on this platform; files are deleted permanently instead.</value>
+  </data>
+  <data name="当前平台暂不支持回收站,本次改为移入隔离区。" xml:space="preserve">
+    <value>The Recycle Bin is not supported on this platform; files are moved to the quarantine instead.</value>
+  </data>
+  <data name="当前平台暂不支持打开文件位置。" xml:space="preserve">
+    <value>Opening file locations is not supported on this platform.</value>
+  </data>
+  <data name="当前平台暂不支持打开文件夹,隔离区位于:{0}" xml:space="preserve">
+    <value>Opening folders is not supported on this platform; the quarantine is at: {0}</value>
+  </data>
+  <data name="当前平台暂不支持扫描回收站" xml:space="preserve">
+    <value>Scanning the Recycle Bin is not supported on this platform</value>
+  </data>
+  <data name="当前平台暂不支持清空回收站" xml:space="preserve">
+    <value>Emptying the Recycle Bin is not supported on this platform</value>
+  </data>
+  <data name="当前平台暂不支持系统还原点。" xml:space="preserve">
+    <value>System restore points are not supported on this platform.</value>
+  </data>
+  <data name="当前平台暂不支持该清理动作" xml:space="preserve">
+    <value>This cleanup action is not supported on this platform</value>
+  </data>
+  <data name="当前平台暂不支持该清理动作。" xml:space="preserve">
+    <value>This cleanup action is not supported on this platform.</value>
+  </data>
+  <data name="当前平台暂不支持重启后删除。" xml:space="preserve">
+    <value>Delete on reboot is not supported on this platform.</value>
+  </data>
+  <data name="当前环境不支持剪贴板,无法复制报告。" xml:space="preserve">
+    <value>The clipboard is unavailable here; the report cannot be copied.</value>
+  </data>
+  <data name="当前用户的临时目录,程序正在使用的文件会自动跳过。" xml:space="preserve">
+    <value>The current user’s temp folder; files currently in use are skipped automatically.</value>
+  </data>
+  <data name="当前用户的字体缓存,删除后系统自动重建;重建完成前个别应用的字体渲染可能短暂异常。" xml:space="preserve">
+    <value>The current user’s font cache; Windows rebuilds it automatically and some apps may render fonts oddly until then.</value>
+  </data>
+  <data name="手动清理" xml:space="preserve">
+    <value>Manual cleanup</value>
+  </data>
+  <data name="打开 broom" xml:space="preserve">
+    <value>Open broom</value>
+  </data>
+  <data name="打开位置" xml:space="preserve">
+    <value>Open location</value>
+  </data>
+  <data name="打开隔离区" xml:space="preserve">
+    <value>Open quarantine</value>
+  </data>
+  <data name="托盘图标左键打开主界面,右键菜单可“立即清理”或真正退出。自动清理只在 broom 运行时执行;需要关机后仍可清理时,用命令行接入 Windows 计划任务:broom --clean safe --yes --report %APPDATA%\broom\auto-clean.txt。" xml:space="preserve">
+    <value>Left-click the tray icon to open the window; the right-click menu can “Clean now” or exit for real. Auto clean only runs while broom is running; to clean even while the PC is shut down, register the command line with Windows Task Scheduler: broom --clean safe --yes --report %APPDATA%\broom\auto-clean.txt.</value>
+  </data>
+  <data name="执行中…" xml:space="preserve">
+    <value>Running…</value>
+  </data>
+  <data name="执行时生效(释放量在清理后统计)" xml:space="preserve">
+    <value>Takes effect when run (freed space counted after cleanup)</value>
+  </data>
+  <data name="扫描与清理时跳过最近 N 天内修改过的文件,避免误删仍在使用的临时文件。" xml:space="preserve">
+    <value>Skip files modified within the last N days during scanning and cleaning to avoid deleting temporary files still in use.</value>
+  </data>
+  <data name="扫描中…" xml:space="preserve">
+    <value>Scanning…</value>
+  </data>
+  <data name="扫描失败:{0}" xml:space="preserve">
+    <value>Scan failed: {0}</value>
+  </data>
+  <data name="扫描完成。" xml:space="preserve">
+    <value>Scan finished.</value>
+  </data>
+  <data name="扫描并清理临时文件、缓存与残留。" xml:space="preserve">
+    <value>Scan and clean temporary files, caches and leftovers.</value>
+  </data>
+  <data name="把扫描到的全部文件导出为 CSV / TXT(规则、路径、大小),便于核对。" xml:space="preserve">
+    <value>Export all scanned files to CSV / TXT (rule, path, size) for review.</value>
+  </data>
+  <data name="把本次清理移入隔离区的文件移回原位置;隔离区内容在保留天数后自动删除。" xml:space="preserve">
+    <value>Move the files quarantined in this cleanup back to where they were; quarantined content is deleted after the retention period.</value>
+  </data>
+  <data name="把清理报告全文复制到剪贴板。" xml:space="preserve">
+    <value>Copy the full cleanup report to the clipboard.</value>
+  </data>
+  <data name="报告写入失败:{0}" xml:space="preserve">
+    <value>Failed to write the report: {0}</value>
+  </data>
+  <data name="按名称" xml:space="preserve">
+    <value>By name</value>
+  </data>
+  <data name="按名称、说明或类别过滤。" xml:space="preserve">
+    <value>Filter by name, description or category.</value>
+  </data>
+  <data name="按大小从大到小" xml:space="preserve">
+    <value>Largest first</value>
+  </data>
+  <data name="按大小从小到大" xml:space="preserve">
+    <value>Smallest first</value>
+  </data>
+  <data name="按本地时间执行;错过时刻(如关机 / 休眠)顺延到下一次,不补跑。" xml:space="preserve">
+    <value>Runs at the local time; missed runs (shutdown / sleep) are skipped, never made up.</value>
+  </data>
+  <data name="按风险等级筛选。" xml:space="preserve">
+    <value>Filter by risk level.</value>
+  </data>
+  <data name="换个关键词,或把风险筛选调回“全部等级”。" xml:space="preserve">
+    <value>Try another keyword, or set the risk filter back to “All levels”.</value>
+  </data>
+  <data name="排除" xml:space="preserve">
+    <value>Exclude</value>
+  </data>
+  <data name="排除文件夹" xml:space="preserve">
+    <value>Exclude folder</value>
+  </data>
+  <data name="排除模式(逗号分隔)" xml:space="preserve">
+    <value>Exclude patterns (comma separated)</value>
+  </data>
+  <data name="排除的文件" xml:space="preserve">
+    <value>Excluded files</value>
+  </data>
+  <data name="排除规则" xml:space="preserve">
+    <value>Exclusions</value>
+  </data>
+  <data name="排除该文件所在的整个目录:清理时跳过该目录下的所有文件,后续扫描不再列出。" xml:space="preserve">
+    <value>Exclude the entire directory containing this file: everything under it is skipped and no longer listed in scans.</value>
+  </data>
+  <data name="排除项必须是绝对路径或包含 %环境变量%:{0} 等 {1} 项。" xml:space="preserve">
+    <value>Exclusions must be absolute paths or contain %ENV% variables: {0} and {1} more.</value>
+  </data>
+  <data name="排除项必须是绝对路径或包含 %环境变量%:{0}。" xml:space="preserve">
+    <value>Exclusions must be absolute paths or contain %ENV% variables: {0}.</value>
+  </data>
+  <data name="提权重启失败:{0}" xml:space="preserve">
+    <value>Elevation failed: {0}</value>
+  </data>
+  <data name="提权重启失败:无法确定当前程序路径。" xml:space="preserve">
+    <value>Elevation failed: unable to determine the program path.</value>
+  </data>
+  <data name="提权重启失败。" xml:space="preserve">
+    <value>Elevation failed.</value>
+  </data>
+  <data name="提示:回收站删除不经过安全擦除;覆写只作用于永久删除与隔离区清理。" xml:space="preserve">
+    <value>Note: deleting to the Recycle Bin does not use secure erase; overwriting only applies to permanent deletion and quarantine purge.</value>
+  </data>
+  <data name="提示:安全擦除在隔离区清理时生效(覆写 {0} 次后删除);移入隔离区本身不覆写。" xml:space="preserve">
+    <value>Note: secure erase applies when the quarantine is purged (overwrite {0} times then delete); moving into the quarantine does not overwrite.</value>
+  </data>
+  <data name="提示:本次删除前已覆写 {0} 次;对 SSD / NVMe 与写时复制文件系统效果有限。" xml:space="preserve">
+    <value>Note: deleted files were overwritten {0} times first; limited effectiveness on SSD / NVMe and copy-on-write file systems.</value>
+  </data>
+  <data name="提示:移入回收站的文件仍占用磁盘空间,清空回收站后才会真正释放。" xml:space="preserve">
+    <value>Note: files moved to the Recycle Bin still use disk space; space is only freed once it is emptied.</value>
+  </data>
+  <data name="提示:隔离区中的文件仍占用磁盘空间,会一直保留直到手动清空;期间可在下方“还原”。" xml:space="preserve">
+    <value>Note: quarantined files still use disk space and are kept until purged manually; you can “Restore” them below until then.</value>
+  </data>
+  <data name="提示:隔离区中的文件仍占用磁盘空间,保留 {0} 天后自动删除;期间可在下方“还原”。" xml:space="preserve">
+    <value>Note: quarantined files still use disk space and are deleted after {0} days; you can “Restore” them below until then.</value>
+  </data>
+  <data name="搜索清理项…" xml:space="preserve">
+    <value>Search cleanup items…</value>
+  </data>
+  <data name="收起文件" xml:space="preserve">
+    <value>Hide files</value>
+  </data>
+  <data name="放弃更改" xml:space="preserve">
+    <value>Discard changes</value>
+  </data>
+  <data name="文件不存在" xml:space="preserve">
+    <value>File does not exist</value>
+  </data>
+  <data name="文本文件(制表符分隔)" xml:space="preserve">
+    <value>Text file (tab separated)</value>
+  </data>
+  <data name="无法列出卷影副本:{0}(可能是没有卷影副本,或需要管理员权限)" xml:space="preserve">
+    <value>Unable to list shadow copies: {0} (there may be none, or administrator rights may be required)</value>
+  </data>
+  <data name="无法创建隔离区目录:{0}" xml:space="preserve">
+    <value>Unable to create the quarantine folder: {0}</value>
+  </data>
+  <data name="无法打开文件位置:{0}" xml:space="preserve">
+    <value>Unable to open file location: {0}</value>
+  </data>
+  <data name="无法打开隔离区:{0}" xml:space="preserve">
+    <value>Unable to open the quarantine: {0}</value>
+  </data>
+  <data name="无法排除该文件所在的目录。" xml:space="preserve">
+    <value>The directory containing this file cannot be excluded.</value>
+  </data>
+  <data name="无法识别的清理范围:{0}(仅支持 safe 或 all)。" xml:space="preserve">
+    <value>Unrecognized cleanup scope: {0} (only safe or all).</value>
+  </data>
+  <data name="旧系统备份与升级残留" xml:space="preserve">
+    <value>Old system backups &amp; upgrade leftovers</value>
+  </data>
+  <data name="旧还原点与卷影副本" xml:space="preserve">
+    <value>Old restore points &amp; shadow copies</value>
+  </data>
+  <data name="时刻" xml:space="preserve">
+    <value>Time</value>
+  </data>
+  <data name="显示 {0} / {1} 项" xml:space="preserve">
+    <value>Showing {0} / {1} items</value>
+  </data>
+  <data name="显示更多(剩余 {0:N0} 项)" xml:space="preserve">
+    <value>Show more ({0:N0} remaining)</value>
+  </data>
+  <data name="显示高风险类目(例如旧系统备份)" xml:space="preserve">
+    <value>Show high-risk categories (e.g. old system backups)</value>
+  </data>
+  <data name="暂无清理历史" xml:space="preserve">
+    <value>No cleanup history yet</value>
+  </data>
+  <data name="更新与组件安装过程产生的日志文件。" xml:space="preserve">
+    <value>Log files produced by updates and component installations.</value>
+  </data>
+  <data name="最近使用的文档与跳转列表" xml:space="preserve">
+    <value>Recent documents &amp; jump lists</value>
+  </data>
+  <data name="未创建系统还原点:{0}清理继续,本次删除无法通过还原点回滚。" xml:space="preserve">
+    <value>No system restore point created: {0} the cleanup continues and this deletion cannot be rolled back via a restore point.</value>
+  </data>
+  <data name="未创建系统还原点:当前平台暂不支持。" xml:space="preserve">
+    <value>No system restore point created: not supported on this platform.</value>
+  </data>
+  <data name="未创建系统还原点:需要管理员权限(可点击“以管理员身份重启”),本次跳过。" xml:space="preserve">
+    <value>No system restore point created: administrator rights are required (click “Restart as administrator”); skipped this time.</value>
+  </data>
+  <data name="未知参数:{0}" xml:space="preserve">
+    <value>Unknown argument: {0}</value>
+  </data>
+  <data name="未知的清理动作:{0}" xml:space="preserve">
+    <value>Unknown cleanup action: {0}</value>
+  </data>
+  <data name="未能复制到隔离区" xml:space="preserve">
+    <value>Failed to copy to the quarantine</value>
+  </data>
+  <data name="未能复制到隔离区:{0}" xml:space="preserve">
+    <value>Failed to copy to the quarantine: {0}</value>
+  </data>
+  <data name="未能安排重启后删除:{0}" xml:space="preserve">
+    <value>Failed to schedule deletion on reboot: {0}</value>
+  </data>
+  <data name="本次合并了 {0} 个重复排除项。" xml:space="preserve">
+    <value>{0} duplicate exclusions were merged.</value>
+  </data>
+  <data name="本次释放 +{0}" xml:space="preserve">
+    <value>freed +{0} this time</value>
+  </data>
+  <data name="本次释放 {0}" xml:space="preserve">
+    <value>Freed {0} this session</value>
+  </data>
+  <data name="来自设置的自定义目录。" xml:space="preserve">
+    <value>Custom folder configured in settings.</value>
+  </data>
+  <data name="枚举事件日志失败:{0}" xml:space="preserve">
+    <value>Failed to enumerate event logs: {0}</value>
+  </data>
+  <data name="查看文件({0:N0})" xml:space="preserve">
+    <value>View files ({0:N0})</value>
+  </data>
+  <data name="正在创建系统还原点…" xml:space="preserve">
+    <value>Creating system restore point…</value>
+  </data>
+  <data name="正在扫描:{0}" xml:space="preserve">
+    <value>Scanning: {0}</value>
+  </data>
+  <data name="正在扫描:{0} — {1}" xml:space="preserve">
+    <value>Scanning: {0} — {1}</value>
+  </data>
+  <data name="正在清理:{0}" xml:space="preserve">
+    <value>Cleaning: {0}</value>
+  </data>
+  <data name="正在清理:{0} — {1}" xml:space="preserve">
+    <value>Cleaning: {0} — {1}</value>
+  </data>
+  <data name="正在还原:{0}/{1}" xml:space="preserve">
+    <value>Restoring: {0}/{1}</value>
+  </data>
+  <data name="每个自定义目录都需要填写路径。" xml:space="preserve">
+    <value>Every custom folder needs a path.</value>
+  </data>
+  <data name="每周" xml:space="preserve">
+    <value>Weekly</value>
+  </data>
+  <data name="每天" xml:space="preserve">
+    <value>Daily</value>
+  </data>
+  <data name="每月" xml:space="preserve">
+    <value>Monthly</value>
+  </data>
+  <data name="每月按日期执行(1–28,避免短月份跳过)。" xml:space="preserve">
+    <value>Runs on a day of the month (1–28 so short months are never skipped).</value>
+  </data>
+  <data name="每次清理(含自动清理与命令行)都会记录到 %APPDATA%\broom\history.json,重启后累计数据仍在。" xml:space="preserve">
+    <value>Every cleanup (including auto clean and the command line) is recorded in %APPDATA%\broom\history.json; totals survive restarts.</value>
+  </data>
+  <data name="每行一个文件路径,命中的文件在任何规则下都会被跳过;在清理页的文件明细中点击“排除”会自动添加到这里。" xml:space="preserve">
+    <value>One file path per line; matching files are skipped by every rule. Clicking “Exclude” in the cleanup details adds entries here automatically.</value>
+  </data>
+  <data name="每行一个路径,命中的文件在任何规则下都会被跳过(包含该目录下的所有内容)。" xml:space="preserve">
+    <value>One path per line; matching files are skipped by every rule (includes everything under that directory).</value>
+  </data>
+  <data name="永久保留" xml:space="preserve">
+    <value>Keep forever</value>
+  </data>
+  <data name="永久删除" xml:space="preserve">
+    <value>Delete permanently</value>
+  </data>
+  <data name="永久删除(覆写 {0} 次)" xml:space="preserve">
+    <value>Delete permanently ({0} overwrite passes)</value>
+  </data>
+  <data name="永久删除时先移入隔离区(可还原)" xml:space="preserve">
+    <value>Move to quarantine before permanent deletion (restorable)</value>
+  </data>
+  <data name="永久删除隔离区中的全部内容,不可恢复。" xml:space="preserve">
+    <value>Permanently delete everything in the quarantine; this cannot be undone.</value>
+  </data>
+  <data name="没有勾选可清理的内容 —— 请先扫描并选择要清理的项目。" xml:space="preserve">
+    <value>Nothing selected to clean — scan first and choose the items to clean.</value>
+  </data>
+  <data name="没有匹配的清理项" xml:space="preserve">
+    <value>No matching cleanup items</value>
+  </data>
+  <data name="没有可删除的旧卷影副本(每个卷只保留最新一个)" xml:space="preserve">
+    <value>No old shadow copies to delete (only the newest per volume is kept)</value>
+  </data>
+  <data name="没有可清理的内容" xml:space="preserve">
+    <value>Nothing to clean</value>
+  </data>
+  <data name="没有符合当前筛选的文件。" xml:space="preserve">
+    <value>No files match the current filter.</value>
+  </data>
+  <data name="浏览器 Cookie 与登录状态" xml:space="preserve">
+    <value>Browser cookies &amp; sign-ins</value>
+  </data>
+  <data name="浏览器历史与会话" xml:space="preserve">
+    <value>Browser history &amp; sessions</value>
+  </data>
+  <data name="浏览器缓存" xml:space="preserve">
+    <value>Browser caches</value>
+  </data>
+  <data name="浏览器网页缓存" xml:space="preserve">
+    <value>Browser web caches</value>
+  </data>
+  <data name="浏览器隐私" xml:space="preserve">
+    <value>Browser privacy</value>
+  </data>
+  <data name="添加目录" xml:space="preserve">
+    <value>Add folder</value>
+  </data>
+  <data name="清理" xml:space="preserve">
+    <value>Clean</value>
+  </data>
+  <data name="清理前创建系统还原点(需要管理员权限)" xml:space="preserve">
+    <value>Create a system restore point before cleaning (requires administrator)</value>
+  </data>
+  <data name="清理动作失败" xml:space="preserve">
+    <value>Cleanup action failed</value>
+  </data>
+  <data name="清理历史" xml:space="preserve">
+    <value>Cleanup history</value>
+  </data>
+  <data name="清理历史写入失败:{0}(不影响本次清理结果)" xml:space="preserve">
+    <value>Failed to write cleanup history: {0} (cleanup result unaffected)</value>
+  </data>
+  <data name="清理后移除扫描根下的空目录" xml:space="preserve">
+    <value>Remove empty directories under scanned roots after cleaning</value>
+  </data>
+  <data name="清理失败:{0}" xml:space="preserve">
+    <value>Cleanup failed: {0}</value>
+  </data>
+  <data name="清理完成:删除 {0:N0} 项,共 {1}。" xml:space="preserve">
+    <value>Cleanup finished: {0:N0} items deleted, {1} in total.</value>
+  </data>
+  <data name="清理完成。" xml:space="preserve">
+    <value>Cleanup finished.</value>
+  </data>
+  <data name="清理完成后顺带回收本次扫描根下的空目录;可能删除你有意保留的空目录结构,默认关闭。" xml:space="preserve">
+    <value>Also remove empty directories under the scanned roots after cleaning; this may delete empty folder structures you meant to keep, so it is off by default.</value>
+  </data>
+  <data name="清理已取消,以上为已完成的部分。" xml:space="preserve">
+    <value>Cleanup was cancelled; the above covers the completed part.</value>
+  </data>
+  <data name="清理报告" xml:space="preserve">
+    <value>Cleanup report</value>
+  </data>
+  <data name="清理报告已复制到剪贴板。" xml:space="preserve">
+    <value>Cleanup report copied to the clipboard.</value>
+  </data>
+  <data name="清理范围" xml:space="preserve">
+    <value>Cleanup scope</value>
+  </data>
+  <data name="清理选中({0})" xml:space="preserve">
+    <value>Clean selected ({0})</value>
+  </data>
+  <data name="清理项" xml:space="preserve">
+    <value>Cleanup items</value>
+  </data>
+  <data name="清空回收站,清空后其中的文件将无法恢复。" xml:space="preserve">
+    <value>Empties the Recycle Bin; the files in it cannot be recovered afterwards.</value>
+  </data>
+  <data name="清空隔离区" xml:space="preserve">
+    <value>Purge quarantine</value>
+  </data>
+  <data name="清空隔离区未完成:{0}" xml:space="preserve">
+    <value>Purging the quarantine did not finish: {0}</value>
+  </data>
+  <data name="点击“开始扫描”,分析磁盘上可以清理的内容。" xml:space="preserve">
+    <value>Click “Start scan” to analyze what can be cleaned up.</value>
+  </data>
+  <data name="用户临时文件" xml:space="preserve">
+    <value>User temporary files</value>
+  </data>
+  <data name="用随机数据覆写后再删除,降低数据恢复的可行性;文件越大、次数越多,清理越慢。" xml:space="preserve">
+    <value>Overwrite with random data before deleting to make recovery harder; larger files and more passes make cleaning slower.</value>
+  </data>
+  <data name="登记到系统重启队列,重启后生效;重启前文件仍占用空间。" xml:space="preserve">
+    <value>Register with the Windows reboot deletion queue; takes effect after restart, files keep using space until then.</value>
+  </data>
+  <data name="确认清空(不可恢复)" xml:space="preserve">
+    <value>Confirm purge (cannot be undone)</value>
+  </data>
+  <data name="磁盘 {0} 可用空间仅剩 {1}(低于阈值 {2})" xml:space="preserve">
+    <value>Drive {0} has only {1} of free space left (below the {2} threshold)</value>
+  </data>
+  <data name="磁盘空间不足" xml:space="preserve">
+    <value>Low disk space</value>
+  </data>
+  <data name="磁盘空间提醒" xml:space="preserve">
+    <value>Low disk space alerts</value>
+  </data>
+  <data name="程序崩溃时生成的转储文件,仅用于事后诊断。" xml:space="preserve">
+    <value>Dump files created when programs crash, used for diagnostics only.</value>
+  </data>
+  <data name="立即清理(按自动清理设置)" xml:space="preserve">
+    <value>Clean now (per auto-clean settings)</value>
+  </data>
+  <data name="系统 Internet 临时文件缓存。" xml:space="preserve">
+    <value>The system cache for Internet temporary files.</value>
+  </data>
+  <data name="系统临时与日志" xml:space="preserve">
+    <value>System temp &amp; logs</value>
+  </data>
+  <data name="系统临时文件" xml:space="preserve">
+    <value>System temporary files</value>
+  </data>
+  <data name="系统保护未开启(可在「系统属性 → 系统保护」中为系统盘启用)。" xml:space="preserve">
+    <value>System protection is off (enable it for the system drive in “System Properties → System Protection”).</value>
+  </data>
+  <data name="系统内存转储" xml:space="preserve">
+    <value>System memory dumps</value>
+  </data>
+  <data name="系统升级残留与安装日志" xml:space="preserve">
+    <value>Upgrade leftovers &amp; setup logs</value>
+  </data>
+  <data name="系统备份" xml:space="preserve">
+    <value>System backups</value>
+  </data>
+  <data name="系统服务使用的字体缓存,删除后自动重建。" xml:space="preserve">
+    <value>Font cache used by system services; rebuilt automatically after deletion.</value>
+  </data>
+  <data name="系统级错误报告归档,与用户级互相独立。" xml:space="preserve">
+    <value>Archived system-level error reports, independent of the user ones.</value>
+  </data>
+  <data name="系统缓存" xml:space="preserve">
+    <value>System caches</value>
+  </data>
+  <data name="系统蓝屏转储与内存转储文件,通常体积很大。" xml:space="preserve">
+    <value>System crash (BSOD) and memory dump files, usually very large.</value>
+  </data>
+  <data name="系统返回错误码 {0}。" xml:space="preserve">
+    <value>The system returned error code {0}.</value>
+  </data>
+  <data name="系统还原点" xml:space="preserve">
+    <value>System restore point</value>
+  </data>
+  <data name="累计释放 {0}" xml:space="preserve">
+    <value>{0} freed in total</value>
+  </data>
+  <data name="组件存储清理" xml:space="preserve">
+    <value>Component store cleanup</value>
+  </data>
+  <data name="组件存储清理(WinSxS)" xml:space="preserve">
+    <value>Component store cleanup (WinSxS)</value>
+  </data>
+  <data name="缩略图与图标缓存" xml:space="preserve">
+    <value>Thumbnail &amp; icon caches</value>
+  </data>
+  <data name="自动删除必须可预期:推荐只清安全项;“上次勾选的项目”按清理页当前的选择执行。" xml:space="preserve">
+    <value>Automatic deletion must be predictable: cleaning safe items only is recommended; “Last selected items” follows your current selection on the cleanup page.</value>
+  </data>
+  <data name="自动化与托盘" xml:space="preserve">
+    <value>Automation and tray</value>
+  </data>
+  <data name="自动清理" xml:space="preserve">
+    <value>Auto clean</value>
+  </data>
+  <data name="自动清理:当前范围没有可清理的规则。" xml:space="preserve">
+    <value>Auto clean: no cleanup rules in the current scope.</value>
+  </data>
+  <data name="自动清理:没有需要清理的内容。" xml:space="preserve">
+    <value>Auto clean: nothing needs cleaning.</value>
+  </data>
+  <data name="自动清理失败:{0}" xml:space="preserve">
+    <value>Auto clean failed: {0}</value>
+  </data>
+  <data name="自动清理完成:没有需要清理的内容。" xml:space="preserve">
+    <value>Auto clean finished: nothing needed cleaning.</value>
+  </data>
+  <data name="自动清理完成:清理 {0:N0} 项 · 释放 {1}" xml:space="preserve">
+    <value>Auto clean finished: {0:N0} items cleaned · {1} freed</value>
+  </data>
+  <data name="自动清理已取消。" xml:space="preserve">
+    <value>Auto clean cancelled.</value>
+  </data>
+  <data name="自定义:{0}" xml:space="preserve">
+    <value>Custom: {0}</value>
+  </data>
+  <data name="自定义清理目录、排除规则与默认选项。" xml:space="preserve">
+    <value>Customize cleanup folders, exclusions and default options.</value>
+  </data>
+  <data name="自定义清理目录、排除规则与默认选项。修改后点击“保存设置”才会生效。" xml:space="preserve">
+    <value>Customize cleanup folders, exclusions and default options. Click “Save settings” to apply changes.</value>
+  </data>
+  <data name="自定义目录" xml:space="preserve">
+    <value>Custom folders</value>
+  </data>
+  <data name="覆写 1 次" xml:space="preserve">
+    <value>Overwrite once</value>
+  </data>
+  <data name="覆写 3 次" xml:space="preserve">
+    <value>Overwrite 3 times</value>
+  </data>
+  <data name="规则	路径	大小(字节)" xml:space="preserve">
+    <value>Rule	Path	Size (bytes)</value>
+  </data>
+  <data name="规则,路径,大小(字节)" xml:space="preserve">
+    <value>Rule,Path,Size (bytes)</value>
+  </data>
+  <data name="规则缺少清理动作定义" xml:space="preserve">
+    <value>Rule has no cleanup action defined</value>
+  </data>
+  <data name="设置" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="设置保存失败:{0}" xml:space="preserve">
+    <value>Saving settings failed: {0}</value>
+  </data>
+  <data name="设置保存失败:{0}(本次会话内仍生效)。" xml:space="preserve">
+    <value>Saving settings failed: {0} (still in effect for this session).</value>
+  </data>
+  <data name="设置已保存,请重新扫描。" xml:space="preserve">
+    <value>Settings saved; please scan again.</value>
+  </data>
+  <data name="设置已保存。" xml:space="preserve">
+    <value>Settings saved.</value>
+  </data>
+  <data name="请指定 --scan 或 --clean。" xml:space="preserve">
+    <value>Specify --scan or --clean.</value>
+  </data>
+  <data name="请等待当前操作完成后再排除文件。" xml:space="preserve">
+    <value>Wait for the current operation to finish before excluding files.</value>
+  </data>
+  <data name="请等待当前操作完成后再排除文件夹。" xml:space="preserve">
+    <value>Wait for the current operation to finish before excluding folders.</value>
+  </data>
+  <data name="调整清理项的排列顺序。" xml:space="preserve">
+    <value>Change the sort order of cleanup items.</value>
+  </data>
+  <data name="谨慎" xml:space="preserve">
+    <value>Caution</value>
+  </data>
+  <data name="资源管理器「最近使用」与任务栏跳转列表(含固定项)的记录;不影响文档本身,列表从头开始重新积累。" xml:space="preserve">
+    <value>File Explorer “Recent” and taskbar jump list entries (including pinned items); documents themselves are untouched and the list rebuilds from scratch.</value>
+  </data>
+  <data name="资源管理器缩略图与图标缓存,删除后会自动重建。" xml:space="preserve">
+    <value>File Explorer thumbnail and icon caches; rebuilt automatically after deletion.</value>
+  </data>
+  <data name="超过保留天数的隔离内容在启动应用时自动清理;“永久保留”需手动清空。" xml:space="preserve">
+    <value>Quarantined content older than the retention period is purged at startup; “Keep forever” requires manual purge.</value>
+  </data>
+  <data name="路径(支持 %ENV% 与目录级通配符 *)" xml:space="preserve">
+    <value>Path (supports %ENV% and directory wildcards *)</value>
+  </data>
+  <data name="跳过最近修改的文件" xml:space="preserve">
+    <value>Skip recently modified files</value>
+  </data>
+  <data name="还原到原位置;隔离区中的文件仍占用磁盘空间。" xml:space="preserve">
+    <value>Restore to original locations; quarantined files still use disk space.</value>
+  </data>
+  <data name="还原本次隔离的 {0} 项" xml:space="preserve">
+    <value>Restore the {0} quarantined items</value>
+  </data>
+  <data name="这些目录会作为自定义规则出现在清理页,可扫描、可清理。路径支持 %ENV% 环境变量与目录级通配符(*)。" xml:space="preserve">
+    <value>These folders appear as custom rules on the cleanup page and can be scanned and cleaned. Paths support %ENV% variables and directory-level wildcards (*).</value>
+  </data>
+  <data name="退出 broom" xml:space="preserve">
+    <value>Exit broom</value>
+  </data>
+  <data name="退出码 {0}{1}" xml:space="preserve">
+    <value>Exit code {0}{1}</value>
+  </data>
+  <data name="通过 UAC 以管理员身份重新启动,用于清理需要管理员权限的项目。" xml:space="preserve">
+    <value>Restarts broom with UAC elevation so items requiring administrator rights can be cleaned.</value>
+  </data>
+  <data name="通过系统 API 清空事件查看器中的历史记录;排障历史将丢失且不可恢复,建议先导出留存。" xml:space="preserve">
+    <value>Clears Event Viewer history through system APIs; troubleshooting history is lost and cannot be recovered, export it first if you need it.</value>
+  </data>
+  <data name="部分失败可通过提权重试 —— 点击右上角“以管理员身份重启”。" xml:space="preserve">
+    <value>Some failures can be retried with elevation — click “Restart as administrator” in the top right.</value>
+  </data>
+  <data name="部分文件被占用,操作被中止" xml:space="preserve">
+    <value>Some files are in use and the operation was aborted</value>
+  </data>
+  <data name="部分无法访问" xml:space="preserve">
+    <value>Some paths inaccessible</value>
+  </data>
+  <data name="重新扫描" xml:space="preserve">
+    <value>Scan again</value>
+  </data>
+  <data name="隔离区" xml:space="preserve">
+    <value>Quarantine</value>
+  </data>
+  <data name="隔离区(可还原)" xml:space="preserve">
+    <value>Quarantine (restorable)</value>
+  </data>
+  <data name="隔离区中的副本已不存在(可能已被清理)。" xml:space="preserve">
+    <value>The copy in the quarantine no longer exists (it may have been purged).</value>
+  </data>
+  <data name="隔离区当前:{0:N0} 项 · {1}。" xml:space="preserve">
+    <value>Quarantine currently: {0:N0} items · {1}.</value>
+  </data>
+  <data name="隔离区当前为空。" xml:space="preserve">
+    <value>The quarantine is currently empty.</value>
+  </data>
+  <data name="隔离区本来就是空的。" xml:space="preserve">
+    <value>The quarantine is already empty.</value>
+  </data>
+  <data name="需要管理员" xml:space="preserve">
+    <value>Requires admin</value>
+  </data>
+  <data name="需要管理员权限 —— 请先以管理员身份重启。" xml:space="preserve">
+    <value>Requires administrator rights — restart as administrator first.</value>
+  </data>
+  <data name="需要管理员权限。" xml:space="preserve">
+    <value>Requires administrator rights.</value>
+  </data>
+  <data name="预览本条规则命中的文件,可将个别文件排除。" xml:space="preserve">
+    <value>Preview files matched by this rule; individual files can be excluded.</value>
+  </data>
+  <data name="预读取文件(Prefetch)" xml:space="preserve">
+    <value>Prefetch files</value>
+  </data>
+  <data name="频率" xml:space="preserve">
+    <value>Frequency</value>
+  </data>
+  <data name="风险等级" xml:space="preserve">
+    <value>Risk level</value>
+  </data>
+  <data name="高风险" xml:space="preserve">
+    <value>High risk</value>
+  </data>
+  <data name="默认使用永久删除(不经过回收站)" xml:space="preserve">
+    <value>Delete permanently by default (bypassing the Recycle Bin)</value>
+  </data>
+  <data name="默认勾选" xml:space="preserve">
+    <value>Selected by default</value>
+  </data>
+</root>

@@ -1,6 +1,7 @@
-using broom.Core;
+﻿using broom.Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 
+using broom.Localization;
 namespace broom.ViewModels;
 
 /// <summary>界面上的一个规则分组(例如"开发者缓存"),含分组小计与分组级勾选。</summary>
@@ -47,6 +48,6 @@ public class RuleGroupViewModel : ObservableObject
     private void UpdateTotals()
     {
         SizeText = Formatting.FormatBytes(Items.Sum(item => item.SizeBytes));
-        CountText = $"{Items.Count} 项";
+        CountText = Strings.M($"{Items.Count} 项");
     }
 }

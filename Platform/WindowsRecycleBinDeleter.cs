@@ -1,5 +1,6 @@
-using System.Runtime.Versioning;
+﻿using System.Runtime.Versioning;
 
+using broom.Localization;
 namespace broom.Platform;
 
 /// <summary>
@@ -10,7 +11,7 @@ public sealed class WindowsRecycleBinDeleter : IFileDeleter
 {
     private const int BatchSize = 512;
 
-    public string Name => "回收站";
+    public string Name => Strings.T("回收站");
 
     public int Delete(IReadOnlyList<string> paths, IDictionary<string, string> failures, CancellationToken ct = default)
     {

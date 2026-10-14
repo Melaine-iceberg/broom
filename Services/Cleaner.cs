@@ -1,6 +1,7 @@
-using broom.Core;
+﻿using broom.Core;
 using broom.Platform;
 
+using broom.Localization;
 namespace broom.Services;
 
 /// <summary>
@@ -186,17 +187,17 @@ public sealed class Cleaner
     {
         if (target.Rule.Action is not { } action)
         {
-            result.Failures.Add(new DeleteFailure($"<{target.Rule.DisplayName}>", "规则缺少清理动作定义"));
+            result.Failures.Add(new DeleteFailure($"<{target.Rule.DisplayName}>", Strings.T("规则缺少清理动作定义")));
             return;
         }
 
         if (!actions.IsSupported(action))
         {
-            result.Failures.Add(new DeleteFailure($"<{target.Rule.DisplayName}>", "当前平台暂不支持该清理动作"));
+            result.Failures.Add(new DeleteFailure($"<{target.Rule.DisplayName}>", Strings.T("当前平台暂不支持该清理动作")));
             return;
         }
 
-        progress?.Report(new CleanProgress(index, count, target.Rule.DisplayName, "执行中…"));
+        progress?.Report(new CleanProgress(index, count, target.Rule.DisplayName, Strings.T("执行中…")));
         var detail = new Progress<string>(line => progress?.Report(new CleanProgress(index, count, target.Rule.DisplayName, line)));
 
         CleanupActionResult outcome;
@@ -206,7 +207,7 @@ public sealed class Cleaner
         }
         catch (OperationCanceledException)
         {
-            result.Summary = "动作已取消";
+            result.Summary = Strings.T("动作已取消");
             return;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
@@ -221,7 +222,7 @@ public sealed class Cleaner
         result.Failures.AddRange(outcome.Failures);
         if (!outcome.Success && outcome.Failures.Count == 0)
         {
-            result.Failures.Add(new DeleteFailure($"<{target.Rule.DisplayName}>", outcome.Error ?? "清理动作失败"));
+            result.Failures.Add(new DeleteFailure($"<{target.Rule.DisplayName}>", outcome.Error ?? Strings.T("清理动作失败")));
         }
     }
 
@@ -229,7 +230,7 @@ public sealed class Cleaner
     {
         if (!OperatingSystem.IsWindows())
         {
-            result.Failures.Add(new DeleteFailure("<回收站>", "当前平台暂不支持清空回收站"));
+            result.Failures.Add(new DeleteFailure(Strings.T("<回收站>"), Strings.T("当前平台暂不支持清空回收站")));
             return;
         }
 
@@ -241,7 +242,7 @@ public sealed class Cleaner
 
         if (!ok)
         {
-            result.Failures.Add(new DeleteFailure("<回收站>", error));
+            result.Failures.Add(new DeleteFailure(Strings.T("<回收站>"), error));
         }
     }
 

@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Text;
 using broom.Core;
@@ -8,6 +8,7 @@ using broom.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
+using broom.Localization;
 namespace broom.ViewModels;
 
 public partial class MainWindowViewModel : ObservableObject
@@ -72,7 +73,7 @@ public partial class MainWindowViewModel : ObservableObject
     private bool _hasScanned;
 
     [ObservableProperty]
-    private string _statusText = "点击“开始扫描”,分析磁盘上可以清理的内容。";
+    private string _statusText = Strings.T("点击“开始扫描”,分析磁盘上可以清理的内容。");
 
     [ObservableProperty]
     private double _progressValue;
@@ -88,17 +89,17 @@ public partial class MainWindowViewModel : ObservableObject
 
     private static readonly RiskFilterOption[] RiskFilterOptions =
     [
-        new(null, "全部等级"),
-        new(RiskLevel.Safe, "安全"),
-        new(RiskLevel.Caution, "谨慎"),
-        new(RiskLevel.High, "高风险"),
+        new(null, Strings.T("全部等级")),
+        new(RiskLevel.Safe, Strings.T("安全")),
+        new(RiskLevel.Caution, Strings.T("谨慎")),
+        new(RiskLevel.High, Strings.T("高风险")),
     ];
 
     private static readonly SortOption[] SortOptionList =
     [
-        new(RuleSort.SizeDescending, "按大小从大到小"),
-        new(RuleSort.SizeAscending, "按大小从小到大"),
-        new(RuleSort.Name, "按名称"),
+        new(RuleSort.SizeDescending, Strings.T("按大小从大到小")),
+        new(RuleSort.SizeAscending, Strings.T("按大小从小到大")),
+        new(RuleSort.Name, Strings.T("按名称")),
     ];
 
     [ObservableProperty]
@@ -122,7 +123,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     /// <summary>已勾选的规则数与预计释放空间。</summary>
     [ObservableProperty]
-    private string _selectedSummaryText = "尚未扫描";
+    private string _selectedSummaryText = Strings.T("尚未扫描");
 
     [ObservableProperty]
     private string _visibleCountText = "";
@@ -130,9 +131,9 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private bool _hasVisibleRules = true;
 
-    public string ScanButtonText => HasScanned ? "重新扫描" : "开始扫描";
+    public string ScanButtonText => HasScanned ? Strings.T("重新扫描") : Strings.T("开始扫描");
 
-    public string CleanButtonText => $"清理选中({Rules.Count(r => r.IsSelected)})";
+    public string CleanButtonText => Strings.M($"清理选中({Rules.Count(r => r.IsSelected)})");
 
     partial void OnSearchTextChanged(string value) => RefreshGroups();
 
@@ -165,18 +166,18 @@ public partial class MainWindowViewModel : ObservableObject
 
     public bool HasQuarantineEntries => QuarantineCount > 0;
 
-    public string RestoreQuarantineText => $"还原本次隔离的 {QuarantineCount} 项";
+    public string RestoreQuarantineText => Strings.M($"还原本次隔离的 {QuarantineCount} 项");
 
     /// <summary>清理报告中是否存在可登记“重启后删除”的失败项。</summary>
     public bool HasPendingRebootDeletes => PendingRebootCount > 0;
 
     public bool CanScheduleRebootDelete => PendingRebootCount > 0 && IsElevated && _rebootDeletes.IsSupported;
 
-    public string ScheduleRebootDeleteText => $"安排重启后删除({PendingRebootCount})";
+    public string ScheduleRebootDeleteText => Strings.M($"安排重启后删除({PendingRebootCount})");
 
     /// <summary>「本次释放 / 累计释放」摘要;历史为空且本次未清理时为占位文案。</summary>
     [ObservableProperty]
-    private string _historySummaryText = "暂无清理历史";
+    private string _historySummaryText = Strings.T("暂无清理历史");
 
     /// <summary>最近的清理记录(新的在前)。</summary>
     public ObservableCollection<HistoryItemViewModel> HistoryItems { get; } = [];
@@ -208,7 +209,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         if (!_elevation.TryRestartElevated(out var error))
         {
-            StatusText = error ?? "提权重启失败。";
+            StatusText = error ?? Strings.T("提权重启失败。");
             return;
         }
 
@@ -286,7 +287,7 @@ public partial class MainWindowViewModel : ObservableObject
     {
         if (IsBusy)
         {
-            StatusText = "请等待当前操作完成后再排除文件。";
+            StatusText = Strings.T("请等待当前操作完成后再排除文件。");
             return;
         }
 
@@ -308,8 +309,8 @@ public partial class MainWindowViewModel : ObservableObject
         RemoveFileFromScan(path);
 
         StatusText = saveError is null
-            ? $"已排除:{path}(可在设置页恢复)"
-            : $"已排除:{path},但设置保存失败:{saveError}(可在设置页恢复)";
+            ? Strings.M($"已排除:{path}(可在设置页恢复)")
+            : Strings.M($"已排除:{path},但设置保存失败:{saveError}(可在设置页恢复)");
     }
 
     /// <summary>把文件所在目录加入全局排除名单:持久化,并立即从当前扫描结果中移除该目录下的所有文件。</summary>
@@ -317,14 +318,14 @@ public partial class MainWindowViewModel : ObservableObject
     {
         if (IsBusy)
         {
-            StatusText = "请等待当前操作完成后再排除文件夹。";
+            StatusText = Strings.T("请等待当前操作完成后再排除文件夹。");
             return;
         }
 
         var normalized = directory.TrimEnd('\\', '/');
         if (normalized.Length == 0)
         {
-            StatusText = "无法排除该文件所在的目录。";
+            StatusText = Strings.T("无法排除该文件所在的目录。");
             return;
         }
 
@@ -346,8 +347,8 @@ public partial class MainWindowViewModel : ObservableObject
         RemoveDirectoryFromScan(normalized);
 
         StatusText = saveError is null
-            ? $"已排除目录:{normalized}(可在设置页恢复)"
-            : $"已排除目录:{normalized},但设置保存失败:{saveError}(可在设置页恢复)";
+            ? Strings.M($"已排除目录:{normalized}(可在设置页恢复)")
+            : Strings.M($"已排除目录:{normalized},但设置保存失败:{saveError}(可在设置页恢复)");
     }
 
     /// <summary>在资源管理器中定位文件。</summary>
@@ -355,13 +356,13 @@ public partial class MainWindowViewModel : ObservableObject
     {
         if (!OperatingSystem.IsWindows())
         {
-            StatusText = "当前平台暂不支持打开文件位置。";
+            StatusText = Strings.T("当前平台暂不支持打开文件位置。");
             return;
         }
 
         if (!WindowsShell.TryRevealInExplorer(path, out var error))
         {
-            StatusText = $"无法打开文件位置:{error}";
+            StatusText = Strings.M($"无法打开文件位置:{error}");
         }
     }
 
@@ -397,8 +398,8 @@ public partial class MainWindowViewModel : ObservableObject
             {
                 rule.SizeBytes = result.TotalBytes;
                 rule.StatusText = result.ItemCount == 0
-                    ? "没有可清理的内容"
-                    : $"{result.ItemCount:N0} 个文件";
+                    ? Strings.T("没有可清理的内容")
+                    : Strings.M($"{result.ItemCount:N0} 个文件");
                 rule.RefreshFiles();
             }
         }
@@ -431,7 +432,7 @@ public partial class MainWindowViewModel : ObservableObject
                 }
                 else
                 {
-                    failures.Add(new DeleteFailure(item.Path, $"未能复制到隔离区:{copyError}"));
+                    failures.Add(new DeleteFailure(item.Path, Strings.M($"未能复制到隔离区:{copyError}")));
                     continue;
                 }
             }
@@ -453,24 +454,24 @@ public partial class MainWindowViewModel : ObservableObject
         if (failures.Count == 0)
         {
             StatusText = copies > 0
-                ? $"已安排 {scheduled} 项重启后删除,隔离区已保留副本,重启后生效。"
-                : $"已安排 {scheduled} 项重启后删除,重启后生效。";
+                ? Strings.M($"已安排 {scheduled} 项重启后删除,隔离区已保留副本,重启后生效。")
+                : Strings.M($"已安排 {scheduled} 项重启后删除,重启后生效。");
         }
         else if (scheduled == 0)
         {
-            StatusText = failures[0].Reason.StartsWith("未能复制到隔离区")
-                ? $"未能安排重启后删除:{failures[0].Reason}"
-                : "安排重启后删除失败,请确认已以管理员身份运行。";
+            StatusText = failures[0].Reason.StartsWith(Strings.T("未能复制到隔离区"))
+                ? Strings.M($"未能安排重启后删除:{failures[0].Reason}")
+                : Strings.T("安排重启后删除失败,请确认已以管理员身份运行。");
         }
         else
         {
-            StatusText = $"已安排 {scheduled} 项,{failures.Count} 项安排失败。";
+            StatusText = Strings.M($"已安排 {scheduled} 项,{failures.Count} 项安排失败。");
         }
 
         if (scheduled > 0)
         {
-            var copyNote = copies > 0 ? $",隔离区已保留 {copies} 份副本" : "";
-            ReportText = $"{ReportText}{Environment.NewLine}✔ 已安排 {scheduled} 项重启后删除(重启后生效,重启前文件仍占用空间{copyNote})。";
+            var copyNote = copies > 0 ? Strings.M($",隔离区已保留 {copies} 份副本") : "";
+            ReportText = Strings.M($"{ReportText}{Environment.NewLine}✔ 已安排 {scheduled} 项重启后删除(重启后生效,重启前文件仍占用空间{copyNote})。");
         }
     }
 
@@ -497,7 +498,7 @@ public partial class MainWindowViewModel : ObservableObject
             var progress = new Progress<int>(done =>
             {
                 ProgressValue = done * 100.0 / total;
-                StatusText = $"正在还原:{done}/{total}";
+                StatusText = Strings.M($"正在还原:{done}/{total}");
             });
 
             (restored, failures, cancelled) = await Task.Run(() => RestoreEntries(session, progress, cts.Token));
@@ -513,24 +514,24 @@ public partial class MainWindowViewModel : ObservableObject
         QuarantineCount = session.RestorableCount;
         if (cancelled)
         {
-            StatusText = $"已取消还原,已还原 {restored} 项。";
+            StatusText = Strings.M($"已取消还原,已还原 {restored} 项。");
             return;
         }
 
         var sb = new StringBuilder();
         if (restored > 0)
         {
-            sb.AppendLine($"✔ 已还原 {restored} 项到原位置(可重新扫描以刷新列表)。");
+            sb.AppendLine(Strings.M($"✔ 已还原 {restored} 项到原位置(可重新扫描以刷新列表)。"));
         }
 
         foreach (var failure in failures.Take(5))
         {
-            sb.AppendLine($"    ✗ 未还原 {failure.Path}({failure.Reason})");
+            sb.AppendLine(Strings.M($"    ✗ 未还原 {failure.Path}({failure.Reason})"));
         }
 
         if (failures.Count > 5)
         {
-            sb.AppendLine($"    …其余 {failures.Count - 5} 项未还原");
+            sb.AppendLine(Strings.M($"    …其余 {failures.Count - 5} 项未还原"));
         }
 
         if (sb.Length > 0)
@@ -539,8 +540,8 @@ public partial class MainWindowViewModel : ObservableObject
         }
 
         StatusText = failures.Count == 0
-            ? $"已还原 {restored} 项到原位置,可重新扫描以刷新列表。"
-            : $"已还原 {restored} 项,{failures.Count} 项失败:{failures[0].Reason}";
+            ? Strings.M($"已还原 {restored} 项到原位置,可重新扫描以刷新列表。")
+            : Strings.M($"已还原 {restored} 项,{failures.Count} 项失败:{failures[0].Reason}");
     }
 
     private static (int Restored, List<DeleteFailure> Failures, bool Cancelled) RestoreEntries(
@@ -583,7 +584,7 @@ public partial class MainWindowViewModel : ObservableObject
         var selected = GetSelectedResults();
         if (selected.Count == 0)
         {
-            StatusText = "没有勾选可清理的内容 —— 请先扫描并选择要清理的项目。";
+            StatusText = Strings.T("没有勾选可清理的内容 —— 请先扫描并选择要清理的项目。");
             return;
         }
 
@@ -598,7 +599,7 @@ public partial class MainWindowViewModel : ObservableObject
             // 还原点创建在工作流内部完成;失败(未提权 / 系统保护未开启)只提示,不阻塞清理
             if (Settings.CreateRestorePointBeforeClean)
             {
-                StatusText = "正在创建系统还原点…";
+                StatusText = Strings.T("正在创建系统还原点…");
             }
 
             var request = new CleanupRequest { Settings = Settings, PermanentDelete = PermanentDelete, IsElevated = IsElevated };
@@ -606,8 +607,8 @@ public partial class MainWindowViewModel : ObservableObject
             {
                 ProgressValue = p.RuleCount == 0 ? 0 : p.RuleIndex * 100.0 / p.RuleCount;
                 StatusText = p.Detail.Length > 0
-                    ? $"正在清理:{p.RuleName} — {p.Detail}"
-                    : $"正在清理:{p.RuleName}";
+                    ? Strings.M($"正在清理:{p.RuleName} — {p.Detail}")
+                    : Strings.M($"正在清理:{p.RuleName}");
             });
 
             var outcome = await _workflow.CleanAsync(selected, request, progress, cts.Token);
@@ -617,16 +618,16 @@ public partial class MainWindowViewModel : ObservableObject
             QuarantineCount = _lastQuarantineSession?.RestorableCount ?? 0;
             RecordCleanup(outcome.Report, CleanupHistoryEntry.SourceManual);
             cancelled = outcome.Report.WasCancelled;
-            StatusText = cancelled ? "已取消清理,报告中为已完成的部分。" : "清理完成。";
+            StatusText = cancelled ? Strings.T("已取消清理,报告中为已完成的部分。") : Strings.T("清理完成。");
         }
         catch (OperationCanceledException)
         {
             cancelled = true;
-            StatusText = "已取消清理。";
+            StatusText = Strings.T("已取消清理。");
         }
         catch (Exception ex)
         {
-            StatusText = $"清理失败:{ex.Message}";
+            StatusText = Strings.M($"清理失败:{ex.Message}");
         }
         finally
         {
@@ -656,7 +657,7 @@ public partial class MainWindowViewModel : ObservableObject
         {
             foreach (var rule in Rules)
             {
-                rule.StatusText = "扫描中…";
+                rule.StatusText = Strings.T("扫描中…");
                 rule.HasFailures = false;
             }
 
@@ -664,8 +665,8 @@ public partial class MainWindowViewModel : ObservableObject
             {
                 ProgressValue = p.RuleCount == 0 ? 0 : p.RuleIndex * 100.0 / p.RuleCount;
                 StatusText = p.CurrentPath.Length > 0
-                    ? $"正在扫描:{p.RuleName} — {p.CurrentPath}"
-                    : $"正在扫描:{p.RuleName}";
+                    ? Strings.M($"正在扫描:{p.RuleName} — {p.CurrentPath}")
+                    : Strings.M($"正在扫描:{p.RuleName}");
             });
 
             var results = await _workflow.ScanAsync(Rules.Select(r => r.Rule).ToList(), Settings, progress, cts.Token);
@@ -674,12 +675,12 @@ public partial class MainWindowViewModel : ObservableObject
 
             HasScanned = true;
             ProgressValue = 100;
-            StatusText = "扫描完成。";
+            StatusText = Strings.T("扫描完成。");
         }
         catch (OperationCanceledException)
         {
             // 丢弃半成品结果,恢复上一次完整结果(若有)
-            StatusText = _lastScan is null ? "已取消扫描。" : "已取消扫描,保留上一次的扫描结果。";
+            StatusText = _lastScan is null ? Strings.T("已取消扫描。") : Strings.T("已取消扫描,保留上一次的扫描结果。");
             if (_lastScan is not null)
             {
                 ApplyScanResults(_lastScan);
@@ -688,13 +689,13 @@ public partial class MainWindowViewModel : ObservableObject
             {
                 foreach (var rule in Rules)
                 {
-                    rule.StatusText = "尚未扫描";
+                    rule.StatusText = Strings.T("尚未扫描");
                 }
             }
         }
         catch (Exception ex)
         {
-            StatusText = $"扫描失败:{ex.Message}";
+            StatusText = Strings.M($"扫描失败:{ex.Message}");
         }
         finally
         {
@@ -718,10 +719,10 @@ public partial class MainWindowViewModel : ObservableObject
             rule.SizeBytes = result.TotalBytes;
             rule.HasFailures = result.Errors.Count > 0;
             rule.StatusText = rule.Rule.Kind == RuleKind.Action
-                ? "执行时生效(释放量在清理后统计)"
+                ? Strings.T("执行时生效(释放量在清理后统计)")
                 : result.ItemCount == 0
-                    ? "没有可清理的内容"
-                    : $"{result.ItemCount:N0} 个文件";
+                    ? Strings.T("没有可清理的内容")
+                    : Strings.M($"{result.ItemCount:N0} 个文件");
             rule.AttachScanResult(result);
         }
 
@@ -781,12 +782,12 @@ public partial class MainWindowViewModel : ObservableObject
         {
             ResetScanState();
             StatusText = saveError is null
-                ? "设置已保存,请重新扫描。"
-                : $"设置保存失败:{saveError}(本次会话内仍生效)。";
+                ? Strings.T("设置已保存,请重新扫描。")
+                : Strings.M($"设置保存失败:{saveError}(本次会话内仍生效)。");
         }
         else
         {
-            StatusText = saveError is null ? "设置已保存。" : $"设置保存失败:{saveError}";
+            StatusText = saveError is null ? Strings.T("设置已保存。") : Strings.M($"设置保存失败:{saveError}");
         }
     }
 
@@ -798,7 +799,7 @@ public partial class MainWindowViewModel : ObservableObject
         {
             rule.SizeBytes = 0;
             rule.HasFailures = false;
-            rule.StatusText = "尚未扫描";
+            rule.StatusText = Strings.T("尚未扫描");
             rule.AttachScanResult(null);
         }
 
@@ -859,16 +860,16 @@ public partial class MainWindowViewModel : ObservableObject
         var parts = new List<string>();
         if (_sessionFreedBytes > 0)
         {
-            parts.Add($"本次释放 {Formatting.FormatBytes(_sessionFreedBytes)}");
+            parts.Add(Strings.M($"本次释放 {Formatting.FormatBytes(_sessionFreedBytes)}"));
         }
 
         if (entries.Count > 0)
         {
-            parts.Add($"累计释放 {Formatting.FormatBytes(totalBytes)}");
-            parts.Add($"共 {entries.Count:N0} 次清理");
+            parts.Add(Strings.M($"累计释放 {Formatting.FormatBytes(totalBytes)}"));
+            parts.Add(Strings.M($"共 {entries.Count:N0} 次清理"));
         }
 
-        HistorySummaryText = parts.Count == 0 ? "暂无清理历史" : string.Join(" · ", parts);
+        HistorySummaryText = parts.Count == 0 ? Strings.T("暂无清理历史") : string.Join(" · ", parts);
     }
 
     /// <summary>界面之外(自动清理 / 托盘“立即清理”)完成清理后同步历史与状态栏。</summary>
@@ -899,28 +900,28 @@ public partial class MainWindowViewModel : ObservableObject
 
         if (report.WasCancelled)
         {
-            notes.Add("清理已取消,以上为已完成的部分。");
+            notes.Add(Strings.T("清理已取消,以上为已完成的部分。"));
         }
 
         if (deleter is WindowsRecycleBinDeleter)
         {
-            notes.Add("提示:移入回收站的文件仍占用磁盘空间,清空回收站后才会真正释放。");
+            notes.Add(Strings.T("提示:移入回收站的文件仍占用磁盘空间,清空回收站后才会真正释放。"));
         }
 
         if (deleter is QuarantineFileDeleter quarantineDeleter && quarantineDeleter.Session.RestorableCount > 0)
         {
             notes.Add(Settings.QuarantineRetentionDays > 0
-                ? $"提示:隔离区中的文件仍占用磁盘空间,保留 {Settings.QuarantineRetentionDays} 天后自动删除;期间可在下方“还原”。"
-                : "提示:隔离区中的文件仍占用磁盘空间,会一直保留直到手动清空;期间可在下方“还原”。");
+                ? Strings.M($"提示:隔离区中的文件仍占用磁盘空间,保留 {Settings.QuarantineRetentionDays} 天后自动删除;期间可在下方“还原”。")
+                : Strings.T("提示:隔离区中的文件仍占用磁盘空间,会一直保留直到手动清空;期间可在下方“还原”。"));
         }
 
         if (Settings.SecureErasePasses > 0)
         {
             notes.Add(deleter switch
             {
-                WindowsRecycleBinDeleter => "提示:回收站删除不经过安全擦除;覆写只作用于永久删除与隔离区清理。",
-                QuarantineFileDeleter => $"提示:安全擦除在隔离区清理时生效(覆写 {Settings.SecureErasePasses} 次后删除);移入隔离区本身不覆写。",
-                _ => $"提示:本次删除前已覆写 {Settings.SecureErasePasses} 次;对 SSD / NVMe 与写时复制文件系统效果有限。",
+                WindowsRecycleBinDeleter => Strings.T("提示:回收站删除不经过安全擦除;覆写只作用于永久删除与隔离区清理。"),
+                QuarantineFileDeleter => Strings.M($"提示:安全擦除在隔离区清理时生效(覆写 {Settings.SecureErasePasses} 次后删除);移入隔离区本身不覆写。"),
+                _ => Strings.M($"提示:本次删除前已覆写 {Settings.SecureErasePasses} 次;对 SSD / NVMe 与写时复制文件系统效果有限。"),
             });
         }
 
@@ -930,12 +931,12 @@ public partial class MainWindowViewModel : ObservableObject
         }
 
         var footer = !IsElevated && report.Results.Any(r => r.Rule.RequiresAdmin && r.Failures.Count > 0)
-            ? "部分失败可通过提权重试 —— 点击右上角“以管理员身份重启”。"
+            ? Strings.T("部分失败可通过提权重试 —— 点击右上角“以管理员身份重启”。")
             : null;
 
         return ReportTextBuilder.Build(
             report,
-            $"{deleter.Name}:清理 {report.TotalDeleted:N0} 项,共 {Formatting.FormatBytes(report.TotalBytesRemoved)}。",
+            Strings.M($"{deleter.Name}:清理 {report.TotalDeleted:N0} 项,共 {Formatting.FormatBytes(report.TotalBytesRemoved)}。"),
             notes,
             footer);
     }
@@ -945,8 +946,8 @@ public partial class MainWindowViewModel : ObservableObject
         var selectedCount = Rules.Count(r => r.IsSelected);
         var selectedBytes = Rules.Where(r => r.IsSelected).Sum(r => r.SizeBytes);
         SelectedSummaryText = HasScanned
-            ? $"已勾选 {selectedCount} 项 · 预计释放 {Formatting.FormatBytes(selectedBytes)}"
-            : "尚未扫描 —— 点击“开始扫描”分析可清理的内容";
+            ? Strings.M($"已勾选 {selectedCount} 项 · 预计释放 {Formatting.FormatBytes(selectedBytes)}")
+            : Strings.T("尚未扫描 —— 点击“开始扫描”分析可清理的内容");
 
         foreach (var group in RuleGroups)
         {
@@ -976,8 +977,8 @@ public partial class MainWindowViewModel : ObservableObject
 
         HasVisibleRules = visible.Count > 0;
         VisibleCountText = visible.Count == Rules.Count
-            ? $"共 {Rules.Count} 项"
-            : $"显示 {visible.Count} / {Rules.Count} 项";
+            ? Strings.M($"共 {Rules.Count} 项")
+            : Strings.M($"显示 {visible.Count} / {Rules.Count} 项");
     }
 
     private bool MatchesFilter(RuleViewModel rule)
@@ -1007,7 +1008,7 @@ public partial class MainWindowViewModel : ObservableObject
     /// <summary>分组在界面上的先后顺序;不在名单里的类别排到最后。</summary>
     private static readonly string[] CategoryOrder =
     [
-        "系统临时与日志", "系统缓存", "使用痕迹", "浏览器缓存", "浏览器隐私", "应用缓存", "开发者缓存", "自定义目录", "回收站", "系统备份", "其他",
+        Strings.T("系统临时与日志"), Strings.T("系统缓存"), Strings.T("使用痕迹"), Strings.T("浏览器缓存"), Strings.T("浏览器隐私"), Strings.T("应用缓存"), Strings.T("开发者缓存"), Strings.T("自定义目录"), Strings.T("回收站"), Strings.T("系统备份"), Strings.T("其他"),
     ];
 
     /// <summary>从当前设置重建设置页状态(放弃未保存的更改)。</summary>
@@ -1027,7 +1028,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (settings is null)
         {
             ResetSettingsEditor();
-            StatusText = "已放弃未保存的设置更改。";
+            StatusText = Strings.T("已放弃未保存的设置更改。");
             return;
         }
 
@@ -1050,12 +1051,12 @@ public partial class MainWindowViewModel : ObservableObject
     {
         if (!_quarantine.TryPurgeAll(out var items, out var bytes, out var error, Settings.SecureErasePasses))
         {
-            return $"清空隔离区未完成:{error}";
+            return Strings.M($"清空隔离区未完成:{error}");
         }
 
         return items == 0
-            ? "隔离区本来就是空的。"
-            : $"已清空隔离区:{items:N0} 项 · {Formatting.FormatBytes(bytes)}。";
+            ? Strings.T("隔离区本来就是空的。")
+            : Strings.M($"已清空隔离区:{items:N0} 项 · {Formatting.FormatBytes(bytes)}。");
     }
 
     private string OpenQuarantine()
@@ -1066,17 +1067,17 @@ public partial class MainWindowViewModel : ObservableObject
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return $"无法创建隔离区目录:{ex.Message}";
+            return Strings.M($"无法创建隔离区目录:{ex.Message}");
         }
 
         if (!OperatingSystem.IsWindows())
         {
-            return $"当前平台暂不支持打开文件夹,隔离区位于:{_quarantine.RootPath}";
+            return Strings.M($"当前平台暂不支持打开文件夹,隔离区位于:{_quarantine.RootPath}");
         }
 
         return WindowsShell.TryRevealInExplorer(_quarantine.RootPath, out var error)
-            ? $"已打开隔离区:{_quarantine.RootPath}"
-            : $"无法打开隔离区:{error}";
+            ? Strings.M($"已打开隔离区:{_quarantine.RootPath}")
+            : Strings.M($"无法打开隔离区:{error}");
     }
 
     /// <summary>进入设置页时后台统计隔离区用量,避免大目录阻塞界面。</summary>
@@ -1090,8 +1091,8 @@ public partial class MainWindowViewModel : ObservableObject
         }
 
         editor.QuarantineStatusText = items == 0
-            ? "隔离区当前为空。"
-            : $"隔离区当前:{items:N0} 项 · {Formatting.FormatBytes(bytes)}。";
+            ? Strings.T("隔离区当前为空。")
+            : Strings.M($"隔离区当前:{items:N0} 项 · {Formatting.FormatBytes(bytes)}。");
     }
 
     private void RebuildRules()

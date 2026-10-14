@@ -1,7 +1,8 @@
-using broom.Core;
+﻿using broom.Core;
 using broom.Platform;
 using broom.Rules;
 
+using broom.Localization;
 namespace broom.Services;
 
 /// <summary>
@@ -90,10 +91,10 @@ public sealed class CleanupWorkflow
 
         if (settings.QuarantineEnabled)
         {
-            return (new QuarantineFileDeleter(_quarantine.CreateSession()), "当前平台暂不支持回收站,本次改为移入隔离区。");
+            return (new QuarantineFileDeleter(_quarantine.CreateSession()), Strings.T("当前平台暂不支持回收站,本次改为移入隔离区。"));
         }
 
-        return (new PermanentFileDeleter(settings.SecureErasePasses), "当前平台暂不支持回收站,本次改为永久删除。");
+        return (new PermanentFileDeleter(settings.SecureErasePasses), Strings.T("当前平台暂不支持回收站,本次改为永久删除。"));
     }
 
     /// <summary>清理前创建系统还原点;失败不阻塞清理,返回的说明文字并入清理报告。</summary>
@@ -101,18 +102,18 @@ public sealed class CleanupWorkflow
     {
         if (!OperatingSystem.IsWindows())
         {
-            return "未创建系统还原点:当前平台暂不支持。";
+            return Strings.T("未创建系统还原点:当前平台暂不支持。");
         }
 
         if (!isElevated)
         {
-            return "未创建系统还原点:需要管理员权限(可点击“以管理员身份重启”),本次跳过。";
+            return Strings.T("未创建系统还原点:需要管理员权限(可点击“以管理员身份重启”),本次跳过。");
         }
 
-        var description = $"broom 清理前还原点({DateTime.Now:yyyy-MM-dd HH:mm})";
+        var description = Strings.M($"broom 清理前还原点({DateTime.Now:yyyy-MM-dd HH:mm})");
         return _restorePoints.TryCreateRestorePoint(description, out var error)
-            ? $"已创建系统还原点:{description}。"
-            : $"未创建系统还原点:{error}清理继续,本次删除无法通过还原点回滚。";
+            ? Strings.M($"已创建系统还原点:{description}。")
+            : Strings.M($"未创建系统还原点:{error}清理继续,本次删除无法通过还原点回滚。");
     }
 }
 

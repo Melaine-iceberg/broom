@@ -1,6 +1,7 @@
-using broom.Core;
+﻿using broom.Core;
 using broom.Platform;
 
+using broom.Localization;
 namespace broom.Services;
 
 /// <summary>自动 / 托盘触发的清理。</summary>
@@ -64,7 +65,7 @@ public sealed class AutoCleanService
 
         if (Interlocked.Exchange(ref _running, 1) == 1)
         {
-            return new AutoCleanResult(false, "已有清理正在进行,本次跳过。", null, source);
+            return new AutoCleanResult(false, Strings.T("已有清理正在进行,本次跳过。"), null, source);
         }
 
         try
@@ -74,13 +75,13 @@ public sealed class AutoCleanService
             var rules = SelectRules(CleanupWorkflow.CreateRules(settings), settings.AutoCleanScope, settings.SelectedRuleIds);
             if (rules.Count == 0)
             {
-                return new AutoCleanResult(true, "自动清理:当前范围没有可清理的规则。", null, source);
+                return new AutoCleanResult(true, Strings.T("自动清理:当前范围没有可清理的规则。"), null, source);
             }
 
             var scan = await _workflow.ScanAsync(rules, settings, null, ct);
             if (scan.Sum(r => r.ItemCount) == 0 && scan.All(r => r.Rule.Kind == RuleKind.Paths))
             {
-                return new AutoCleanResult(true, "自动清理:没有需要清理的内容。", null, source);
+                return new AutoCleanResult(true, Strings.T("自动清理:没有需要清理的内容。"), null, source);
             }
 
             // 自动删除必须可预期:一律走回收站,不因“默认永久删除”设置而销毁文件
@@ -103,18 +104,18 @@ public sealed class AutoCleanService
             }
 
             var summary = report.TotalDeleted == 0 && report.TotalBytesRemoved == 0
-                ? "自动清理完成:没有需要清理的内容。"
-                : $"自动清理完成:清理 {report.TotalDeleted:N0} 项 · 释放 {Formatting.FormatBytes(report.TotalBytesRemoved)}"
-                  + (report.TotalFailures > 0 ? $"({report.TotalFailures:N0} 项失败)" : "");
+                ? Strings.T("自动清理完成:没有需要清理的内容。")
+                : Strings.M($"自动清理完成:清理 {report.TotalDeleted:N0} 项 · 释放 {Formatting.FormatBytes(report.TotalBytesRemoved)}")
+                  + (report.TotalFailures > 0 ? Strings.M($"({report.TotalFailures:N0} 项失败)") : "");
             return new AutoCleanResult(true, summary, report, source);
         }
         catch (OperationCanceledException)
         {
-            return new AutoCleanResult(false, "自动清理已取消。", null, source);
+            return new AutoCleanResult(false, Strings.T("自动清理已取消。"), null, source);
         }
         catch (Exception ex)
         {
-            return new AutoCleanResult(false, $"自动清理失败:{ex.Message}", null, source);
+            return new AutoCleanResult(false, Strings.M($"自动清理失败:{ex.Message}"), null, source);
         }
         finally
         {

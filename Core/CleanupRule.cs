@@ -1,3 +1,5 @@
+﻿using broom.Localization;
+
 namespace broom.Core;
 
 /// <summary>清理项的风险等级,决定 UI 上的提示与默认勾选策略。</summary>
@@ -55,7 +57,7 @@ public sealed record CleanupRule
     public required string DisplayName { get; init; }
 
     /// <summary>界面分组用的类别,例如 "系统临时与日志"。</summary>
-    public string Category { get; init; } = "其他";
+    public string Category { get; init; } = Strings.T("其他");
 
     /// <summary>面向用户的说明,包含删除后果提示。</summary>
     public string Description { get; init; } = "";

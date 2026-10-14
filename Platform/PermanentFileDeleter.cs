@@ -1,3 +1,5 @@
+﻿using broom.Localization;
+
 namespace broom.Platform;
 
 /// <summary>永久删除(不经过回收站);开启安全擦除时先随机覆写文件内容再删除。</summary>
@@ -8,7 +10,7 @@ public sealed class PermanentFileDeleter : IFileDeleter
     /// <param name="overwritePasses">删除前的随机覆写次数;0 表示不覆写。</param>
     public PermanentFileDeleter(int overwritePasses = 0) => _overwritePasses = overwritePasses;
 
-    public string Name => _overwritePasses > 0 ? $"永久删除(覆写 {_overwritePasses} 次)" : "永久删除";
+    public string Name => _overwritePasses > 0 ? Strings.M($"永久删除(覆写 {_overwritePasses} 次)") : Strings.T("永久删除");
 
     public int Delete(IReadOnlyList<string> paths, IDictionary<string, string> failures, CancellationToken ct = default)
     {

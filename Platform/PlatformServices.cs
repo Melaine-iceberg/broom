@@ -1,5 +1,6 @@
-using broom.Core;
+﻿using broom.Core;
 
+using broom.Localization;
 namespace broom.Platform;
 
 /// <summary>平台服务工厂:按当前操作系统选择合适的实现。</summary>
@@ -53,7 +54,7 @@ public sealed class UnsupportedElevationService : IElevationService
 
     public bool TryRestartElevated(out string? error)
     {
-        error = "当前平台暂不支持以管理员身份重启。";
+        error = Strings.T("当前平台暂不支持以管理员身份重启。");
         return false;
     }
 }
@@ -65,7 +66,7 @@ public sealed class UnsupportedRebootDeleteService : IRebootDeleteService
 
     public bool TrySchedule(string path, out string error)
     {
-        error = "当前平台暂不支持重启后删除。";
+        error = Strings.T("当前平台暂不支持重启后删除。");
         return false;
     }
 }
@@ -75,7 +76,7 @@ public sealed class UnsupportedRestorePointService : IRestorePointService
 {
     public bool TryCreateRestorePoint(string description, out string error)
     {
-        error = "当前平台暂不支持系统还原点。";
+        error = Strings.T("当前平台暂不支持系统还原点。");
         return false;
     }
 }
@@ -86,5 +87,5 @@ public sealed class UnsupportedCleanupActionService : ICleanupActionService
     public bool IsSupported(CleanupAction action) => false;
 
     public CleanupActionResult Execute(CleanupAction action, IProgress<string>? progress = null, CancellationToken ct = default)
-        => new() { Success = false, Error = "当前平台暂不支持该清理动作。" };
+        => new() { Success = false, Error = Strings.T("当前平台暂不支持该清理动作。") };
 }

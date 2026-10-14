@@ -1,3 +1,5 @@
+﻿using broom.Localization;
+
 namespace broom.Cli;
 
 /// <summary>命令行要执行的动作。</summary>
@@ -49,25 +51,8 @@ public sealed record CliParseResult(CliOptions? Options, string? Error, bool Sho
 /// <summary>命令行参数解析:无第三方依赖,未知参数一律报错(避免无人值守静默跑偏)。</summary>
 public static class CommandLineParser
 {
-    public const string Usage =
-        """
-        用法:
-          broom --scan [选项]               扫描并输出可清理内容(只读,不删除)
-          broom --clean [safe|all] [选项]   清理(默认仅安全项;all 含谨慎与高风险项)
-
-        选项:
-          --dry-run        只扫描并输出报告,不删除(可与 --clean 连用做预演)
-          --report <路径>  把报告另存为文本文件
-          --yes            无人值守:跳过确认(计划任务 / 脚本必须显式给出)
-          -h, --help       显示本帮助
-
-        退出码:
-          0 成功;1 有失败项或运行错误;2 参数错误;3 未确认或被取消
-
-        示例:
-          broom --scan --report scan.txt
-          broom --clean safe --yes --report clean.txt
-        """;
+    /// <summary>用法说明(多行文案,用稳定键存放在资源里)。</summary>
+    public static string Usage => Strings.T("cli.usage");
 
     private static readonly string[] CliFlags = ["--scan", "--clean", "--dry-run", "--report", "--yes", "--help", "-h", "/?"];
 
@@ -95,7 +80,7 @@ public static class CommandLineParser
                 case "--scan":
                     if (action is not null)
                     {
-                        return CliParseResult.Fail("--scan 与 --clean 只能指定一个。");
+                        return CliParseResult.Fail(Strings.T("--scan 与 --clean 只能指定一个。"));
                     }
 
                     action = CliAction.Scan;
@@ -103,7 +88,7 @@ public static class CommandLineParser
                 case "--clean":
                     if (action is not null)
                     {
-                        return CliParseResult.Fail("--scan 与 --clean 只能指定一个。");
+                        return CliParseResult.Fail(Strings.T("--scan 与 --clean 只能指定一个。"));
                     }
 
                     action = CliAction.Clean;
@@ -120,7 +105,7 @@ public static class CommandLineParser
                         }
                         else
                         {
-                            return CliParseResult.Fail($"无法识别的清理范围:{value}(仅支持 safe 或 all)。");
+                            return CliParseResult.Fail(Strings.M($"无法识别的清理范围:{value}(仅支持 safe 或 all)。"));
                         }
                     }
 
@@ -134,19 +119,19 @@ public static class CommandLineParser
                 case "--report":
                     if (i + 1 >= args.Count || args[i + 1].StartsWith('-'))
                     {
-                        return CliParseResult.Fail("--report 需要指定报告文件路径。");
+                        return CliParseResult.Fail(Strings.T("--report 需要指定报告文件路径。"));
                     }
 
                     reportPath = args[++i];
                     break;
                 default:
-                    return CliParseResult.Fail($"未知参数:{arg}");
+                    return CliParseResult.Fail(Strings.M($"未知参数:{arg}"));
             }
         }
 
         if (action is null)
         {
-            return CliParseResult.Fail("请指定 --scan 或 --clean。");
+            return CliParseResult.Fail(Strings.T("请指定 --scan 或 --clean。"));
         }
 
         return CliParseResult.Ok(new CliOptions

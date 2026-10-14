@@ -1,3 +1,5 @@
+﻿using broom.Localization;
+
 namespace broom.Platform;
 
 /// <summary>
@@ -7,7 +9,7 @@ public sealed class QuarantineFileDeleter : IFileDeleter
 {
     public QuarantineFileDeleter(QuarantineSession session) => Session = session;
 
-    public string Name => "隔离区(可还原)";
+    public string Name => Strings.T("隔离区(可还原)");
 
     public QuarantineSession Session { get; }
 

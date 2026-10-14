@@ -1,6 +1,7 @@
-using System.Text;
+﻿using System.Text;
 using broom.Core;
 
+using broom.Localization;
 namespace broom.Services;
 
 /// <summary>
@@ -26,9 +27,9 @@ public static class ReportTextBuilder
         foreach (var delta in report.DriveSpace)
         {
             var change = delta.FreedBytes >= 0
-                ? $"本次释放 +{Formatting.FormatBytes(delta.FreedBytes)}"
-                : $"可用不增反减 {Formatting.FormatBytes(-delta.FreedBytes)},可能受其他程序活动影响";
-            sb.AppendLine($"· 磁盘 {delta.Drive.TrimEnd('\\', '/')} 可用空间:{Formatting.FormatBytes(delta.FreeBefore)} → {Formatting.FormatBytes(delta.FreeAfter)}({change})");
+                ? Strings.M($"本次释放 +{Formatting.FormatBytes(delta.FreedBytes)}")
+                : Strings.M($"可用不增反减 {Formatting.FormatBytes(-delta.FreedBytes)},可能受其他程序活动影响");
+            sb.AppendLine(Strings.M($"· 磁盘 {delta.Drive.TrimEnd('\\', '/')} 可用空间:{Formatting.FormatBytes(delta.FreeBefore)} → {Formatting.FormatBytes(delta.FreeAfter)}({change})"));
         }
 
         if (notes is not null)
@@ -52,7 +53,7 @@ public static class ReportTextBuilder
             // 动作型规则没有逐个删除的文件,用执行摘要代替计数
             var summary = result.Summary.Length > 0
                 ? result.Summary
-                : $"{result.DeletedCount:N0} 项 / {Formatting.FormatBytes(result.BytesRemoved)}";
+                : Strings.M($"{result.DeletedCount:N0} 项 / {Formatting.FormatBytes(result.BytesRemoved)}");
             sb.AppendLine($"· {result.Rule.DisplayName}:{summary}");
             foreach (var failure in result.Failures.Take(maxFailuresPerRule))
             {
@@ -61,18 +62,18 @@ public static class ReportTextBuilder
 
             if (result.Failures.Count > maxFailuresPerRule)
             {
-                sb.AppendLine($"    …其余 {result.Failures.Count - maxFailuresPerRule} 项失败未列出");
+                sb.AppendLine(Strings.M($"    …其余 {result.Failures.Count - maxFailuresPerRule} 项失败未列出"));
             }
         }
 
         if (report.EmptyDirectoriesRemoved > 0)
         {
-            sb.AppendLine($"· 另回收空目录 {report.EmptyDirectoriesRemoved:N0} 个。");
+            sb.AppendLine(Strings.M($"· 另回收空目录 {report.EmptyDirectoriesRemoved:N0} 个。"));
         }
 
         if (report.SkippedRules.Count > 0)
         {
-            sb.AppendLine($"· 未执行的规则:{string.Join("、", report.SkippedRules.Select(r => r.DisplayName))}");
+            sb.AppendLine(Strings.M($"· 未执行的规则:{string.Join("、", report.SkippedRules.Select(r => r.DisplayName))}"));
         }
 
         if (!string.IsNullOrEmpty(footer))

@@ -17,6 +17,7 @@
 > P4 三个小件(2026-10-14):backlog 第 15–17 项(本文档第 15–17 项)已落地 —— 磁盘空间前后对比、勾选状态持久化、报告复制与扫描明细导出;验证情况见各项实现说明。
 > P2 收口(2026-10-14):「动作型规则」模型落地(本文档第 18 项),backlog 第 10、11 项与第 6 项遗留的事件日志 / DNS 类目随之实现;backlog 第 9 项(本文档第 19 项)以「清理后移除空目录」开关落地 —— **P2 全部完成**,仅 DriverStore 类目继续遗留。
 > P3 自动化(2026-10-14):backlog 第 12–14 项(本文档第 20–22 项)已落地 —— 定时自动清理 + 托盘常驻、命令行 / 无人值守、清理历史与累计统计;扫描 / 清理流程下沉为 `CleanupWorkflow`,GUI、CLI 与自动清理共用一条流水线。**P3 全部完成**;验证情况见各项实现说明。
+> 多语言(2026-10-14):backlog 第 18 项(本文档第 23 项)已落地 —— 中文 + 英文双语言,默认跟随系统语言;文案键即中文原文(gettext 风格),规则数据在创建时按语言解析;验证情况见该项实现说明。
 
 ## 1. 扫描 / 清理取消
 
@@ -792,6 +793,42 @@
 - 累计口径含条目数与字节数,最近记录列表按时间倒序;
 - history.json 损坏时应用正常启动、历史清零并保留 `history.bad.json`;`dotnet test` 全部通过。
 
+## 23. 多语言(i18n:中文 / 英文)
+
+> 来源:backlog 第 18 项(P4 · 体验与分发)。
+
+**目标**:界面、规则与报告文案不再硬编码中文 —— 中文系统保持中文,其他系统语言显示英文(本期只做这两种语言)。
+
+**现状(实现前)**
+
+- 430 处用户可见文案以字符串字面量散落在 AXAML、视图模型、规则数据、服务与 CLI 中;
+- 规则的 `DisplayName` / `Description` 是纯数据([WindowsRuleSet](../Rules/WindowsRuleSet.cs)),没有资源键方案;报告 / CLI 输出同样硬编码。
+
+**方案**
+
+1. 资源:[Localization/Strings.resx](../Localization/Strings.resx)(中性 = 简体中文)与 [Localization/Strings.en.resx](../Localization/Strings.en.resx)(英文),运行时经 [Strings](../Localization/Strings.cs) 访问;缺失键回退中文原文,不会出现空白文案;
+2. **键即中文原文(gettext 风格)**:不必为 430 处文案发明键名,中文原文即键、英文资源做对照翻译;插值串的键是带 `{0[:格式]}` 的格式串,调用保持插值写法 `Strings.M($"清理 {n:N0} 项")`;
+3. 语言选择:`Strings.ResolveUiCulture` —— zh* 系统语言 → zh-CN(中性资源),其余一律 en-US;在 [Program.cs](../Program.cs) 启动时确定一次,不做运行时切换;
+4. AXAML:`{loc:Loc '中文原文'}`([LocExtension](../Localization/LocExtension.cs))引用资源,控件创建时一次性解析;
+5. 规则:规则数据保持纯数据(内联中文即资源键),[WindowsRuleSet.Create](../Rules/WindowsRuleSet.cs) 在创建时经 `Localize` 解析显示名 / 说明 / 类别 —— 按调用时语言解析(而非类型初始化时),不会把某种语言"焊死"在静态初始化里;
+6. 覆盖面:主窗口与设置页、状态与报告、清理历史、托盘菜单、通知、扫描明细导出表头、动作型规则摘要、平台失败原因、CLI 用法与输出(多行的 `cli.usage` 用稳定键)。
+
+**影响文件**
+
+- 新增 [Localization/Strings.cs](../Localization/Strings.cs)、[Localization/LocExtension.cs](../Localization/LocExtension.cs)、[Localization/Strings.resx](../Localization/Strings.resx)、[Localization/Strings.en.resx](../Localization/Strings.en.resx)
+- [Program.cs](../Program.cs)(启动定语言)、[MainWindow.axaml](../MainWindow.axaml) / [NotificationWindow.axaml](../NotificationWindow.axaml)({loc:Loc})、其余 30 个含文案的 .cs(ViewModels / Services / Platform / Cli / Rules)
+- 新增 [broom.Tests/LocalizationTests.cs](../broom.Tests/LocalizationTests.cs)、[broom.Tests/TestSetup.cs](../broom.Tests/TestSetup.cs)(测试固定中文语境,英文用例临时切语言)
+
+> 实现说明:文案抽取 / 资源生成 / 源码包装由一次性脚本完成,并复扫校验零遗漏(431 个资源键,英文 100% 覆盖);两条边界需手工登记 —— 插值洞内的字符串参数(如确认语里的 `,含动作型规则(不可逆)`)与多行原始字符串(`cli.usage`),脚本不入洞 / 不切行。`WindowsRuleSet` 的内联文案刻意不包装,统一在 `Create()` 的 `Localize` 里解析。验证:171 项测试全绿(新增语言映射、双语查找、中英文资源键完整性、规则名 / 说明 / 类别双语、缺失键回退),GUI 冒烟与 CLI 中文输出与改造前一致;英文界面在中文系统上无法进程级冒烟(Windows UI 语言不可按进程覆盖),由英文查找与资源完整性测试覆盖,留英文系统人工验收。
+
+**验收标准**
+
+- 中文系统:界面 / 规则 / 报告 / CLI 文案与改造前逐字一致;
+- 非中文系统:界面、规则名与说明、报告与 `broom --help` 全部英文,无中文残留、无空白文案;
+- 语言默认跟随系统、无需设置;`zh*` 之外一律英文;
+- 新增文案:中文照常写在代码 / AXAML,并在两个 resx 同键补条目(测试校验英译完整性);
+- `dotnet test` 全部通过。
+
 ## 依赖关系与建议顺序
 
 | 顺序 | 项 | 理由 |
@@ -818,5 +855,6 @@
 | 20 | 定时 / 阈值自动清理 + 托盘常驻 | 复用第 21 项下沉的清理工作流;托盘 / 通知 / 排期为独立服务 |
 | 21 | 命令行 CLI / 无人值守 | 先把扫描 / 清理流程从 ViewModel 下沉为服务,是第 20 项自动清理的前置 |
 | 22 | 清理历史与累计统计 | 只加历史服务与清理页统计;第 20、21 项的清理结果同样写入 |
+| 23 | 多语言(i18n) | 全局文案改造,独立于功能项;在其余项稳定后落地,避免大面积冲突 |
 
 各项相互独立,可单独交付;建议每项完成后跑一次「扫描 → 清理 → 报告」全流程,外加一次 GUI 冒烟测试(启动应用、确认窗口创建、关闭)。

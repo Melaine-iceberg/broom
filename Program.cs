@@ -2,6 +2,7 @@
 using System;
 using System.Threading;
 using broom.Cli;
+using broom.Localization;
 
 namespace broom;
 
@@ -13,6 +14,9 @@ class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        // 文案语言先于界面 / 命令行输出确定:中文系统显示中文,其余显示英文
+        Strings.ApplySystemLanguage();
+
         // 命令行 / 无人值守模式:不启动界面,扫描与清理直接跑完并返回退出码
         if (CommandLineParser.LooksLikeCliRequest(args))
         {

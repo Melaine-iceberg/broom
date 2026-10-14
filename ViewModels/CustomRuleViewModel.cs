@@ -1,7 +1,8 @@
-using broom.Core;
+﻿using broom.Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
+using broom.Localization;
 namespace broom.ViewModels;
 
 /// <summary>设置页中的一条自定义目录。</summary>
@@ -23,9 +24,9 @@ public partial class CustomRuleViewModel : ObservableObject
 
     public IReadOnlyList<RiskOption> RiskOptions { get; } =
     [
-        new(RiskLevel.Safe, "安全"),
-        new(RiskLevel.Caution, "谨慎"),
-        new(RiskLevel.High, "高风险"),
+        new(RiskLevel.Safe, Strings.T("安全")),
+        new(RiskLevel.Caution, Strings.T("谨慎")),
+        new(RiskLevel.High, Strings.T("高风险")),
     ];
 
     public IRelayCommand RemoveCommand { get; }

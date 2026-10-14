@@ -1,12 +1,13 @@
-using broom.Core;
+﻿using broom.Core;
 
+using broom.Localization;
 namespace broom.Services;
 
 /// <summary>低磁盘空间提醒。</summary>
 public readonly record struct LowDiskAlert(string Drive, long FreeBytes, long ThresholdBytes)
 {
     public string Message =>
-        $"磁盘 {Drive.TrimEnd('\\', '/')} 可用空间仅剩 {Formatting.FormatBytes(FreeBytes)}(低于阈值 {Formatting.FormatBytes(ThresholdBytes)})";
+        Strings.M($"磁盘 {Drive.TrimEnd('\\', '/')} 可用空间仅剩 {Formatting.FormatBytes(FreeBytes)}(低于阈值 {Formatting.FormatBytes(ThresholdBytes)})");
 }
 
 /// <summary>

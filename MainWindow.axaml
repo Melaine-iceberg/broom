@@ -1,12 +1,13 @@
-<Window xmlns="https://github.com/avaloniaui"
+﻿<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:broom.Localization"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:broom.ViewModels"
         mc:Ignorable="d" d:DesignWidth="1080" d:DesignHeight="720"
         x:Class="broom.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="broom · 垃圾清理"
+        Title="{loc:Loc 'broom · 垃圾清理'}"
         Width="1080" Height="720"
         MinWidth="880" MinHeight="580"
         Background="{DynamicResource Brush.Bg}"
@@ -28,30 +29,30 @@
                         <TextBlock Text="broom" FontSize="17" FontWeight="SemiBold"
                                    Foreground="{DynamicResource Brush.Text}" VerticalAlignment="Center"/>
                     </StackPanel>
-                    <TextBlock Classes="muted" Text="垃圾清理与磁盘瘦身" Margin="40,0,0,0"/>
+                    <TextBlock Classes="muted" Text="{loc:Loc '垃圾清理与磁盘瘦身'}" Margin="40,0,0,0"/>
                 </StackPanel>
 
                 <StackPanel DockPanel.Dock="Bottom" Spacing="8" Margin="4,0">
                     <Border Classes="badge admin" IsVisible="{Binding IsElevated}" Padding="10,6"
                             HorizontalAlignment="Stretch">
-                        <TextBlock Text="已以管理员身份运行" HorizontalAlignment="Center"/>
+                        <TextBlock Text="{loc:Loc '已以管理员身份运行'}" HorizontalAlignment="Center"/>
                     </Border>
                     <Button Classes="ghost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                            Content="以管理员身份重启" IsVisible="{Binding !IsElevated}"
+                            Content="{loc:Loc '以管理员身份重启'}" IsVisible="{Binding !IsElevated}"
                             IsEnabled="{Binding !IsBusy}" Command="{Binding RestartElevatedCommand}"
-                            ToolTip.Tip="通过 UAC 以管理员身份重新启动,用于清理需要管理员权限的项目。"/>
+                            ToolTip.Tip="{loc:Loc '通过 UAC 以管理员身份重新启动,用于清理需要管理员权限的项目。'}"/>
                     <Border Classes="divider" Margin="4,4"/>
                     <TextBlock Classes="muted" Margin="8,0,8,4" TextWrapping="Wrap"
-                               Text="删除默认移入回收站,可恢复"/>
+                               Text="{loc:Loc '删除默认移入回收站,可恢复'}"/>
                 </StackPanel>
 
                 <StackPanel Spacing="4" Margin="4,0">
                     <Button Classes="nav" Classes.active="{Binding IsCleanPage}"
-                            Command="{Binding ShowCleanCommand}" Content="清理"
-                            ToolTip.Tip="扫描并清理临时文件、缓存与残留。"/>
+                            Command="{Binding ShowCleanCommand}" Content="{loc:Loc '清理'}"
+                            ToolTip.Tip="{loc:Loc '扫描并清理临时文件、缓存与残留。'}"/>
                     <Button Classes="nav" Classes.active="{Binding IsSettingsPage}"
-                            Command="{Binding ShowSettingsCommand}" IsEnabled="{Binding !IsBusy}" Content="设置"
-                            ToolTip.Tip="自定义清理目录、排除规则与默认选项。"/>
+                            Command="{Binding ShowSettingsCommand}" IsEnabled="{Binding !IsBusy}" Content="{loc:Loc '设置'}"
+                            ToolTip.Tip="{loc:Loc '自定义清理目录、排除规则与默认选项。'}"/>
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -66,7 +67,7 @@
                 <Border Grid.Row="0" Classes="hero">
                     <Grid ColumnDefinitions="*,Auto">
                         <StackPanel Grid.Column="0" Spacing="6" VerticalAlignment="Center">
-                            <TextBlock Classes="section" Text="可释放空间"/>
+                            <TextBlock Classes="section" Text="{loc:Loc '可释放空间'}"/>
                             <TextBlock Text="{Binding TotalSizeText}" FontSize="40" FontWeight="SemiBold"
                                        Foreground="{DynamicResource Brush.Text}" LineHeight="46"/>
                             <TextBlock Classes="body" Text="{Binding SelectedSummaryText}"/>
@@ -77,7 +78,7 @@
                                     Content="{Binding ScanButtonText}" Command="{Binding ScanCommand}"
                                     IsEnabled="{Binding !IsBusy}"/>
                             <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                                <Button Classes="secondary" Content="取消" Command="{Binding CancelCommand}"
+                                <Button Classes="secondary" Content="{loc:Loc '取消'}" Command="{Binding CancelCommand}"
                                         IsVisible="{Binding IsBusy}"/>
                                 <Button Classes.accent="{Binding HasScanned}" Classes.secondary="{Binding !HasScanned}"
                                         MinWidth="168" HorizontalAlignment="Right"
@@ -97,21 +98,21 @@
 
                 <!-- 筛选工具栏 -->
                 <Grid Grid.Row="2" Margin="0,16,0,12" ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto">
-                    <TextBlock Grid.Column="0" Classes="h2" Text="清理项" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="0" Classes="h2" Text="{loc:Loc '清理项'}" VerticalAlignment="Center"/>
                     <TextBlock Grid.Column="1" Classes="muted" Margin="10,0,0,0"
                                Text="{Binding VisibleCountText}" VerticalAlignment="Center"/>
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4"
                                 Margin="16,0,0,0" VerticalAlignment="Center">
-                        <Button Classes="ghost" Content="全选" Command="{Binding SelectAllVisibleCommand}"/>
-                        <Button Classes="ghost" Content="仅安全" Command="{Binding SelectSafeOnlyCommand}"/>
-                        <Button Classes="ghost" Content="全不选" Command="{Binding SelectNoneVisibleCommand}"/>
+                        <Button Classes="ghost" Content="{loc:Loc '全选'}" Command="{Binding SelectAllVisibleCommand}"/>
+                        <Button Classes="ghost" Content="{loc:Loc '仅安全'}" Command="{Binding SelectSafeOnlyCommand}"/>
+                        <Button Classes="ghost" Content="{loc:Loc '全不选'}" Command="{Binding SelectNoneVisibleCommand}"/>
                     </StackPanel>
                     <TextBox Grid.Column="3" Width="220" VerticalAlignment="Center"
-                             Text="{Binding SearchText}" PlaceholderText="搜索清理项…"
-                             ToolTip.Tip="按名称、说明或类别过滤。"/>
+                             Text="{Binding SearchText}" PlaceholderText="{loc:Loc '搜索清理项…'}"
+                             ToolTip.Tip="{loc:Loc '按名称、说明或类别过滤。'}"/>
                     <ComboBox Grid.Column="4" Width="132" Margin="8,0,0,0"
                               ItemsSource="{Binding RiskFilters}" SelectedItem="{Binding SelectedRiskFilter}"
-                              ToolTip.Tip="按风险等级筛选。">
+                              ToolTip.Tip="{loc:Loc '按风险等级筛选。'}">
                         <ComboBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:RiskFilterOption">
                                 <TextBlock Text="{Binding Label}"/>
@@ -120,25 +121,25 @@
                     </ComboBox>
                     <ComboBox Grid.Column="5" Width="168" Margin="8,0,0,0"
                               ItemsSource="{Binding SortOptions}" SelectedItem="{Binding SelectedSortOption}"
-                              ToolTip.Tip="调整清理项的排列顺序。">
+                              ToolTip.Tip="{loc:Loc '调整清理项的排列顺序。'}">
                         <ComboBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:SortOption">
                                 <TextBlock Text="{Binding Label}"/>
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
-                    <Button Grid.Column="6" Classes="ghost" Content="导出明细" Click="ExportScan_Click"
+                    <Button Grid.Column="6" Classes="ghost" Content="{loc:Loc '导出明细'}" Click="ExportScan_Click"
                             Margin="8,0,0,0" IsEnabled="{Binding HasScanned}"
-                            ToolTip.Tip="把扫描到的全部文件导出为 CSV / TXT(规则、路径、大小),便于核对。"/>
+                            ToolTip.Tip="{loc:Loc '把扫描到的全部文件导出为 CSV / TXT(规则、路径、大小),便于核对。'}"/>
                 </Grid>
 
                 <!-- 清理项列表 -->
                 <ScrollViewer Grid.Row="3">
                     <StackPanel Spacing="16">
                         <StackPanel IsVisible="{Binding !HasVisibleRules}" Spacing="6" Margin="0,48">
-                            <TextBlock Classes="h2" Text="没有匹配的清理项" HorizontalAlignment="Center"/>
+                            <TextBlock Classes="h2" Text="{loc:Loc '没有匹配的清理项'}" HorizontalAlignment="Center"/>
                             <TextBlock Classes="body" HorizontalAlignment="Center" TextWrapping="Wrap"
-                                       Text="换个关键词,或把风险筛选调回“全部等级”。"/>
+                                       Text="{loc:Loc '换个关键词,或把风险筛选调回“全部等级”。'}"/>
                         </StackPanel>
 
                         <ItemsControl ItemsSource="{Binding RuleGroups}">
@@ -148,7 +149,7 @@
                                         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                                             <CheckBox Grid.Column="0" Margin="0,0,10,0" VerticalAlignment="Center"
                                                       IsChecked="{Binding IsSelected}"
-                                                      ToolTip.Tip="勾选 / 取消勾选本组全部清理项"/>
+                                                      ToolTip.Tip="{loc:Loc '勾选 / 取消勾选本组全部清理项'}"/>
                                             <TextBlock Grid.Column="1" Classes="h2" VerticalAlignment="Center"
                                                        Text="{Binding Title}"/>
                                             <TextBlock Grid.Column="2" Classes="muted" Margin="10,0,14,0"
@@ -165,7 +166,7 @@
                                                             <CheckBox Grid.Column="0" Margin="0,2,12,0"
                                                                       VerticalAlignment="Top"
                                                                       IsChecked="{Binding IsSelected}"
-                                                                      ToolTip.Tip="勾选后参与本次清理"/>
+                                                                      ToolTip.Tip="{loc:Loc '勾选后参与本次清理'}"/>
                                                             <StackPanel Grid.Column="1" Spacing="5">
                                                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                                                     <TextBlock Text="{Binding DisplayName}"
@@ -180,18 +181,18 @@
                                                                     </Border>
                                                                     <Border Classes="badge admin"
                                                                             IsVisible="{Binding RequiresAdmin}">
-                                                                        <TextBlock Text="需要管理员"/>
+                                                                        <TextBlock Text="{loc:Loc '需要管理员'}"/>
                                                                     </Border>
                                                                     <Border Classes="badge high"
                                                                             IsVisible="{Binding HasFailures}">
-                                                                        <TextBlock Text="部分无法访问"/>
+                                                                        <TextBlock Text="{loc:Loc '部分无法访问'}"/>
                                                                     </Border>
                                                                     <Button Classes="ghost" Padding="8,2" FontSize="11"
                                                                             VerticalAlignment="Center"
                                                                             Content="{Binding FilesToggleText}"
                                                                             Command="{Binding ToggleFilesCommand}"
                                                                             IsVisible="{Binding HasFiles}"
-                                                                            ToolTip.Tip="预览本条规则命中的文件,可将个别文件排除。"/>
+                                                                            ToolTip.Tip="{loc:Loc '预览本条规则命中的文件,可将个别文件排除。'}"/>
                                                                 </StackPanel>
                                                                 <TextBlock Text="{Binding Description}" FontSize="12"
                                                                            TextWrapping="Wrap"
@@ -210,11 +211,11 @@
                                                                         IsVisible="{Binding IsFilesExpanded}">
                                                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                                                     <TextBlock Classes="muted" VerticalAlignment="Center"
-                                                                               Text="仅显示"/>
+                                                                               Text="{loc:Loc '仅显示'}"/>
                                                                     <ComboBox Width="112"
                                                                               ItemsSource="{Binding SizeFilters}"
                                                                               SelectedItem="{Binding SelectedSizeFilter}"
-                                                                              ToolTip.Tip="只影响明细的显示,不改变清理范围;被筛掉的文件清理时仍会删除。">
+                                                                              ToolTip.Tip="{loc:Loc '只影响明细的显示,不改变清理范围;被筛掉的文件清理时仍会删除。'}">
                                                                         <ComboBox.ItemTemplate>
                                                                             <DataTemplate x:DataType="vm:SizeFilterOption">
                                                                                 <TextBlock Text="{Binding Label}"/>
@@ -246,16 +247,16 @@
                                                                                             Spacing="4"
                                                                                             VerticalAlignment="Center">
                                                                                     <Button Classes="ghost" Padding="8,2"
-                                                                                            FontSize="11" Content="打开位置"
+                                                                                            FontSize="11" Content="{loc:Loc '打开位置'}"
                                                                                             Command="{Binding RevealCommand}"/>
                                                                                     <Button Classes="ghost" Padding="8,2"
-                                                                                            FontSize="11" Content="排除文件夹"
+                                                                                            FontSize="11" Content="{loc:Loc '排除文件夹'}"
                                                                                             Command="{Binding ExcludeDirectoryCommand}"
-                                                                                            ToolTip.Tip="排除该文件所在的整个目录:清理时跳过该目录下的所有文件,后续扫描不再列出。"/>
+                                                                                            ToolTip.Tip="{loc:Loc '排除该文件所在的整个目录:清理时跳过该目录下的所有文件,后续扫描不再列出。'}"/>
                                                                                     <Button Classes="ghost" Padding="8,2"
-                                                                                            FontSize="11" Content="排除"
+                                                                                            FontSize="11" Content="{loc:Loc '排除'}"
                                                                                             Command="{Binding ExcludeCommand}"
-                                                                                            ToolTip.Tip="加入排除名单:清理时跳过该文件,后续扫描不再列出。"/>
+                                                                                            ToolTip.Tip="{loc:Loc '加入排除名单:清理时跳过该文件,后续扫描不再列出。'}"/>
                                                                                 </StackPanel>
                                                                             </Grid>
                                                                         </DataTemplate>
@@ -267,7 +268,7 @@
                                                                         Command="{Binding ShowMoreFilesCommand}"
                                                                         IsVisible="{Binding HasMoreFiles}"/>
                                                                 <TextBlock Classes="muted"
-                                                                           Text="没有符合当前筛选的文件。"
+                                                                           Text="{loc:Loc '没有符合当前筛选的文件。'}"
                                                                            IsVisible="{Binding ShowEmptyHint}"/>
                                                             </StackPanel>
                                                         </Grid>
@@ -288,28 +289,28 @@
                         IsVisible="{Binding HasReport}">
                     <DockPanel>
                         <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto">
-                            <TextBlock Grid.Column="0" Classes="h2" Text="清理报告" VerticalAlignment="Center"/>
-                            <Button Grid.Column="1" Classes="secondary" Content="复制报告" Click="CopyReport_Click"
-                                    ToolTip.Tip="把清理报告全文复制到剪贴板。"/>
+                            <TextBlock Grid.Column="0" Classes="h2" Text="{loc:Loc '清理报告'}" VerticalAlignment="Center"/>
+                            <Button Grid.Column="1" Classes="secondary" Content="{loc:Loc '复制报告'}" Click="CopyReport_Click"
+                                    ToolTip.Tip="{loc:Loc '把清理报告全文复制到剪贴板。'}"/>
                         </Grid>
                         <StackPanel DockPanel.Dock="Bottom" Spacing="8" Margin="0,12,0,0">
                             <StackPanel Orientation="Horizontal" Spacing="8"
                                         IsVisible="{Binding HasPendingRebootDeletes}">
                                 <Button Classes="secondary" Content="{Binding ScheduleRebootDeleteText}"
                                         Command="{Binding ScheduleRebootDeleteCommand}"
-                                        ToolTip.Tip="登记到系统重启队列,重启后生效;重启前文件仍占用空间。"/>
+                                        ToolTip.Tip="{loc:Loc '登记到系统重启队列,重启后生效;重启前文件仍占用空间。'}"/>
                                 <TextBlock Classes="muted" VerticalAlignment="Center"
                                            IsVisible="{Binding !IsElevated}"
-                                           Text="需要管理员权限 —— 请先以管理员身份重启。"/>
+                                           Text="{loc:Loc '需要管理员权限 —— 请先以管理员身份重启。'}"/>
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="8"
                                         IsVisible="{Binding HasQuarantineEntries}">
                                 <Button Classes="secondary" Content="{Binding RestoreQuarantineText}"
                                         Command="{Binding RestoreQuarantineCommand}"
                                         IsEnabled="{Binding !IsBusy}"
-                                        ToolTip.Tip="把本次清理移入隔离区的文件移回原位置;隔离区内容在保留天数后自动删除。"/>
+                                        ToolTip.Tip="{loc:Loc '把本次清理移入隔离区的文件移回原位置;隔离区内容在保留天数后自动删除。'}"/>
                                 <TextBlock Classes="muted" VerticalAlignment="Center"
-                                           Text="还原到原位置;隔离区中的文件仍占用磁盘空间。"/>
+                                           Text="{loc:Loc '还原到原位置;隔离区中的文件仍占用磁盘空间。'}"/>
                             </StackPanel>
                         </StackPanel>
                         <ScrollViewer Margin="0,10,0,0">
@@ -323,7 +324,7 @@
                     <Border Grid.Row="1" Classes="card" Margin="0,12,0,0">
                         <StackPanel Spacing="8">
                             <Grid ColumnDefinitions="*,Auto">
-                                <TextBlock Grid.Column="0" Classes="h2" Text="清理历史" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="0" Classes="h2" Text="{loc:Loc '清理历史'}" VerticalAlignment="Center"/>
                                 <TextBlock Grid.Column="1" Classes="muted" VerticalAlignment="Center"
                                            Text="{Binding HistorySummaryText}"/>
                             </Grid>
@@ -345,7 +346,7 @@
                                 </ItemsControl>
                             </ScrollViewer>
                             <TextBlock Classes="muted" TextWrapping="Wrap"
-                                       Text="每次清理(含自动清理与命令行)都会记录到 %APPDATA%\broom\history.json,重启后累计数据仍在。"/>
+                                       Text="{loc:Loc '每次清理(含自动清理与命令行)都会记录到 %APPDATA%\broom\history.json,重启后累计数据仍在。'}"/>
                         </StackPanel>
                     </Border>
                 </Grid>
@@ -355,53 +356,53 @@
             <ScrollViewer IsVisible="{Binding IsSettingsPage}" Margin="24">
                 <StackPanel Spacing="16" MaxWidth="880" HorizontalAlignment="Stretch">
                     <StackPanel Spacing="4">
-                        <TextBlock Classes="h1" Text="设置"/>
+                        <TextBlock Classes="h1" Text="{loc:Loc '设置'}"/>
                         <TextBlock Classes="body" TextWrapping="Wrap"
-                                   Text="自定义清理目录、排除规则与默认选项。修改后点击“保存设置”才会生效。"/>
+                                   Text="{loc:Loc '自定义清理目录、排除规则与默认选项。修改后点击“保存设置”才会生效。'}"/>
                     </StackPanel>
 
                     <!-- 自定义目录 -->
                     <Border Classes="card">
                         <StackPanel Spacing="12">
                             <Grid ColumnDefinitions="*,Auto">
-                                <TextBlock Grid.Column="0" Classes="h2" Text="自定义目录" VerticalAlignment="Center"/>
-                                <Button Grid.Column="1" Classes="secondary" Content="添加目录"
+                                <TextBlock Grid.Column="0" Classes="h2" Text="{loc:Loc '自定义目录'}" VerticalAlignment="Center"/>
+                                <Button Grid.Column="1" Classes="secondary" Content="{loc:Loc '添加目录'}"
                                         Command="{Binding SettingsEditor.AddCustomRuleCommand}"/>
                             </Grid>
                             <TextBlock Classes="muted" TextWrapping="Wrap"
-                                       Text="这些目录会作为自定义规则出现在清理页,可扫描、可清理。路径支持 %ENV% 环境变量与目录级通配符(*)。"/>
+                                       Text="{loc:Loc '这些目录会作为自定义规则出现在清理页,可扫描、可清理。路径支持 %ENV% 环境变量与目录级通配符(*)。'}"/>
                             <ItemsControl ItemsSource="{Binding SettingsEditor.CustomRules}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:CustomRuleViewModel">
                                         <Border Classes="card" Padding="14" Margin="0,0,0,8">
                                             <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
                                                 <StackPanel Grid.Row="0" Grid.Column="0" Spacing="2">
-                                                    <TextBlock Classes="muted" Text="名称(可留空)"/>
-                                                    <TextBox Text="{Binding Name}" PlaceholderText="例如:我的下载缓存"/>
+                                                    <TextBlock Classes="muted" Text="{loc:Loc '名称(可留空)'}"/>
+                                                    <TextBox Text="{Binding Name}" PlaceholderText="{loc:Loc '例如:我的下载缓存'}"/>
                                                 </StackPanel>
                                                 <Button Grid.Row="0" Grid.Column="1" Classes="danger"
-                                                        Content="删除" Command="{Binding RemoveCommand}"
+                                                        Content="{loc:Loc '删除'}" Command="{Binding RemoveCommand}"
                                                         VerticalAlignment="Bottom" Margin="10,0,0,2"/>
                                                 <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
                                                             Spacing="2" Margin="0,12,0,0">
                                                     <TextBlock Classes="muted"
-                                                               Text="路径(支持 %ENV% 与目录级通配符 *)"/>
+                                                               Text="{loc:Loc '路径(支持 %ENV% 与目录级通配符 *)'}"/>
                                                     <TextBox Text="{Binding Path}"
                                                              PlaceholderText="%LOCALAPPDATA%\MyApp\Cache"/>
                                                 </StackPanel>
                                                 <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
                                                       Margin="0,12,0,0" ColumnDefinitions="*,*,Auto,Auto">
                                                     <StackPanel Grid.Column="0" Spacing="2">
-                                                        <TextBlock Classes="muted" Text="包含模式(逗号分隔)"/>
+                                                        <TextBlock Classes="muted" Text="{loc:Loc '包含模式(逗号分隔)'}"/>
                                                         <TextBox Text="{Binding IncludePatternsText}" PlaceholderText="*"/>
                                                     </StackPanel>
                                                     <StackPanel Grid.Column="1" Spacing="2" Margin="10,0,0,0">
-                                                        <TextBlock Classes="muted" Text="排除模式(逗号分隔)"/>
+                                                        <TextBlock Classes="muted" Text="{loc:Loc '排除模式(逗号分隔)'}"/>
                                                         <TextBox Text="{Binding ExcludePatternsText}"
                                                                  PlaceholderText="*.db, *.log"/>
                                                     </StackPanel>
                                                     <StackPanel Grid.Column="2" Spacing="2" Margin="10,0,0,0">
-                                                        <TextBlock Classes="muted" Text="风险等级"/>
+                                                        <TextBlock Classes="muted" Text="{loc:Loc '风险等级'}"/>
                                                         <ComboBox ItemsSource="{Binding RiskOptions}"
                                                                   SelectedItem="{Binding SelectedRisk}">
                                                             <ComboBox.ItemTemplate>
@@ -412,7 +413,7 @@
                                                         </ComboBox>
                                                     </StackPanel>
                                                     <CheckBox Grid.Column="3" Margin="10,20,0,0"
-                                                              Content="默认勾选" IsChecked="{Binding Recommended}"/>
+                                                              Content="{loc:Loc '默认勾选'}" IsChecked="{Binding Recommended}"/>
                                                 </Grid>
                                             </Grid>
                                         </Border>
@@ -425,42 +426,42 @@
                     <!-- 排除规则 -->
                     <Border Classes="card">
                         <StackPanel Spacing="8">
-                            <TextBlock Classes="h2" Text="排除规则"/>
+                            <TextBlock Classes="h2" Text="{loc:Loc '排除规则'}"/>
                             <TextBlock Classes="muted" TextWrapping="Wrap"
-                                       Text="每行一个路径,命中的文件在任何规则下都会被跳过(包含该目录下的所有内容)。"/>
+                                       Text="{loc:Loc '每行一个路径,命中的文件在任何规则下都会被跳过(包含该目录下的所有内容)。'}"/>
                             <TextBox AcceptsReturn="True" MinHeight="110" TextWrapping="Wrap"
                                      VerticalContentAlignment="Top"
                                      Text="{Binding SettingsEditor.ExcludedPathsText}"
-                                     PlaceholderText="例如:C:\Users\me\AppData\Local\Temp\keep"/>
+                                     PlaceholderText="{loc:Loc '例如:C:\Users\me\AppData\Local\Temp\keep'}"/>
                         </StackPanel>
                     </Border>
 
                     <!-- 排除的文件 -->
                     <Border Classes="card">
                         <StackPanel Spacing="12">
-                            <TextBlock Classes="h2" Text="排除的文件"/>
+                            <TextBlock Classes="h2" Text="{loc:Loc '排除的文件'}"/>
                             <TextBlock Classes="muted" TextWrapping="Wrap"
-                                       Text="每行一个文件路径,命中的文件在任何规则下都会被跳过;在清理页的文件明细中点击“排除”会自动添加到这里。"/>
+                                       Text="{loc:Loc '每行一个文件路径,命中的文件在任何规则下都会被跳过;在清理页的文件明细中点击“排除”会自动添加到这里。'}"/>
                             <TextBox AcceptsReturn="True" MinHeight="90" TextWrapping="Wrap"
                                      VerticalContentAlignment="Top"
                                      Text="{Binding SettingsEditor.ExcludedFilesText}"
-                                     PlaceholderText="例如:C:\Users\me\AppData\Local\Temp\keep\important.tmp"/>
+                                     PlaceholderText="{loc:Loc '例如:C:\Users\me\AppData\Local\Temp\keep\important.tmp'}"/>
                         </StackPanel>
                     </Border>
 
                     <!-- 隔离区 -->
                     <Border Classes="card">
                         <StackPanel Spacing="12">
-                            <TextBlock Classes="h2" Text="隔离区"/>
+                            <TextBlock Classes="h2" Text="{loc:Loc '隔离区'}"/>
                             <TextBlock Classes="muted" TextWrapping="Wrap"
-                                       Text="开启后“永久删除”会先把文件移入隔离区,可在清理报告的“还原”中找回;超过保留天数的内容自动删除。"/>
-                            <CheckBox Content="永久删除时先移入隔离区(可还原)"
+                                       Text="{loc:Loc '开启后“永久删除”会先把文件移入隔离区,可在清理报告的“还原”中找回;超过保留天数的内容自动删除。'}"/>
+                            <CheckBox Content="{loc:Loc '永久删除时先移入隔离区(可还原)'}"
                                       IsChecked="{Binding SettingsEditor.QuarantineEnabled}"/>
                             <StackPanel Orientation="Horizontal" Spacing="10">
-                                <TextBlock Text="保留天数" VerticalAlignment="Center"/>
+                                <TextBlock Text="{loc:Loc '保留天数'}" VerticalAlignment="Center"/>
                                 <ComboBox Width="132" ItemsSource="{Binding SettingsEditor.QuarantineRetentionOptions}"
                                           SelectedItem="{Binding SettingsEditor.SelectedQuarantineRetention}"
-                                          ToolTip.Tip="超过保留天数的隔离内容在启动应用时自动清理;“永久保留”需手动清空。">
+                                          ToolTip.Tip="{loc:Loc '超过保留天数的隔离内容在启动应用时自动清理;“永久保留”需手动清空。'}">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate x:DataType="vm:RetentionOption">
                                             <TextBlock Text="{Binding Label}"/>
@@ -469,12 +470,12 @@
                                 </ComboBox>
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button Classes="secondary" Content="打开隔离区"
+                                <Button Classes="secondary" Content="{loc:Loc '打开隔离区'}"
                                         Command="{Binding SettingsEditor.OpenQuarantineCommand}"
-                                        ToolTip.Tip="在资源管理器中查看隔离区中的文件。"/>
+                                        ToolTip.Tip="{loc:Loc '在资源管理器中查看隔离区中的文件。'}"/>
                                 <Button Classes="secondary" Content="{Binding SettingsEditor.PurgeQuarantineText}"
                                         Command="{Binding SettingsEditor.PurgeQuarantineCommand}"
-                                        ToolTip.Tip="永久删除隔离区中的全部内容,不可恢复。"/>
+                                        ToolTip.Tip="{loc:Loc '永久删除隔离区中的全部内容,不可恢复。'}"/>
                             </StackPanel>
                             <TextBlock Classes="muted" TextWrapping="Wrap"
                                        Text="{Binding SettingsEditor.QuarantineStatusText}"/>
@@ -484,24 +485,24 @@
                     <!-- 系统还原点 -->
                     <Border Classes="card">
                         <StackPanel Spacing="12">
-                            <TextBlock Classes="h2" Text="系统还原点"/>
+                            <TextBlock Classes="h2" Text="{loc:Loc '系统还原点'}"/>
                             <TextBlock Classes="muted" TextWrapping="Wrap"
-                                       Text="开启后在每次清理前尝试创建 Windows 系统还原点,为系统类目的清理提供一键回滚;失败不会阻塞清理,原因写进清理报告。"/>
-                            <CheckBox Content="清理前创建系统还原点(需要管理员权限)"
+                                       Text="{loc:Loc '开启后在每次清理前尝试创建 Windows 系统还原点,为系统类目的清理提供一键回滚;失败不会阻塞清理,原因写进清理报告。'}"/>
+                            <CheckBox Content="{loc:Loc '清理前创建系统还原点(需要管理员权限)'}"
                                       IsChecked="{Binding SettingsEditor.CreateRestorePointBeforeClean}"/>
                             <TextBlock Classes="muted" TextWrapping="Wrap"
-                                       Text="仅对启用了系统保护的卷有效(通常为系统盘),创建需要数秒到数十秒,Windows 对创建频率另有限制。注意:勾选「旧还原点与卷影副本」类目会删除这些回滚点,两者语义互斥。"/>
+                                       Text="{loc:Loc '仅对启用了系统保护的卷有效(通常为系统盘),创建需要数秒到数十秒,Windows 对创建频率另有限制。注意:勾选「旧还原点与卷影副本」类目会删除这些回滚点,两者语义互斥。'}"/>
                         </StackPanel>
                     </Border>
 
                     <!-- 自动化与托盘 -->
                     <Border Classes="card">
                         <StackPanel Spacing="12">
-                            <TextBlock Classes="h2" Text="自动化与托盘"/>
+                            <TextBlock Classes="h2" Text="{loc:Loc '自动化与托盘'}"/>
                             <TextBlock Classes="muted" TextWrapping="Wrap"
-                                       Text="开启自动清理后 broom 常驻托盘,到点按下面的范围清理;一律移入回收站(不永久删除),结果计入清理历史并弹出通知。"/>
+                                       Text="{loc:Loc '开启自动清理后 broom 常驻托盘,到点按下面的范围清理;一律移入回收站(不永久删除),结果计入清理历史并弹出通知。'}"/>
                             <StackPanel Orientation="Horizontal" Spacing="10">
-                                <TextBlock Text="频率" VerticalAlignment="Center"/>
+                                <TextBlock Text="{loc:Loc '频率'}" VerticalAlignment="Center"/>
                                 <ComboBox Width="132"
                                           ItemsSource="{Binding SettingsEditor.AutoCleanFrequencyOptions}"
                                           SelectedItem="{Binding SettingsEditor.SelectedAutoCleanFrequency}">
@@ -511,12 +512,12 @@
                                         </DataTemplate>
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>
-                                <TextBlock Text="时刻" VerticalAlignment="Center"
+                                <TextBlock Text="{loc:Loc '时刻'}" VerticalAlignment="Center"
                                            IsVisible="{Binding SettingsEditor.IsAutoCleanEnabled}"/>
                                 <ComboBox Width="112" IsVisible="{Binding SettingsEditor.IsAutoCleanEnabled}"
                                           ItemsSource="{Binding SettingsEditor.AutoCleanHourOptions}"
                                           SelectedItem="{Binding SettingsEditor.SelectedAutoCleanHour}"
-                                          ToolTip.Tip="按本地时间执行;错过时刻(如关机 / 休眠)顺延到下一次,不补跑。">
+                                          ToolTip.Tip="{loc:Loc '按本地时间执行;错过时刻(如关机 / 休眠)顺延到下一次,不补跑。'}">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate x:DataType="vm:AutoCleanHourOption">
                                             <TextBlock Text="{Binding Label}"/>
@@ -526,7 +527,7 @@
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="10"
                                         IsVisible="{Binding SettingsEditor.IsWeekly}">
-                                <TextBlock Text="每周" VerticalAlignment="Center"/>
+                                <TextBlock Text="{loc:Loc '每周'}" VerticalAlignment="Center"/>
                                 <ComboBox Width="132"
                                           ItemsSource="{Binding SettingsEditor.AutoCleanDayOfWeekOptions}"
                                           SelectedItem="{Binding SettingsEditor.SelectedAutoCleanDayOfWeek}">
@@ -539,11 +540,11 @@
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="10"
                                         IsVisible="{Binding SettingsEditor.IsMonthly}">
-                                <TextBlock Text="每月" VerticalAlignment="Center"/>
+                                <TextBlock Text="{loc:Loc '每月'}" VerticalAlignment="Center"/>
                                 <ComboBox Width="132"
                                           ItemsSource="{Binding SettingsEditor.AutoCleanDayOfMonthOptions}"
                                           SelectedItem="{Binding SettingsEditor.SelectedAutoCleanDayOfMonth}"
-                                          ToolTip.Tip="每月按日期执行(1–28,避免短月份跳过)。">
+                                          ToolTip.Tip="{loc:Loc '每月按日期执行(1–28,避免短月份跳过)。'}">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate x:DataType="vm:AutoCleanDayOfMonthOption">
                                             <TextBlock Text="{Binding Label}"/>
@@ -553,11 +554,11 @@
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="10"
                                         IsVisible="{Binding SettingsEditor.IsAutoCleanEnabled}">
-                                <TextBlock Text="清理范围" VerticalAlignment="Center"/>
+                                <TextBlock Text="{loc:Loc '清理范围'}" VerticalAlignment="Center"/>
                                 <ComboBox Width="184"
                                           ItemsSource="{Binding SettingsEditor.AutoCleanScopeOptions}"
                                           SelectedItem="{Binding SettingsEditor.SelectedAutoCleanScope}"
-                                          ToolTip.Tip="自动删除必须可预期:推荐只清安全项;“上次勾选的项目”按清理页当前的选择执行。">
+                                          ToolTip.Tip="{loc:Loc '自动删除必须可预期:推荐只清安全项;“上次勾选的项目”按清理页当前的选择执行。'}">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate x:DataType="vm:AutoCleanScopeOption">
                                             <TextBlock Text="{Binding Label}"/>
@@ -565,16 +566,16 @@
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>
                             </StackPanel>
-                            <CheckBox Content="关闭主窗口时最小化到托盘(保持后台定时清理)"
+                            <CheckBox Content="{loc:Loc '关闭主窗口时最小化到托盘(保持后台定时清理)'}"
                                       IsChecked="{Binding SettingsEditor.CloseToTray}"/>
                             <TextBlock Classes="muted" TextWrapping="Wrap"
-                                       Text="托盘图标左键打开主界面,右键菜单可“立即清理”或真正退出。自动清理只在 broom 运行时执行;需要关机后仍可清理时,用命令行接入 Windows 计划任务:broom --clean safe --yes --report %APPDATA%\broom\auto-clean.txt。"/>
+                                       Text="{loc:Loc '托盘图标左键打开主界面,右键菜单可“立即清理”或真正退出。自动清理只在 broom 运行时执行;需要关机后仍可清理时,用命令行接入 Windows 计划任务:broom --clean safe --yes --report %APPDATA%\broom\auto-clean.txt。'}"/>
                             <StackPanel Orientation="Horizontal" Spacing="10">
-                                <TextBlock Text="磁盘空间提醒" VerticalAlignment="Center"/>
+                                <TextBlock Text="{loc:Loc '磁盘空间提醒'}" VerticalAlignment="Center"/>
                                 <ComboBox Width="156"
                                           ItemsSource="{Binding SettingsEditor.LowDiskOptions}"
                                           SelectedItem="{Binding SettingsEditor.SelectedLowDisk}"
-                                          ToolTip.Tip="固定磁盘可用空间低于阈值时弹出通知;每块盘只提醒一次,恢复后再次跌破会再提醒。">
+                                          ToolTip.Tip="{loc:Loc '固定磁盘可用空间低于阈值时弹出通知;每块盘只提醒一次,恢复后再次跌破会再提醒。'}">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate x:DataType="vm:LowDiskOption">
                                             <TextBlock Text="{Binding Label}"/>
@@ -588,14 +589,14 @@
                     <!-- 其他选项 -->
                     <Border Classes="card">
                         <StackPanel Spacing="12">
-                            <TextBlock Classes="h2" Text="其他选项"/>
-                            <CheckBox Content="默认使用永久删除(不经过回收站)"
+                            <TextBlock Classes="h2" Text="{loc:Loc '其他选项'}"/>
+                            <CheckBox Content="{loc:Loc '默认使用永久删除(不经过回收站)'}"
                                       IsChecked="{Binding SettingsEditor.DefaultPermanentDelete}"/>
                             <StackPanel Orientation="Horizontal" Spacing="10">
-                                <TextBlock Text="安全擦除(永久删除前覆写)" VerticalAlignment="Center"/>
+                                <TextBlock Text="{loc:Loc '安全擦除(永久删除前覆写)'}" VerticalAlignment="Center"/>
                                 <ComboBox Width="132" ItemsSource="{Binding SettingsEditor.SecureEraseOptions}"
                                           SelectedItem="{Binding SettingsEditor.SelectedSecureErase}"
-                                          ToolTip.Tip="用随机数据覆写后再删除,降低数据恢复的可行性;文件越大、次数越多,清理越慢。">
+                                          ToolTip.Tip="{loc:Loc '用随机数据覆写后再删除,降低数据恢复的可行性;文件越大、次数越多,清理越慢。'}">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate x:DataType="vm:SecureEraseOption">
                                             <TextBlock Text="{Binding Label}"/>
@@ -604,14 +605,14 @@
                                 </ComboBox>
                             </StackPanel>
                             <TextBlock Classes="muted" TextWrapping="Wrap"
-                                       Text="对 SSD / NVMe 与写时复制文件系统(ReFS、Dev Drive)效果有限。只作用于真正销毁文件的路径:回收站删除与“重启后删除”不覆写,移入隔离区的文件在隔离区清理时才覆写删除;覆写失败的文件保留并计入失败列表。"/>
-                            <CheckBox Content="显示高风险类目(例如旧系统备份)"
+                                       Text="{loc:Loc '对 SSD / NVMe 与写时复制文件系统(ReFS、Dev Drive)效果有限。只作用于真正销毁文件的路径:回收站删除与“重启后删除”不覆写,移入隔离区的文件在隔离区清理时才覆写删除;覆写失败的文件保留并计入失败列表。'}"/>
+                            <CheckBox Content="{loc:Loc '显示高风险类目(例如旧系统备份)'}"
                                       IsChecked="{Binding SettingsEditor.ShowHighRiskRules}"/>
                             <StackPanel Orientation="Horizontal" Spacing="10">
-                                <TextBlock Text="跳过最近修改的文件" VerticalAlignment="Center"/>
+                                <TextBlock Text="{loc:Loc '跳过最近修改的文件'}" VerticalAlignment="Center"/>
                                 <ComboBox Width="132" ItemsSource="{Binding SettingsEditor.SkipRecentOptions}"
                                           SelectedItem="{Binding SettingsEditor.SelectedSkipRecent}"
-                                          ToolTip.Tip="扫描与清理时跳过最近 N 天内修改过的文件,避免误删仍在使用的临时文件。">
+                                          ToolTip.Tip="{loc:Loc '扫描与清理时跳过最近 N 天内修改过的文件,避免误删仍在使用的临时文件。'}">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate x:DataType="vm:DayOption">
                                             <TextBlock Text="{Binding Label}"/>
@@ -620,21 +621,21 @@
                                 </ComboBox>
                             </StackPanel>
                             <TextBlock Classes="muted" TextWrapping="Wrap"
-                                       Text="“跳过最近修改”按文件的最后写入时间判断,清理前会再次校验;对“清空回收站”不生效。"/>
-                            <CheckBox Content="清理后移除扫描根下的空目录"
+                                       Text="{loc:Loc '“跳过最近修改”按文件的最后写入时间判断,清理前会再次校验;对“清空回收站”不生效。'}"/>
+                            <CheckBox Content="{loc:Loc '清理后移除扫描根下的空目录'}"
                                       IsChecked="{Binding SettingsEditor.RemoveEmptyDirectories}"/>
                             <TextBlock Classes="muted" TextWrapping="Wrap"
-                                       Text="清理完成后顺带回收本次扫描根下的空目录;可能删除你有意保留的空目录结构,默认关闭。"/>
+                                       Text="{loc:Loc '清理完成后顺带回收本次扫描根下的空目录;可能删除你有意保留的空目录结构,默认关闭。'}"/>
                         </StackPanel>
                     </Border>
 
                     <!-- 保存栏 -->
                     <StackPanel Orientation="Horizontal" Spacing="12">
-                        <Button Classes="accent" Content="保存设置"
+                        <Button Classes="accent" Content="{loc:Loc '保存设置'}"
                                 Command="{Binding SettingsEditor.SaveCommand}"/>
-                        <Button Classes="secondary" Content="放弃更改"
+                        <Button Classes="secondary" Content="{loc:Loc '放弃更改'}"
                                 Command="{Binding SettingsEditor.CancelCommand}"
-                                ToolTip.Tip="丢弃本次未保存的修改,恢复到当前生效的设置。"/>
+                                ToolTip.Tip="{loc:Loc '丢弃本次未保存的修改,恢复到当前生效的设置。'}"/>
                         <TextBlock Classes="error" VerticalAlignment="Center" MaxWidth="420"
                                    TextWrapping="Wrap" Text="{Binding SettingsEditor.ErrorText}"/>
                     </StackPanel>

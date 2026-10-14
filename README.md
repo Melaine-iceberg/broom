@@ -19,6 +19,7 @@ Windows 磁盘清理工具:把「什么是垃圾」写成纯数据规则,先扫�
 - **命令行 / 无人值守**:`broom --scan|--clean [safe|all] --dry-run --report out.txt --yes`,约定退出码,可接入 Windows 计划任务或脚本
 - **自动化与托盘**:每周 / 每月 / 每天定时自动清理(范围可预期:仅安全项或上次勾选,一律走回收站),托盘常驻、可关闭窗口后继续运行;磁盘可用空间低于阈值时弹出提醒
 - **清理历史**:每次清理(含自动清理与命令行)计入 `%APPDATA%\broom\history.json`,界面展示「本次释放 / 累计释放」与最近记录
+- **中英双语**:文案跟随系统语言(中文系统显示中文,其余显示英文);界面、规则、报告与命令行输出全部本地化,资源见 [Localization](Localization/Strings.resx)
 
 ## 构建与运行
 
@@ -93,6 +94,7 @@ Core/       规则与数据模型、路径模板展开、格式化、清理历�
 Rules/      Windows 内置规则集(纯数据)
 Services/   扫描器、清理器、设置与历史持久化、清理工作流、自动清理与磁盘看门通知
 Cli/        命令行模式:参数解析与无人值守执行
+Localization/ 文案资源(中性中文 + 英文)与 AXAML 引用扩展
 Platform/   Windows 能力:回收站、提权、隔离区、重删、还原点、安全擦除
 ViewModels/ MVVM 视图模型(CommunityToolkit.Mvvm)
 Styles/     主题变量与控件样式(深浅色双主题)

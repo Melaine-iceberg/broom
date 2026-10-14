@@ -1,8 +1,9 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using broom.Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
+using broom.Localization;
 namespace broom.ViewModels;
 
 /// <summary>单条清理规则在界面上的状态,含文件明细预览。</summary>
@@ -37,7 +38,7 @@ public partial class RuleViewModel : ObservableObject
     private long _sizeBytes;
 
     [ObservableProperty]
-    private string _statusText = "尚未扫描";
+    private string _statusText = Strings.T("尚未扫描");
 
     [ObservableProperty]
     private bool _hasFailures;
@@ -53,11 +54,11 @@ public partial class RuleViewModel : ObservableObject
     public bool HasFiles => _scanResult is { Files.Count: > 0 };
 
     public string FilesToggleText =>
-        IsFilesExpanded ? "收起文件" : $"查看文件({_scanResult?.Files.Count ?? 0:N0})";
+        IsFilesExpanded ? Strings.T("收起文件") : Strings.M($"查看文件({_scanResult?.Files.Count ?? 0:N0})");
 
     public bool HasMoreFiles => _orderedFiles is not null && _shownFiles < _orderedFiles.Count;
 
-    public string ShowMoreText => $"显示更多(剩余 {(_orderedFiles?.Count ?? 0) - _shownFiles:N0} 项)";
+    public string ShowMoreText => Strings.M($"显示更多(剩余 {(_orderedFiles?.Count ?? 0) - _shownFiles:N0} 项)");
 
     public string DisplayName => Rule.DisplayName;
 
@@ -73,9 +74,9 @@ public partial class RuleViewModel : ObservableObject
 
     public string RiskText => Rule.Risk switch
     {
-        RiskLevel.Safe => "安全",
-        RiskLevel.Caution => "谨慎",
-        _ => "高风险",
+        RiskLevel.Safe => Strings.T("安全"),
+        RiskLevel.Caution => Strings.T("谨慎"),
+        _ => Strings.T("高风险"),
     };
 
     /// <summary>文件明细的大小筛选选项(仅影响展示,不改变清理范围)。</summary>
@@ -83,7 +84,7 @@ public partial class RuleViewModel : ObservableObject
 
     private static readonly SizeFilterOption[] SizeFilterList =
     [
-        new(0, "全部大小"),
+        new(0, Strings.T("全部大小")),
         new(1L << 20, "≥ 1 MB"),
         new(10L << 20, "≥ 10 MB"),
         new(100L << 20, "≥ 100 MB"),

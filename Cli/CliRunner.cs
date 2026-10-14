@@ -1,8 +1,9 @@
-using System.Text;
+﻿using System.Text;
 using broom.Core;
 using broom.Platform;
 using broom.Services;
 
+using broom.Localization;
 namespace broom.Cli;
 
 /// <summary>
@@ -61,9 +62,9 @@ public static class CliRunner
         }
 
         var scopeText = options.Action == CliAction.Scan
-            ? "全部规则(只读)"
-            : options.Scope == CliScope.Safe ? "仅安全项" : "全部规则(含高风险)";
-        output.WriteLine($"broom 命令行 · {DateTime.Now:yyyy-MM-dd HH:mm} · {rules.Count} 条规则 · {scopeText}");
+            ? Strings.T("全部规则(只读)")
+            : options.Scope == CliScope.Safe ? Strings.T("仅安全项") : Strings.T("全部规则(含高风险)");
+        output.WriteLine(Strings.M($"broom 命令行 · {DateTime.Now:yyyy-MM-dd HH:mm} · {rules.Count} 条规则 · {scopeText}"));
 
         IReadOnlyList<RuleScanResult> scan;
         try
@@ -72,19 +73,19 @@ public static class CliRunner
             {
                 if (p.CurrentPath.Length == 0)
                 {
-                    output.WriteLine($"[{p.RuleIndex + 1}/{p.RuleCount}] 扫描 {p.RuleName}");
+                    output.WriteLine(Strings.M($"[{p.RuleIndex + 1}/{p.RuleCount}] 扫描 {p.RuleName}"));
                 }
             });
             scan = await workflow.ScanAsync(rules, settings, progress, ct);
         }
         catch (OperationCanceledException)
         {
-            error.WriteLine("已取消。");
+            error.WriteLine(Strings.T("已取消。"));
             return ExitCancelled;
         }
         catch (Exception ex)
         {
-            error.WriteLine($"扫描失败:{ex.Message}");
+            error.WriteLine(Strings.M($"扫描失败:{ex.Message}"));
             return ExitRuntimeError;
         }
 
@@ -100,10 +101,10 @@ public static class CliRunner
         var hasActions = scan.Any(r => r.Rule.Kind == RuleKind.Action);
         if (!options.AssumeYes)
         {
-            var question = $"即将清理 {totalItems:N0} 项 · {Formatting.FormatBytes(totalBytes)}{(hasActions ? ",含动作型规则(不可逆)" : "")},是否继续?";
+            var question = Strings.M($"即将清理 {totalItems:N0} 项 · {Formatting.FormatBytes(totalBytes)}{(hasActions ? Strings.T(",含动作型规则(不可逆)") : "")},是否继续?");
             if (!confirm(question))
             {
-                error.WriteLine("已取消:未确认清理(无人值守请加 --yes)。");
+                error.WriteLine(Strings.T("已取消:未确认清理(无人值守请加 --yes)。"));
                 return ExitCancelled;
             }
         }
@@ -112,17 +113,17 @@ public static class CliRunner
         try
         {
             var request = new CleanupRequest { Settings = settings, PermanentDelete = settings.DefaultPermanentDelete, IsElevated = isElevated };
-            var progress = new Progress<CleanProgress>(p => output.WriteLine($"[{p.RuleIndex + 1}/{p.RuleCount}] 清理 {p.RuleName}"));
+            var progress = new Progress<CleanProgress>(p => output.WriteLine(Strings.M($"[{p.RuleIndex + 1}/{p.RuleCount}] 清理 {p.RuleName}")));
             outcome = await workflow.CleanAsync(scan, request, progress, ct);
         }
         catch (OperationCanceledException)
         {
-            error.WriteLine("已取消。");
+            error.WriteLine(Strings.T("已取消。"));
             return ExitCancelled;
         }
         catch (Exception ex)
         {
-            error.WriteLine($"清理失败:{ex.Message}");
+            error.WriteLine(Strings.M($"清理失败:{ex.Message}"));
             return ExitRuntimeError;
         }
 
@@ -133,7 +134,7 @@ public static class CliRunner
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            error.WriteLine($"清理历史写入失败:{ex.Message}(不影响本次清理结果)");
+            error.WriteLine(Strings.M($"清理历史写入失败:{ex.Message}(不影响本次清理结果)"));
         }
 
         var notes = new List<string>();
@@ -144,7 +145,7 @@ public static class CliRunner
 
         if (report.WasCancelled)
         {
-            notes.Add("清理已取消,以上为已完成的部分。");
+            notes.Add(Strings.T("清理已取消,以上为已完成的部分。"));
         }
 
         if (outcome.Warning is not null)
@@ -154,7 +155,7 @@ public static class CliRunner
 
         var cleanReport = ReportTextBuilder.Build(
             report,
-            $"清理完成:删除 {report.TotalDeleted:N0} 项,共 {Formatting.FormatBytes(report.TotalBytesRemoved)}。",
+            Strings.M($"清理完成:删除 {report.TotalDeleted:N0} 项,共 {Formatting.FormatBytes(report.TotalBytesRemoved)}。"),
             notes);
         output.WriteLine(cleanReport);
 
@@ -171,27 +172,27 @@ public static class CliRunner
     private static string BuildScanReport(IReadOnlyList<RuleScanResult> scan)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"broom 扫描报告 · {DateTime.Now:yyyy-MM-dd HH:mm} · 只读,未删除任何文件");
+        sb.AppendLine(Strings.M($"broom 扫描报告 · {DateTime.Now:yyyy-MM-dd HH:mm} · 只读,未删除任何文件"));
         foreach (var result in scan)
         {
             if (result.ItemCount > 0)
             {
-                sb.AppendLine($"· {result.Rule.DisplayName}:{result.ItemCount:N0} 项 · {Formatting.FormatBytes(result.TotalBytes)}");
+                sb.AppendLine(Strings.M($"· {result.Rule.DisplayName}:{result.ItemCount:N0} 项 · {Formatting.FormatBytes(result.TotalBytes)}"));
             }
         }
 
         var actions = scan.Where(r => r.Rule.Kind == RuleKind.Action).ToList();
         if (actions.Count > 0)
         {
-            sb.AppendLine($"· 动作型规则 {actions.Count} 条:{string.Join("、", actions.Select(r => r.Rule.DisplayName))}(执行时生效,不计大小)");
+            sb.AppendLine(Strings.M($"· 动作型规则 {actions.Count} 条:{string.Join("、", actions.Select(r => r.Rule.DisplayName))}(执行时生效,不计大小)"));
         }
 
         foreach (var result in scan.Where(r => r.Errors.Count > 0))
         {
-            sb.AppendLine($"    ✗ {result.Rule.DisplayName}:{result.Errors.Count} 处无法访问");
+            sb.AppendLine(Strings.M($"    ✗ {result.Rule.DisplayName}:{result.Errors.Count} 处无法访问"));
         }
 
-        sb.AppendLine($"合计:可清理 {scan.Sum(r => r.ItemCount):N0} 项 · {Formatting.FormatBytes(scan.Sum(r => r.TotalBytes))}({scan.Count} 条规则)");
+        sb.AppendLine(Strings.M($"合计:可清理 {scan.Sum(r => r.ItemCount):N0} 项 · {Formatting.FormatBytes(scan.Sum(r => r.TotalBytes))}({scan.Count} 条规则)"));
         return sb.ToString().TrimEnd();
     }
 
@@ -217,7 +218,7 @@ public static class CliRunner
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
-            error.WriteLine($"报告写入失败:{ex.Message}");
+            error.WriteLine(Strings.M($"报告写入失败:{ex.Message}"));
             return true;
         }
     }

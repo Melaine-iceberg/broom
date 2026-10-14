@@ -1,10 +1,11 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Diagnostics.Eventing.Reader;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text.RegularExpressions;
 using broom.Core;
 
+using broom.Localization;
 namespace broom.Platform;
 
 /// <summary>Windows 动作型清理:DNS 缓存刷新、事件日志清空、卷影副本删除、DISM 组件存储清理。</summary>
@@ -24,7 +25,7 @@ public sealed class WindowsCleanupActionService : ICleanupActionService
             CleanupAction.ClearEventLogs => ClearEventLogs(ct),
             CleanupAction.DeleteShadowCopies => DeleteShadowCopies(progress, ct),
             CleanupAction.CleanComponentStore => CleanComponentStore(progress, ct),
-            _ => new CleanupActionResult { Success = false, Error = $"未知的清理动作:{action}" },
+            _ => new CleanupActionResult { Success = false, Error = Strings.M($"未知的清理动作:{action}") },
         };
 
     [DllImport("dnsapi.dll", EntryPoint = "DnsFlushResolverCache")]
@@ -35,12 +36,12 @@ public sealed class WindowsCleanupActionService : ICleanupActionService
         try
         {
             return DnsFlushResolverCache()
-                ? new CleanupActionResult { Success = true, Summary = "已刷新 DNS 解析缓存。" }
-                : new CleanupActionResult { Success = false, Error = "刷新 DNS 解析缓存失败。" };
+                ? new CleanupActionResult { Success = true, Summary = Strings.T("已刷新 DNS 解析缓存。") }
+                : new CleanupActionResult { Success = false, Error = Strings.T("刷新 DNS 解析缓存失败。") };
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
         {
-            return new CleanupActionResult { Success = false, Error = $"刷新 DNS 解析缓存失败:{ex.Message}" };
+            return new CleanupActionResult { Success = false, Error = Strings.M($"刷新 DNS 解析缓存失败:{ex.Message}") };
         }
     }
 
@@ -71,20 +72,20 @@ public sealed class WindowsCleanupActionService : ICleanupActionService
                 }
                 catch (Exception ex) when (ex is EventLogException or UnauthorizedAccessException or IOException)
                 {
-                    result.Failures.Add(new DeleteFailure($"<事件日志:{name}>", ex.Message));
+                    result.Failures.Add(new DeleteFailure(Strings.M($"<事件日志:{name}>"), ex.Message));
                 }
             }
         }
         catch (Exception ex) when (ex is EventLogException or UnauthorizedAccessException)
         {
-            return new CleanupActionResult { Success = false, Error = $"枚举事件日志失败:{ex.Message}" };
+            return new CleanupActionResult { Success = false, Error = Strings.M($"枚举事件日志失败:{ex.Message}") };
         }
 
         return new CleanupActionResult
         {
             Success = true,
             ItemsAffected = (int)Math.Min(clearedRecords, int.MaxValue),
-            Summary = $"已清空 {clearedLogs:N0} 个事件日志(共 {clearedRecords:N0} 条记录)",
+            Summary = Strings.M($"已清空 {clearedLogs:N0} 个事件日志(共 {clearedRecords:N0} 条记录)"),
         };
     }
 
@@ -112,14 +113,14 @@ public sealed class WindowsCleanupActionService : ICleanupActionService
             for (var i = 1; i < count; i++)
             {
                 ct.ThrowIfCancellationRequested();
-                progress?.Report($"删除 {drive.TrimEnd('\\')} 的旧卷影副本({i}/{count - 1})…");
+                progress?.Report(Strings.M($"删除 {drive.TrimEnd('\\')} 的旧卷影副本({i}/{count - 1})…"));
                 if (TryRunCapture(vssadmin, $"delete shadows /for={drive} /oldest", out _, out error, ct))
                 {
                     deleted++;
                 }
                 else
                 {
-                    result.Failures.Add(new DeleteFailure($"<卷影副本:{drive.TrimEnd('\\')}>", error));
+                    result.Failures.Add(new DeleteFailure(Strings.M($"<卷影副本:{drive.TrimEnd('\\')}>"), error));
                     break;
                 }
             }
@@ -131,7 +132,7 @@ public sealed class WindowsCleanupActionService : ICleanupActionService
             {
                 Success = true,
                 ItemsAffected = deleted,
-                Summary = $"已删除 {deleted:N0} 个旧还原点 / 卷影副本(每个卷保留最新一个)",
+                Summary = Strings.M($"已删除 {deleted:N0} 个旧还原点 / 卷影副本(每个卷保留最新一个)"),
             };
         }
 
@@ -140,9 +141,9 @@ public sealed class WindowsCleanupActionService : ICleanupActionService
             ? new CleanupActionResult
             {
                 Success = false,
-                Error = $"无法列出卷影副本:{listErrors[0]}(可能是没有卷影副本,或需要管理员权限)",
+                Error = Strings.M($"无法列出卷影副本:{listErrors[0]}(可能是没有卷影副本,或需要管理员权限)"),
             }
-            : new CleanupActionResult { Success = true, Summary = "没有可删除的旧卷影副本(每个卷只保留最新一个)" };
+            : new CleanupActionResult { Success = true, Summary = Strings.T("没有可删除的旧卷影副本(每个卷只保留最新一个)") };
     }
 
     /// <summary>从 vssadmin 输出数出卷影副本个数:按挂载设备名计数,与界面语言无关。</summary>
@@ -214,7 +215,7 @@ public sealed class WindowsCleanupActionService : ICleanupActionService
                 return true;
             }
 
-            error = $"退出码 {process.ExitCode}{(output.Length > 0 ? $":{Truncate(output, 200)}" : "")}";
+            error = Strings.M($"退出码 {process.ExitCode}{(output.Length > 0 ? $":{Truncate(output, 200)}" : "")}");
             return false;
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException)
@@ -230,7 +231,7 @@ public sealed class WindowsCleanupActionService : ICleanupActionService
     private static CleanupActionResult CleanComponentStore(IProgress<string>? progress, CancellationToken ct)
     {
         var dism = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "Dism.exe");
-        return RunProcess(dism, "/Online /Cleanup-Image /StartComponentCleanup", "组件存储清理", progress, ct);
+        return RunProcess(dism, "/Online /Cleanup-Image /StartComponentCleanup", Strings.T("组件存储清理"), progress, ct);
     }
 
     /// <summary>运行系统工具并转发输出行作为进度;取消时终止进程树并抛出取消异常。</summary>
@@ -302,7 +303,7 @@ public sealed class WindowsCleanupActionService : ICleanupActionService
             process.WaitForExit();
             if (process.ExitCode == 0)
             {
-                return new CleanupActionResult { Success = true, Summary = $"{actionName}完成" };
+                return new CleanupActionResult { Success = true, Summary = Strings.M($"{actionName}完成") };
             }
 
             string tailText;
@@ -314,12 +315,12 @@ public sealed class WindowsCleanupActionService : ICleanupActionService
             return new CleanupActionResult
             {
                 Success = false,
-                Error = $"{actionName}失败(退出码 {process.ExitCode}){(tailText.Length > 0 ? $":{tailText}" : "")}",
+                Error = Strings.M($"{actionName}失败(退出码 {process.ExitCode}){(tailText.Length > 0 ? $":{tailText}" : "")}"),
             };
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException)
         {
-            return new CleanupActionResult { Success = false, Error = $"{actionName}无法执行:{ex.Message}" };
+            return new CleanupActionResult { Success = false, Error = Strings.M($"{actionName}无法执行:{ex.Message}") };
         }
     }
 }

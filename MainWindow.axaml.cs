@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Text;
 using Avalonia.Controls;
@@ -8,6 +8,7 @@ using Avalonia.Platform.Storage;
 using broom.Services;
 using broom.ViewModels;
 
+using broom.Localization;
 namespace broom;
 
 public partial class MainWindow : Window
@@ -51,12 +52,12 @@ public partial class MainWindow : Window
         var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
         if (clipboard is null)
         {
-            _viewModel.StatusText = "当前环境不支持剪贴板,无法复制报告。";
+            _viewModel.StatusText = Strings.T("当前环境不支持剪贴板,无法复制报告。");
             return;
         }
 
         await clipboard.SetTextAsync(_viewModel.ReportText);
-        _viewModel.StatusText = "清理报告已复制到剪贴板。";
+        _viewModel.StatusText = Strings.T("清理报告已复制到剪贴板。");
     }
 
     private async void ExportScan_Click(object? sender, RoutedEventArgs e)
@@ -74,13 +75,13 @@ public partial class MainWindow : Window
 
         var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
-            Title = "导出扫描结果",
+            Title = Strings.T("导出扫描结果"),
             SuggestedFileName = $"broom-scan-{DateTime.Now:yyyyMMdd-HHmm}",
             DefaultExtension = "csv",
             FileTypeChoices =
             [
-                new FilePickerFileType("CSV 文件(Excel)") { Patterns = ["*.csv"] },
-                new FilePickerFileType("文本文件(制表符分隔)") { Patterns = ["*.txt"] },
+                new FilePickerFileType(Strings.T("CSV 文件(Excel)")) { Patterns = ["*.csv"] },
+                new FilePickerFileType(Strings.T("文本文件(制表符分隔)")) { Patterns = ["*.txt"] },
             ],
         });
         if (file is null)
@@ -100,11 +101,11 @@ public partial class MainWindow : Window
                 ScanExportWriter.Write(writer, _viewModel.LastScanResults, format);
             }
 
-            _viewModel.StatusText = $"已导出扫描结果:{file.Name}。";
+            _viewModel.StatusText = Strings.M($"已导出扫描结果:{file.Name}。");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _viewModel.StatusText = $"导出失败:{ex.Message}";
+            _viewModel.StatusText = Strings.M($"导出失败:{ex.Message}");
         }
     }
 }

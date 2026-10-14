@@ -1,4 +1,5 @@
 using broom.Core;
+using broom.Localization;
 
 namespace broom.Rules;
 
@@ -502,17 +503,29 @@ public static class WindowsRuleSet
     {
         if (settings is null || settings.CustomRules.Count == 0)
         {
-            return BuiltInRules;
+            return [.. BuiltInRules.Select(Localize)];
         }
 
-        var rules = new List<CleanupRule>(BuiltInRules);
+        var rules = new List<CleanupRule>(BuiltInRules.Select(Localize));
         foreach (var custom in settings.CustomRules)
         {
-            rules.Add(ToCleanupRule(custom));
+            rules.Add(Localize(ToCleanupRule(custom)));
         }
 
         return rules;
     }
+
+    /// <summary>
+    /// 文案本地化:规则是纯数据,内联文案即资源键(gettext 风格);
+    /// 显示名 / 说明 / 类别在创建时按当前语言解析,找不到资源时回退中文原文。
+    /// 自定义规则的用户自定义名称同样过一遍(不存在的键原样返回)。
+    /// </summary>
+    private static CleanupRule Localize(CleanupRule rule) => rule with
+    {
+        DisplayName = Strings.T(rule.DisplayName),
+        Description = Strings.T(rule.Description),
+        Category = Strings.T(rule.Category),
+    };
 
     /// <summary>各浏览器配置档案下的缓存目录全集。</summary>
     private static string[] BrowserCachePaths()
@@ -547,7 +560,7 @@ public static class WindowsRuleSet
     {
         Id = $"custom-{custom.Path}",
         Category = "自定义目录",
-        DisplayName = string.IsNullOrWhiteSpace(custom.Name) ? $"自定义:{custom.Path}" : custom.Name,
+        DisplayName = string.IsNullOrWhiteSpace(custom.Name) ? Strings.M($"自定义:{custom.Path}") : custom.Name,
         Description = "来自设置的自定义目录。",
         Paths = [custom.Path],
         IncludePatterns = custom.IncludePatterns.Count > 0 ? [.. custom.IncludePatterns] : ["*"],

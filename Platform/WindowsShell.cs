@@ -1,9 +1,10 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
+using broom.Localization;
 namespace broom.Platform;
 
 /// <summary>
@@ -42,13 +43,13 @@ internal static class WindowsShell
         var hr = SHFileOperationW(ref op);
         if (hr != 0)
         {
-            error = $"Shell 错误码 0x{hr:X8}";
+            error = Strings.M($"Shell 错误码 0x{hr:X8}");
             return false;
         }
 
         if (op.fAnyOperationsAborted)
         {
-            error = "部分文件被占用,操作被中止";
+            error = Strings.T("部分文件被占用,操作被中止");
             return false;
         }
 
@@ -65,7 +66,7 @@ internal static class WindowsShell
         {
             size = 0;
             itemCount = 0;
-            error = $"Shell 错误码 0x{hr:X8}";
+            error = Strings.M($"Shell 错误码 0x{hr:X8}");
             return false;
         }
 
@@ -93,7 +94,7 @@ internal static class WindowsShell
             var hr = SHEmptyRecycleBinW(IntPtr.Zero, null, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
             if (hr < 0 && hr != E_UNEXPECTED)
             {
-                error = $"Shell 错误码 0x{hr:X8}";
+                error = Strings.M($"Shell 错误码 0x{hr:X8}");
                 return false;
             }
         }
@@ -106,7 +107,7 @@ internal static class WindowsShell
 
             if (itemsAfter > 0)
             {
-                error = $"仍有 {itemsAfter:N0} 项未能清空(可能被占用)。";
+                error = Strings.M($"仍有 {itemsAfter:N0} 项未能清空(可能被占用)。");
                 return false;
             }
         }

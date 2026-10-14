@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
@@ -7,6 +7,7 @@ using Avalonia.Threading;
 using broom.Services;
 using CommunityToolkit.Mvvm.Input;
 
+using broom.Localization;
 namespace broom;
 
 public partial class App : Application
@@ -38,7 +39,7 @@ public partial class App : Application
             _scheduler = new AutoCleanScheduler(() => window.ViewModel.Settings, RunScheduledCleanAsync);
             _diskWatcher = new DiskSpaceWatcher(
                 () => window.ViewModel.Settings,
-                alert => _notifier?.Notify("磁盘空间不足", alert.Message));
+                alert => _notifier?.Notify(Strings.T("磁盘空间不足"), alert.Message));
             desktop.Exit += (_, _) => DisposeServices();
         }
 
@@ -51,15 +52,15 @@ public partial class App : Application
         {
             using var stream = AssetLoader.Open(new Uri("avares://broom/Assets/broom.ico"));
             var menu = new NativeMenu();
-            menu.Items.Add(new NativeMenuItem("打开 broom") { Command = new RelayCommand(ShowMainWindow) });
-            menu.Items.Add(new NativeMenuItem("立即清理(按自动清理设置)") { Command = new RelayCommand(() => _ = RunCleanAsync(AutoCleanTrigger.Manual)) });
+            menu.Items.Add(new NativeMenuItem(Strings.T("打开 broom")) { Command = new RelayCommand(ShowMainWindow) });
+            menu.Items.Add(new NativeMenuItem(Strings.T("立即清理(按自动清理设置)")) { Command = new RelayCommand(() => _ = RunCleanAsync(AutoCleanTrigger.Manual)) });
             menu.Items.Add(new NativeMenuItemSeparator());
-            menu.Items.Add(new NativeMenuItem("退出 broom") { Command = new RelayCommand(ExitApplication) });
+            menu.Items.Add(new NativeMenuItem(Strings.T("退出 broom")) { Command = new RelayCommand(ExitApplication) });
 
             _trayIcon = new TrayIcon
             {
                 Icon = new WindowIcon(stream),
-                ToolTipText = "broom · 垃圾清理",
+                ToolTipText = Strings.T("broom · 垃圾清理"),
                 Menu = menu,
                 Command = new RelayCommand(ShowMainWindow),
             };
@@ -82,7 +83,7 @@ public partial class App : Application
         }
 
         var result = await _autoClean.RunAsync(trigger);
-        _notifier?.Notify("broom 自动清理", result.Summary);
+        _notifier?.Notify(Strings.T("broom 自动清理"), result.Summary);
         Dispatcher.UIThread.Post(() =>
         {
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime { MainWindow: MainWindow window })

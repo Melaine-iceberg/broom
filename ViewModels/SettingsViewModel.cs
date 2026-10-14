@@ -1,8 +1,9 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using broom.Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
+using broom.Localization;
 namespace broom.ViewModels;
 
 /// <summary>设置页状态:自定义目录、全局排除路径与其他默认选项。</summary>
@@ -67,23 +68,23 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>隔离区保留天数选项(0 表示永久保留)。</summary>
     public IReadOnlyList<RetentionOption> QuarantineRetentionOptions { get; } =
     [
-        new(7, "7 天"),
-        new(1, "1 天"),
-        new(3, "3 天"),
-        new(14, "14 天"),
-        new(30, "30 天"),
-        new(0, "永久保留"),
+        new(7, Strings.T("7 天")),
+        new(1, Strings.T("1 天")),
+        new(3, Strings.T("3 天")),
+        new(14, Strings.T("14 天")),
+        new(30, Strings.T("30 天")),
+        new(0, Strings.T("永久保留")),
     ];
 
     /// <summary>「跳过最近修改的文件」天数选项(0 表示不启用)。</summary>
     public IReadOnlyList<DayOption> SkipRecentOptions { get; } =
     [
-        new(0, "不启用"),
-        new(1, "1 天"),
-        new(3, "3 天"),
-        new(7, "7 天"),
-        new(14, "14 天"),
-        new(30, "30 天"),
+        new(0, Strings.T("不启用")),
+        new(1, Strings.T("1 天")),
+        new(3, Strings.T("3 天")),
+        new(7, Strings.T("7 天")),
+        new(14, Strings.T("14 天")),
+        new(30, Strings.T("30 天")),
     ];
 
     [ObservableProperty]
@@ -92,9 +93,9 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>安全擦除的覆写次数选项(0 表示不覆写)。</summary>
     public IReadOnlyList<SecureEraseOption> SecureEraseOptions { get; } =
     [
-        new(0, "不覆写"),
-        new(1, "覆写 1 次"),
-        new(3, "覆写 3 次"),
+        new(0, Strings.T("不覆写")),
+        new(1, Strings.T("覆写 1 次")),
+        new(3, Strings.T("覆写 3 次")),
     ];
 
     [ObservableProperty]
@@ -109,10 +110,10 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>自动清理频率选项。</summary>
     public IReadOnlyList<AutoCleanFrequencyOption> AutoCleanFrequencyOptions { get; } =
     [
-        new(AutoCleanFrequency.Off, "关闭"),
-        new(AutoCleanFrequency.Daily, "每天"),
-        new(AutoCleanFrequency.Weekly, "每周"),
-        new(AutoCleanFrequency.Monthly, "每月"),
+        new(AutoCleanFrequency.Off, Strings.T("关闭")),
+        new(AutoCleanFrequency.Daily, Strings.T("每天")),
+        new(AutoCleanFrequency.Weekly, Strings.T("每周")),
+        new(AutoCleanFrequency.Monthly, Strings.T("每月")),
     ];
 
     [ObservableProperty]
@@ -137,13 +138,13 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>每周自动清理的星期几。</summary>
     public IReadOnlyList<AutoCleanDayOfWeekOption> AutoCleanDayOfWeekOptions { get; } =
     [
-        new(1, "周一"),
-        new(2, "周二"),
-        new(3, "周三"),
-        new(4, "周四"),
-        new(5, "周五"),
-        new(6, "周六"),
-        new(0, "周日"),
+        new(1, Strings.T("周一")),
+        new(2, Strings.T("周二")),
+        new(3, Strings.T("周三")),
+        new(4, Strings.T("周四")),
+        new(5, Strings.T("周五")),
+        new(6, Strings.T("周六")),
+        new(0, Strings.T("周日")),
     ];
 
     [ObservableProperty]
@@ -151,7 +152,7 @@ public partial class SettingsViewModel : ObservableObject
 
     /// <summary>每月自动清理的日期(1–28,避免短月份跳过)。</summary>
     public IReadOnlyList<AutoCleanDayOfMonthOption> AutoCleanDayOfMonthOptions { get; } =
-        Enumerable.Range(1, 28).Select(d => new AutoCleanDayOfMonthOption(d, $"{d} 日")).ToList();
+        Enumerable.Range(1, 28).Select(d => new AutoCleanDayOfMonthOption(d, Strings.M($"{d} 日"))).ToList();
 
     [ObservableProperty]
     private AutoCleanDayOfMonthOption _selectedAutoCleanDayOfMonth;
@@ -159,8 +160,8 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>自动清理范围选项。</summary>
     public IReadOnlyList<AutoCleanScopeOption> AutoCleanScopeOptions { get; } =
     [
-        new(AutoCleanScope.SafeOnly, "仅安全项(推荐)"),
-        new(AutoCleanScope.SelectedRules, "上次勾选的项目"),
+        new(AutoCleanScope.SafeOnly, Strings.T("仅安全项(推荐)")),
+        new(AutoCleanScope.SelectedRules, Strings.T("上次勾选的项目")),
     ];
 
     [ObservableProperty]
@@ -172,11 +173,11 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>磁盘空间提醒阈值(GB;0 = 不提醒)。</summary>
     public IReadOnlyList<LowDiskOption> LowDiskOptions { get; } =
     [
-        new(0, "不提醒"),
-        new(10, "低于 10 GB"),
-        new(20, "低于 20 GB"),
-        new(50, "低于 50 GB"),
-        new(100, "低于 100 GB"),
+        new(0, Strings.T("不提醒")),
+        new(10, Strings.T("低于 10 GB")),
+        new(20, Strings.T("低于 20 GB")),
+        new(50, Strings.T("低于 50 GB")),
+        new(100, Strings.T("低于 100 GB")),
     ];
 
     [ObservableProperty]
@@ -196,7 +197,7 @@ public partial class SettingsViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(PurgeQuarantineText))]
     private bool _purgeConfirmed;
 
-    public string PurgeQuarantineText => PurgeConfirmed ? "确认清空(不可恢复)" : "清空隔离区";
+    public string PurgeQuarantineText => PurgeConfirmed ? Strings.T("确认清空(不可恢复)") : Strings.T("清空隔离区");
 
     [RelayCommand]
     private void OpenQuarantine() => QuarantineStatusText = _openQuarantine();
@@ -208,7 +209,7 @@ public partial class SettingsViewModel : ObservableObject
         if (!PurgeConfirmed)
         {
             PurgeConfirmed = true;
-            QuarantineStatusText = "再次点击确认清空 —— 该操作不可恢复。";
+            QuarantineStatusText = Strings.T("再次点击确认清空 —— 该操作不可恢复。");
             return;
         }
 
@@ -242,7 +243,7 @@ public partial class SettingsViewModel : ObservableObject
         }
 
         var merged = mergedPaths + mergedFiles;
-        SaveNotice = merged == 0 ? "" : $"本次合并了 {merged} 个重复排除项。";
+        SaveNotice = merged == 0 ? "" : Strings.M($"本次合并了 {merged} 个重复排除项。");
         ErrorText = "";
         CloseRequested?.Invoke(settings);
     }
@@ -259,7 +260,7 @@ public partial class SettingsViewModel : ObservableObject
             if (rule.Path.Length == 0)
             {
                 settings = new BroomSettings();
-                error = "每个自定义目录都需要填写路径。";
+                error = Strings.T("每个自定义目录都需要填写路径。");
                 return false;
             }
 
@@ -274,8 +275,8 @@ public partial class SettingsViewModel : ObservableObject
             settings = new BroomSettings();
             var shown = string.Join("、", invalid.Take(3));
             error = invalid.Count > 3
-                ? $"排除项必须是绝对路径或包含 %环境变量%:{shown} 等 {invalid.Count} 项。"
-                : $"排除项必须是绝对路径或包含 %环境变量%:{shown}。";
+                ? Strings.M($"排除项必须是绝对路径或包含 %环境变量%:{shown} 等 {invalid.Count} 项。")
+                : Strings.M($"排除项必须是绝对路径或包含 %环境变量%:{shown}。");
             return false;
         }
 

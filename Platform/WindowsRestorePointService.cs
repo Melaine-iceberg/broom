@@ -1,6 +1,7 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
+using broom.Localization;
 namespace broom.Platform;
 
 /// <summary>
@@ -37,9 +38,9 @@ public sealed class WindowsRestorePointService : IRestorePointService
 
         error = code switch
         {
-            5 => "需要管理员权限。",
-            1058 => "系统保护未开启(可在「系统属性 → 系统保护」中为系统盘启用)。",
-            _ => $"系统返回错误码 {code}。",
+            5 => Strings.T("需要管理员权限。"),
+            1058 => Strings.T("系统保护未开启(可在「系统属性 → 系统保护」中为系统盘启用)。"),
+            _ => Strings.M($"系统返回错误码 {code}。"),
         };
         return false;
     }

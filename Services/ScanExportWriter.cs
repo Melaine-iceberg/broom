@@ -1,6 +1,7 @@
-using System.Globalization;
+﻿using System.Globalization;
 using broom.Core;
 
+using broom.Localization;
 namespace broom.Services;
 
 /// <summary>扫描结果导出格式:CSV(Excel 友好)与 TXT(制表符分隔)。</summary>
@@ -16,7 +17,7 @@ public static class ScanExportWriter
     public static void Write(TextWriter writer, IEnumerable<RuleScanResult> results, ScanExportFormat format)
     {
         var separator = format == ScanExportFormat.Csv ? "," : "\t";
-        writer.WriteLine(format == ScanExportFormat.Csv ? "规则,路径,大小(字节)" : "规则\t路径\t大小(字节)");
+        writer.WriteLine(format == ScanExportFormat.Csv ? Strings.T("规则,路径,大小(字节)") : Strings.T("规则\t路径\t大小(字节)"));
 
         foreach (var result in results)
         {

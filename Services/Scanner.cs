@@ -1,7 +1,8 @@
-using System.IO.Enumeration;
+﻿using System.IO.Enumeration;
 using broom.Core;
 using broom.Platform;
 
+using broom.Localization;
 namespace broom.Services;
 
 /// <summary>
@@ -155,7 +156,7 @@ public sealed class Scanner
 
         if (!OperatingSystem.IsWindows())
         {
-            result.Errors.Add("当前平台暂不支持扫描回收站");
+            result.Errors.Add(Strings.T("当前平台暂不支持扫描回收站"));
             return result;
         }
 
@@ -166,7 +167,7 @@ public sealed class Scanner
         }
         else
         {
-            result.Errors.Add($"<回收站>: {error}");
+            result.Errors.Add(Strings.M($"<回收站>: {error}"));
         }
 
         return result;
