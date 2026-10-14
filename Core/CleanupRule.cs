@@ -21,6 +21,25 @@ public enum RuleKind
 
     /// <summary>清空回收站,通过 Shell API 完成,不逐个删除文件。</summary>
     RecycleBin,
+
+    /// <summary>动作型:调用系统能力完成一次清理动作(如清空事件日志、DISM 组件清理),不逐个删除文件。</summary>
+    Action,
+}
+
+/// <summary>动作型规则执行的清理动作;与具体平台实现解耦,规则数据只记枚举。</summary>
+public enum CleanupAction
+{
+    /// <summary>刷新 DNS 解析缓存。</summary>
+    FlushDnsCache,
+
+    /// <summary>清空 Windows 事件日志。</summary>
+    ClearEventLogs,
+
+    /// <summary>删除还原点与卷影副本,每个卷保留最新一个。</summary>
+    DeleteShadowCopies,
+
+    /// <summary>组件存储清理(DISM /StartComponentCleanup)。</summary>
+    CleanComponentStore,
 }
 
 /// <summary>
@@ -42,6 +61,9 @@ public sealed record CleanupRule
     public string Description { get; init; } = "";
 
     public RuleKind Kind { get; init; } = RuleKind.Paths;
+
+    /// <summary>动作型规则(<see cref="RuleKind.Action"/>)执行的清理动作。</summary>
+    public CleanupAction? Action { get; init; }
 
     /// <summary>路径模板,支持 %ENV% 环境变量与目录名通配符(仅在目录段生效)。</summary>
     public string[] Paths { get; init; } = [];

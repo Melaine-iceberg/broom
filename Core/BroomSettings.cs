@@ -39,6 +39,9 @@ public sealed class BroomSettings
 
     /// <summary>上次勾选的规则 Id 集合;null 表示从未保存过,恢复规则默认勾选。</summary>
     public List<string>? SelectedRuleIds { get; set; }
+
+    /// <summary>清理后移除扫描根下的空目录(默认关闭;可能删除用户有意保留的空目录结构)。</summary>
+    public bool RemoveEmptyDirectories { get; set; }
 }
 
 /// <summary>用户自定义的清理目录。</summary>

@@ -31,6 +31,7 @@ public partial class SettingsViewModel : ObservableObject
         SelectedSecureErase = SecureEraseOptions.FirstOrDefault(o => o.Passes == settings.SecureErasePasses)
             ?? SecureEraseOptions[0];
         CreateRestorePointBeforeClean = settings.CreateRestorePointBeforeClean;
+        RemoveEmptyDirectories = settings.RemoveEmptyDirectories;
     }
 
     /// <summary>保存结果已就绪时触发(参数为 null 表示取消),窗口据此关闭。</summary>
@@ -88,6 +89,9 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _createRestorePointBeforeClean;
+
+    [ObservableProperty]
+    private bool _removeEmptyDirectories;
 
     [ObservableProperty]
     private bool _quarantineEnabled;
@@ -199,6 +203,7 @@ public partial class SettingsViewModel : ObservableObject
             SecureErasePasses = SelectedSecureErase.Passes,
             CreateRestorePointBeforeClean = CreateRestorePointBeforeClean,
             SelectedRuleIds = _selectedRuleIds,
+            RemoveEmptyDirectories = RemoveEmptyDirectories,
         };
         error = "";
         return true;

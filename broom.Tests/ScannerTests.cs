@@ -119,6 +119,26 @@ public class ScannerTests
     }
 
     [Fact]
+    public async Task ActionRule_ReportsNoFilesWithoutError()
+    {
+        var rule = new CleanupRule
+        {
+            Id = "act",
+            DisplayName = "动作项",
+            Kind = RuleKind.Action,
+            Action = CleanupAction.FlushDnsCache,
+            Paths = [],
+        };
+
+        var results = await new Scanner().ScanAsync([rule]);
+
+        var result = Assert.Single(results);
+        Assert.Empty(result.Files);
+        Assert.Equal(0, result.ItemCount);
+        Assert.Empty(result.Errors);
+    }
+
+    [Fact]
     public async Task MissingPath_YieldsEmptyResultWithoutError()
     {
         using var dir = new TempDir();

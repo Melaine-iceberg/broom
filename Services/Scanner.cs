@@ -38,9 +38,12 @@ public sealed class Scanner
             var rule = rules[i];
             progress?.Report(new ScanProgress(i, rules.Count, rule.DisplayName, ""));
 
-            results.Add(rule.Kind == RuleKind.RecycleBin
-                ? ScanRecycleBin(rule, i, rules.Count, progress, ct)
-                : ScanPaths(rule, i, rules.Count, excluded, excludedFileSet, protectModifiedAfter, progress, ct));
+            results.Add(rule.Kind switch
+            {
+                RuleKind.RecycleBin => ScanRecycleBin(rule, i, rules.Count, progress, ct),
+                RuleKind.Action => ScanAction(rule, i, rules.Count, progress, ct),
+                _ => ScanPaths(rule, i, rules.Count, excluded, excludedFileSet, protectModifiedAfter, progress, ct),
+            });
         }
 
         return results;
@@ -126,6 +129,19 @@ public sealed class Scanner
     /// 目录里除了 Shell 管理的条目,还堆着它不再承认的孤立残留($I 元数据等),
     /// 直接数文件会让界面数字与资源管理器不一致,清空操作也永远清不掉它们。
     /// </summary>
+    /// <summary>动作型规则没有可枚举的文件:扫描只登记规则,释放量在执行后由报告的磁盘对比体现。</summary>
+    private static RuleScanResult ScanAction(
+        CleanupRule rule,
+        int index,
+        int count,
+        IProgress<ScanProgress>? progress,
+        CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        progress?.Report(new ScanProgress(index, count, rule.DisplayName, ""));
+        return new RuleScanResult { Rule = rule };
+    }
+
     private static RuleScanResult ScanRecycleBin(
         CleanupRule rule,
         int index,

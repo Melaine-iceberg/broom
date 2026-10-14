@@ -596,10 +596,13 @@ public partial class MainWindowViewModel : ObservableObject
             var progress = new Progress<CleanProgress>(p =>
             {
                 ProgressValue = p.RuleCount == 0 ? 0 : p.RuleIndex * 100.0 / p.RuleCount;
-                StatusText = $"正在清理:{p.RuleName}";
+                StatusText = p.Detail.Length > 0
+                    ? $"正在清理:{p.RuleName} — {p.Detail}"
+                    : $"正在清理:{p.RuleName}";
             });
 
-            var report = await _cleaner.CleanAsync(selected, deleter, progress, cts.Token, Settings.SkipRecentDays);
+            var report = await _cleaner.CleanAsync(selected, deleter, progress, cts.Token, Settings.SkipRecentDays,
+                removeEmptyDirectories: Settings.RemoveEmptyDirectories);
             ReportText = BuildReport(report, deleter, warning, restoreNote);
             SetPendingRebootDeletes(report);
             QuarantineCount = _lastQuarantineSession?.RestorableCount ?? 0;
@@ -704,9 +707,11 @@ public partial class MainWindowViewModel : ObservableObject
 
             rule.SizeBytes = result.TotalBytes;
             rule.HasFailures = result.Errors.Count > 0;
-            rule.StatusText = result.ItemCount == 0
-                ? "没有可清理的内容"
-                : $"{result.ItemCount:N0} 个文件";
+            rule.StatusText = rule.Rule.Kind == RuleKind.Action
+                ? "执行时生效(释放量在清理后统计)"
+                : result.ItemCount == 0
+                    ? "没有可清理的内容"
+                    : $"{result.ItemCount:N0} 个文件";
             rule.AttachScanResult(result);
         }
 
@@ -916,12 +921,16 @@ public partial class MainWindowViewModel : ObservableObject
 
         foreach (var result in report.Results)
         {
-            if (result.DeletedCount == 0 && result.Failures.Count == 0)
+            if (result.DeletedCount == 0 && result.Failures.Count == 0 && result.Summary.Length == 0)
             {
                 continue;
             }
 
-            sb.AppendLine($"· {result.Rule.DisplayName}:{result.DeletedCount:N0} 项 / {Formatting.FormatBytes(result.BytesRemoved)}");
+            // 动作型规则没有逐个删除的文件,用执行摘要代替计数
+            var summary = result.Summary.Length > 0
+                ? result.Summary
+                : $"{result.DeletedCount:N0} 项 / {Formatting.FormatBytes(result.BytesRemoved)}";
+            sb.AppendLine($"· {result.Rule.DisplayName}:{summary}");
             foreach (var failure in result.Failures.Take(10))
             {
                 sb.AppendLine($"    ✗ {failure.Path}({failure.Reason})");
@@ -931,6 +940,11 @@ public partial class MainWindowViewModel : ObservableObject
             {
                 sb.AppendLine($"    …其余 {result.Failures.Count - 10} 项失败未列出");
             }
+        }
+
+        if (report.EmptyDirectoriesRemoved > 0)
+        {
+            sb.AppendLine($"· 另回收空目录 {report.EmptyDirectoriesRemoved:N0} 个。");
         }
 
         if (report.SkippedRules.Count > 0)

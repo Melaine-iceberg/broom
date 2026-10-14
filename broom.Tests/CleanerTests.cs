@@ -223,4 +223,184 @@ public class CleanerTests
         Assert.Equal(100, delta.FreeBefore);
         Assert.Equal(200, delta.FreeAfter);
     }
+
+    private static readonly CleanupRule ActionRule = new()
+    {
+        Id = "act",
+        DisplayName = "动作项",
+        Kind = RuleKind.Action,
+        Action = CleanupAction.FlushDnsCache,
+        Paths = [],
+    };
+
+    private sealed class FakeActions : ICleanupActionService
+    {
+        public Func<CleanupAction, CleanupActionResult>? OnExecute { get; init; }
+
+        public bool Supported { get; init; } = true;
+
+        public List<CleanupAction> Executed { get; } = [];
+
+        public bool IsSupported(CleanupAction action) => Supported;
+
+        public CleanupActionResult Execute(CleanupAction action, IProgress<string>? progress = null, CancellationToken ct = default)
+        {
+            Executed.Add(action);
+            progress?.Report("执行中");
+            return OnExecute?.Invoke(action) ?? new CleanupActionResult
+            {
+                Success = true,
+                ItemsAffected = 2,
+                BytesFreed = 10,
+                Summary = "动作已完成",
+            };
+        }
+    }
+
+    private static RuleScanResult ActionTarget(CleanupRule rule) => new() { Rule = rule };
+
+    [Fact]
+    public async Task Clean_ActionRule_UsesActionServiceResult()
+    {
+        var actions = new FakeActions();
+
+        var report = await new Cleaner().CleanAsync([ActionTarget(ActionRule)], new PermanentFileDeleter(), actionService: actions);
+
+        var result = Assert.Single(report.Results);
+        Assert.Equal([CleanupAction.FlushDnsCache], actions.Executed);
+        Assert.Equal(2, result.DeletedCount);
+        Assert.Equal(10, result.BytesRemoved);
+        Assert.Equal("动作已完成", result.Summary);
+        Assert.Empty(result.Failures);
+    }
+
+    [Fact]
+    public async Task Clean_ActionRule_FailureRecordedWithReason()
+    {
+        var actions = new FakeActions
+        {
+            OnExecute = _ => new CleanupActionResult { Success = false, Error = "权限不足" },
+        };
+
+        var report = await new Cleaner().CleanAsync([ActionTarget(ActionRule)], new PermanentFileDeleter(), actionService: actions);
+
+        var result = Assert.Single(report.Results);
+        var failure = Assert.Single(result.Failures);
+        Assert.Equal("权限不足", failure.Reason);
+    }
+
+    [Fact]
+    public async Task Clean_ActionRule_PartialFailuresAreCopied()
+    {
+        var actions = new FakeActions
+        {
+            OnExecute = _ =>
+            {
+                var outcome = new CleanupActionResult { Success = true, ItemsAffected = 3, Summary = "已清空部分日志" };
+                outcome.Failures.Add(new DeleteFailure("<日志:Security>", "拒绝访问"));
+                return outcome;
+            },
+        };
+
+        var report = await new Cleaner().CleanAsync([ActionTarget(ActionRule)], new PermanentFileDeleter(), actionService: actions);
+
+        var result = Assert.Single(report.Results);
+        Assert.Equal(3, result.DeletedCount);
+        Assert.Equal("已清空部分日志", result.Summary);
+        Assert.Equal("拒绝访问", Assert.Single(result.Failures).Reason);
+    }
+
+    [Fact]
+    public async Task Clean_ActionRule_UnsupportedServiceFails()
+    {
+        var actions = new FakeActions { Supported = false };
+
+        var report = await new Cleaner().CleanAsync([ActionTarget(ActionRule)], new PermanentFileDeleter(), actionService: actions);
+
+        var result = Assert.Single(report.Results);
+        Assert.Contains("暂不支持", Assert.Single(result.Failures).Reason);
+        Assert.Empty(actions.Executed);
+    }
+
+    [Fact]
+    public async Task Clean_ActionRule_MissingActionDefinitionFails()
+    {
+        var noAction = new CleanupRule { Id = "act2", DisplayName = "缺动作", Kind = RuleKind.Action, Paths = [] };
+
+        var report = await new Cleaner().CleanAsync([ActionTarget(noAction)], new PermanentFileDeleter(), actionService: new FakeActions());
+
+        Assert.Contains("缺少清理动作", Assert.Single(Assert.Single(report.Results).Failures).Reason);
+    }
+
+    [Fact]
+    public async Task Clean_ActionRule_CancelledMarksActionCancelledAndSkipsRest()
+    {
+        using var cts = new CancellationTokenSource();
+        var actions = new FakeActions
+        {
+            OnExecute = _ =>
+            {
+                cts.Cancel();
+                throw new OperationCanceledException(cts.Token);
+            },
+        };
+        var second = new RuleScanResult { Rule = Rule2, Roots = { "y" } };
+
+        var report = await new Cleaner().CleanAsync(
+            [ActionTarget(ActionRule), second], new PermanentFileDeleter(), ct: cts.Token, actionService: actions);
+
+        Assert.True(report.WasCancelled);
+        Assert.Equal("动作已取消", Assert.Single(report.Results).Summary);
+        Assert.Equal([Rule2], report.SkippedRules);
+    }
+
+    [Fact]
+    public async Task Clean_ActionRule_DiskComparisonCoversFixedDrives()
+    {
+        var calls = 0;
+        Func<string, long?> probe = _ => ++calls * 100;
+
+        var report = await new Cleaner().CleanAsync(
+            [ActionTarget(ActionRule)], new PermanentFileDeleter(), getFreeBytes: probe, actionService: new FakeActions());
+
+        Assert.NotEmpty(report.DriveSpace);
+    }
+
+    [Fact]
+    public async Task Clean_RemoveEmptyDirectories_RemovesAndCounts()
+    {
+        using var dir = new TempDir();
+        dir.CreateFile("keep.txt", "keep");
+        dir.CreateFile(Path.Combine("sub1", "a.tmp"), "aaa");
+        dir.CreateDir("sub2");
+        dir.CreateDir(Path.Combine("sub3", "inner"));
+        var rule = new CleanupRule { Id = "partial", DisplayName = "partial", Paths = [dir.FullPath], IncludePatterns = ["*.tmp"] };
+        var target = Target(rule, new ScannedFile(Path.Combine(dir.FullPath, "sub1", "a.tmp"), 3));
+        target.Roots.Add(dir.FullPath);
+
+        var report = await new Cleaner().CleanAsync([target], new PermanentFileDeleter(), removeEmptyDirectories: true);
+
+        Assert.False(Directory.Exists(Path.Combine(dir.FullPath, "sub1")));
+        Assert.False(Directory.Exists(Path.Combine(dir.FullPath, "sub2")));
+        Assert.False(Directory.Exists(Path.Combine(dir.FullPath, "sub3")));
+        Assert.True(File.Exists(Path.Combine(dir.FullPath, "keep.txt")));
+        Assert.Equal(4, report.EmptyDirectoriesRemoved);
+    }
+
+    [Fact]
+    public async Task Clean_RemoveEmptyDirectories_DisabledKeepsEmptyDirectories()
+    {
+        using var dir = new TempDir();
+        dir.CreateFile(Path.Combine("sub1", "a.tmp"), "aaa");
+        dir.CreateDir("sub2");
+        var rule = new CleanupRule { Id = "partial", DisplayName = "partial", Paths = [dir.FullPath], IncludePatterns = ["*.tmp"] };
+        var target = Target(rule, new ScannedFile(Path.Combine(dir.FullPath, "sub1", "a.tmp"), 3));
+        target.Roots.Add(dir.FullPath);
+
+        var report = await new Cleaner().CleanAsync([target], new PermanentFileDeleter());
+
+        Assert.True(Directory.Exists(Path.Combine(dir.FullPath, "sub1")));
+        Assert.True(Directory.Exists(Path.Combine(dir.FullPath, "sub2")));
+        Assert.Equal(0, report.EmptyDirectoriesRemoved);
+    }
 }

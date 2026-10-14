@@ -242,6 +242,51 @@ public static class WindowsRuleSet
             Risk = RiskLevel.High,
             RequiresAdmin = true,
         },
+
+        // ── 动作型:执行系统清理动作,不逐个删文件 ─────────────
+        new CleanupRule
+        {
+            Id = "action-dns-cache",
+            Category = "系统缓存",
+            DisplayName = "DNS 解析缓存",
+            Description = "刷新系统的域名解析缓存;不影响正常使用,个别域名解析可能短暂变慢,随后自动重建。",
+            Kind = RuleKind.Action,
+            Action = CleanupAction.FlushDnsCache,
+            Recommended = true,
+        },
+        new CleanupRule
+        {
+            Id = "action-event-logs",
+            Category = "系统临时与日志",
+            DisplayName = "Windows 事件日志",
+            Description = "通过系统 API 清空事件查看器中的历史记录;排障历史将丢失且不可恢复,建议先导出留存。",
+            Kind = RuleKind.Action,
+            Action = CleanupAction.ClearEventLogs,
+            Risk = RiskLevel.High,
+            RequiresAdmin = true,
+        },
+        new CleanupRule
+        {
+            Id = "action-shadow-copies",
+            Category = "系统备份",
+            DisplayName = "旧还原点与卷影副本",
+            Description = "删除系统还原点 / 卷影副本,每个卷保留最新一个;释放量通常很大,但删除后无法回滚到更早的系统状态。",
+            Kind = RuleKind.Action,
+            Action = CleanupAction.DeleteShadowCopies,
+            Risk = RiskLevel.High,
+            RequiresAdmin = true,
+        },
+        new CleanupRule
+        {
+            Id = "action-winsxs",
+            Category = "系统备份",
+            DisplayName = "组件存储清理(WinSxS)",
+            Description = "DISM 组件清理,移除已被取代的旧组件;耗时较长(可能十几分钟),执行后无法卸载被取代的更新;释放量以清理后的磁盘对比为准。",
+            Kind = RuleKind.Action,
+            Action = CleanupAction.CleanComponentStore,
+            Risk = RiskLevel.High,
+            RequiresAdmin = true,
+        },
         new CleanupRule
         {
             Id = "windows-logs",

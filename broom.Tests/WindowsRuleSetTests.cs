@@ -175,4 +175,37 @@ public class WindowsRuleSetTests
             Assert.DoesNotContain("RoamingState", p, StringComparison.OrdinalIgnoreCase);
         });
     }
+
+    [Fact]
+    public void ActionRules_HaveActionDefinedAndUnique()
+    {
+        var actionRules = WindowsRuleSet.Create().Where(r => r.Kind == RuleKind.Action).ToList();
+
+        Assert.NotEmpty(actionRules);
+        Assert.All(actionRules, r => Assert.NotNull(r.Action));
+        Assert.Equal(actionRules.Count, actionRules.Select(r => r.Action).Distinct().Count());
+    }
+
+    [Fact]
+    public void ActionRules_DnsFlushIsSafeRecommendedAndFileless()
+    {
+        var rule = Assert.Single(WindowsRuleSet.Create(), r => r.Id == "action-dns-cache");
+
+        Assert.Equal(RiskLevel.Safe, rule.Risk);
+        Assert.True(rule.Recommended);
+        Assert.Empty(rule.Paths);
+    }
+
+    [Theory]
+    [InlineData("action-event-logs")]
+    [InlineData("action-shadow-copies")]
+    [InlineData("action-winsxs")]
+    public void ActionRules_SystemActionsAreHighRiskUncheckedAndAdmin(string ruleId)
+    {
+        var rule = Assert.Single(WindowsRuleSet.Create(), r => r.Id == ruleId);
+
+        Assert.Equal(RiskLevel.High, rule.Risk);
+        Assert.False(rule.Recommended);
+        Assert.True(rule.RequiresAdmin);
+    }
 }

@@ -34,7 +34,7 @@ public sealed class RuleScanResult
 public sealed record ScanProgress(int RuleIndex, int RuleCount, string RuleName, string CurrentPath);
 
 /// <summary>清理进度:当前正在处理的规则。</summary>
-public sealed record CleanProgress(int RuleIndex, int RuleCount, string RuleName);
+public sealed record CleanProgress(int RuleIndex, int RuleCount, string RuleName, string Detail = "");
 
 /// <summary>单个文件的删除失败记录。</summary>
 public sealed record DeleteFailure(string Path, string Reason);
@@ -47,6 +47,9 @@ public sealed class RuleCleanResult
     public long BytesRemoved { get; set; }
 
     public int DeletedCount { get; set; }
+
+    /// <summary>动作型规则的执行摘要,例如“已清空 12 个事件日志”;按文件清理的规则为空。</summary>
+    public string Summary { get; set; } = "";
 
     public List<DeleteFailure> Failures { get; } = [];
 }
@@ -70,4 +73,7 @@ public sealed class CleanupReport
 
     /// <summary>清理前后各盘可用空间对比(只含本次清理涉及、且读取成功的盘符)。</summary>
     public List<DriveSpaceDelta> DriveSpace { get; } = [];
+
+    /// <summary>顺带回收的空目录数量(仅在开启“清理后移除空目录”或整目录规则时统计)。</summary>
+    public int EmptyDirectoriesRemoved { get; set; }
 }

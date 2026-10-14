@@ -16,8 +16,10 @@ public sealed class Cleaner
         IProgress<CleanProgress>? progress = null,
         CancellationToken ct = default,
         int skipRecentDays = 0,
-        Func<string, long?>? getFreeBytes = null)
-        => Task.Run(() => Clean(targets, deleter, skipRecentDays, progress, ct, getFreeBytes), ct);
+        Func<string, long?>? getFreeBytes = null,
+        bool removeEmptyDirectories = false,
+        ICleanupActionService? actionService = null)
+        => Task.Run(() => Clean(targets, deleter, skipRecentDays, progress, ct, getFreeBytes, removeEmptyDirectories, actionService), ct);
 
     private static CleanupReport Clean(
         IReadOnlyList<RuleScanResult> targets,
@@ -25,9 +27,12 @@ public sealed class Cleaner
         int skipRecentDays,
         IProgress<CleanProgress>? progress,
         CancellationToken ct,
-        Func<string, long?>? getFreeBytes)
+        Func<string, long?>? getFreeBytes,
+        bool removeEmptyDirectories,
+        ICleanupActionService? actionService)
     {
         var report = new CleanupReport();
+        var actions = actionService ?? PlatformServices.CreateCleanupActionService();
         var probe = getFreeBytes ?? ProbeFreeBytes;
         var drives = CollectDrives(targets);
         var freeBefore = SnapshotFreeSpace(drives, probe);
@@ -48,12 +53,16 @@ public sealed class Cleaner
             {
                 EmptyRecycleBin(result);
             }
+            else if (target.Rule.Kind == RuleKind.Action)
+            {
+                ExecuteAction(target, actions, result, i, targets.Count, progress, ct);
+            }
             else
             {
                 DeleteFiles(target, deleter, result, protectModifiedAfter, ct);
-                if (target.Rule.IsWholeDirectory)
+                if (target.Rule.IsWholeDirectory || removeEmptyDirectories)
                 {
-                    RemoveEmptyDirectories(target.Roots, ct);
+                    report.EmptyDirectoriesRemoved += RemoveEmptyDirectories(target.Roots, ct);
                 }
             }
 
@@ -100,7 +109,8 @@ public sealed class Cleaner
         var drives = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var target in targets)
         {
-            if (target.Rule.Kind == RuleKind.RecycleBin)
+            // 回收站分布在各盘;动作型(组件清理 / 卷影删除)效果同样跨盘,都对比全部固定磁盘
+            if (target.Rule.Kind is RuleKind.RecycleBin or RuleKind.Action)
             {
                 AddFixedDrives(drives);
                 continue;
@@ -158,6 +168,60 @@ public sealed class Cleaner
             {
                 report.DriveSpace.Add(new DriveSpaceDelta(drive, before, after));
             }
+        }
+    }
+
+    /// <summary>
+    /// 执行动作型清理项:结果摘要进报告;动作中途取消按“优雅停止”处理
+    /// (不抛异常),由上层的取消检查把剩余规则标记为未执行。
+    /// </summary>
+    private static void ExecuteAction(
+        RuleScanResult target,
+        ICleanupActionService actions,
+        RuleCleanResult result,
+        int index,
+        int count,
+        IProgress<CleanProgress>? progress,
+        CancellationToken ct)
+    {
+        if (target.Rule.Action is not { } action)
+        {
+            result.Failures.Add(new DeleteFailure($"<{target.Rule.DisplayName}>", "规则缺少清理动作定义"));
+            return;
+        }
+
+        if (!actions.IsSupported(action))
+        {
+            result.Failures.Add(new DeleteFailure($"<{target.Rule.DisplayName}>", "当前平台暂不支持该清理动作"));
+            return;
+        }
+
+        progress?.Report(new CleanProgress(index, count, target.Rule.DisplayName, "执行中…"));
+        var detail = new Progress<string>(line => progress?.Report(new CleanProgress(index, count, target.Rule.DisplayName, line)));
+
+        CleanupActionResult outcome;
+        try
+        {
+            outcome = actions.Execute(action, detail, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            result.Summary = "动作已取消";
+            return;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            result.Failures.Add(new DeleteFailure($"<{target.Rule.DisplayName}>", ex.Message));
+            return;
+        }
+
+        result.DeletedCount = outcome.ItemsAffected;
+        result.BytesRemoved = outcome.BytesFreed;
+        result.Summary = outcome.Summary;
+        result.Failures.AddRange(outcome.Failures);
+        if (!outcome.Success && outcome.Failures.Count == 0)
+        {
+            result.Failures.Add(new DeleteFailure($"<{target.Rule.DisplayName}>", outcome.Error ?? "清理动作失败"));
         }
     }
 
@@ -221,8 +285,10 @@ public sealed class Cleaner
             .Sum(f => f.Size);
     }
 
-    private static void RemoveEmptyDirectories(IEnumerable<string> roots, CancellationToken ct)
+    /// <summary>回收扫描根下的空目录(不删扫描根本身),返回回收数量。</summary>
+    private static int RemoveEmptyDirectories(IEnumerable<string> roots, CancellationToken ct)
     {
+        var removed = 0;
         var options = new EnumerationOptions
         {
             RecurseSubdirectories = true,
@@ -234,7 +300,7 @@ public sealed class Cleaner
         {
             if (ct.IsCancellationRequested)
             {
-                return;
+                return removed;
             }
 
             try
@@ -246,7 +312,7 @@ public sealed class Cleaner
                 {
                     if (ct.IsCancellationRequested)
                     {
-                        return;
+                        return removed;
                     }
 
                     try
@@ -254,6 +320,7 @@ public sealed class Cleaner
                         if (!Directory.EnumerateFileSystemEntries(directory).Any())
                         {
                             Directory.Delete(directory);
+                            removed++;
                         }
                     }
                     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -265,5 +332,7 @@ public sealed class Cleaner
             {
             }
         }
+
+        return removed;
     }
 }

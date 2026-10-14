@@ -15,6 +15,7 @@
 > CI(2026-10-14):backlog 第 26 项(本文档第 13 项)已落地并真实运行验证 —— 首次运行变红(暴露测试的环境假设)、修复后全绿(run 38529460180);工程基础(#25 测试、#26 CI)就绪。
 > P2 规则扩充(2026-10-14):backlog 第 6–8 项(本文档第 14 项)已落地 —— 系统垃圾 / 应用缓存 / 浏览器覆盖共新增 15 条规则;聊天类只清缓存子目录、浏览器隐私独立成组且默认不勾选;动作型类目(事件日志 / DNS / DriverStore)留待「动作型规则」模型,见第 14 项。
 > P4 三个小件(2026-10-14):backlog 第 15–17 项(本文档第 15–17 项)已落地 —— 磁盘空间前后对比、勾选状态持久化、报告复制与扫描明细导出;验证情况见各项实现说明。
+> P2 收口(2026-10-14):「动作型规则」模型落地(本文档第 18 项),backlog 第 10、11 项与第 6 项遗留的事件日志 / DNS 类目随之实现;backlog 第 9 项(本文档第 19 项)以「清理后移除空目录」开关落地 —— **P2 全部完成**,仅 DriverStore 类目继续遗留。
 
 ## 1. 扫描 / 清理取消
 
@@ -615,6 +616,78 @@
 - 未扫描时导出按钮禁用;取消保存对话框无副作用;
 - `dotnet test` 全部通过,GUI 冒烟通过。
 
+## 18. 动作型规则(事件日志 / DNS / 还原点与卷影 / WinSxS)
+
+> 来源:backlog 第 6 项遗留、第 10、11 项(P2 · 清理覆盖面)。
+
+**目标**:引擎支持「动作型规则」——不逐个删文件,而是调用系统能力完成一次清理动作;并用它落地四个高价值类目:DNS 缓存刷新、事件日志清空、旧还原点与卷影副本删除(每卷保留最新)、组件存储清理(WinSxS)。
+
+**现状(实现前)**
+
+- 引擎只有 `Paths`(删文件)与 `RecycleBin`(Shell 清空)两种规则;事件日志(API 清空)、DNS 缓存、还原点 / 卷影、WinSxS(DISM)这类「执行一个动作」的类目无法表达(backlog 第 6 项因此留下三个遗留类目);
+- 动作类目普遍不可逆、DISM 还长耗时,需要失败处理、进度与取消语义。
+
+**方案**
+
+1. 规则模型:[CleanupRule](../Core/CleanupRule.cs) 新增 `RuleKind.Action` 与 `CleanupAction` 枚举(`FlushDnsCache` / `ClearEventLogs` / `DeleteShadowCopies` / `CleanComponentStore`),规则仍是纯数据;
+2. 执行模型:新增 [ICleanupActionService](../Platform/ICleanupActionService.cs) 与 [WindowsCleanupActionService](../Platform/WindowsCleanupActionService.cs)(非 Windows 平台为占位实现):
+   - **DNS**:`DnsFlushResolverCache` 直接刷新;
+   - **事件日志**:`EventLogSession` 逐个 `ClearLog`(跳过空日志),受保护日志按项记失败不中断整体;需要管理员权限;
+   - **还原点 / 卷影**:vssadmin「逐个删最旧」,每卷保留最新一个 —— 不依赖列表顺序与输出语言(按 `HarddiskVolumeShadowCopyN` 设备名计数,卷 GUID 不会误计);
+   - **WinSxS**:`Dism /Online /Cleanup-Image /StartComponentCleanup`,输出行实时转为进度,取消时终止进程树;释放量以第 15 项的磁盘前后对比为准;
+3. 执行语义:失败原因逐项进报告,成功摘要进 `RuleCleanResult.Summary`;动作中途取消不抛异常,由取消标记把剩余规则列为未执行(与文件删除的「优雅停止」一致);
+4. 扫描语义:动作型规则无可枚举文件,扫描只登记规则、状态显示「执行时生效」;不计入预计释放总量,实际效果由清理后的磁盘对比展示;磁盘对比对动作型规则按全部固定磁盘采样;
+5. 风险语义:事件日志 / 还原点与卷影 / WinSxS 均为高风险 + 默认不勾选 + 标注需管理员;DNS 为安全 + 默认勾选(代价近零)。
+
+**影响文件**
+
+- [Core/CleanupRule.cs](../Core/CleanupRule.cs)、[Core/ScanModels.cs](../Core/ScanModels.cs)
+- 新增 [Platform/ICleanupActionService.cs](../Platform/ICleanupActionService.cs)、[Platform/WindowsCleanupActionService.cs](../Platform/WindowsCleanupActionService.cs);[Platform/PlatformServices.cs](../Platform/PlatformServices.cs)(工厂)
+- [Services/Scanner.cs](../Services/Scanner.cs)、[Services/Cleaner.cs](../Services/Cleaner.cs)、[Rules/WindowsRuleSet.cs](../Rules/WindowsRuleSet.cs)
+- [ViewModels/MainWindowViewModel.cs](../ViewModels/MainWindowViewModel.cs)(状态 / 报告)、[broom.csproj](../broom.csproj)(`System.Diagnostics.EventLog` 包)
+- 新增 [broom.Tests/WindowsCleanupActionServiceTests.cs](../broom.Tests/WindowsCleanupActionServiceTests.cs),扩展 CleanerTests / ScannerTests / WindowsRuleSetTests
+
+> 实现说明:卷影清理原设计走 WMI(`Win32_ShadowCopy`),实测开发机上 CIM 与 WMI 两种接口都报「初始化失败」(提供程序损坏),而 vssadmin 正常 —— 改为纯 vssadmin 路径(顺带移除 `System.Management` 依赖);长耗时动作的阶段文本经 `CleanProgress.Detail` 进状态栏。验证:23 个新测试(动作成功 / 失败 / 部分失败 / 不支持 / 缺动作定义 / 取消、`RunProcess` 成功 / 非零退出码 / 取消杀进程、`TryRunCapture`、卷影计数正则、扫描登记、规则不变量),`dotnet test` 109/109 通过;临时校验程序在真实机器实测 DNS 刷新成功、事件日志枚举 1237 个(135 个有记录)、DISM 与 vssadmin 就位;GUI 冒烟通过。**事件日志清空 / 卷影删除 / DISM 组件清理是不可逆动作,未在开发机上真实执行**,留提权环境人工验收(见验收标准)。
+
+**验收标准**
+
+- 四个动作型类目出现在对应分组:DNS 解析缓存(安全、默认勾选)、Windows 事件日志 / 旧还原点与卷影副本 / 组件存储清理(高风险、默认不勾选、标「需管理员」);
+- DNS 清理执行后报告出「已刷新 DNS 解析缓存」,`ipconfig /displaydns` 显示缓存已重建;
+- 提权后执行事件日志清空:事件查看器历史清零,受保护日志的失败项在报告中逐条列出;
+- 提权后执行卷影清理:每卷只保留最新一个还原点 / 卷影副本,报告给出删除个数与磁盘对比;
+- 执行 DISM 组件清理:状态栏显示进度行、可取消(取消后进程退出),释放量看磁盘对比;
+- 未提权执行高风险动作:报告列出失败原因并提示「以管理员身份重启」;
+- `dotnet test` 全部通过,GUI 冒烟通过。
+
+## 19. 清理后回收空目录
+
+> 来源:backlog 第 9 项(P2 · 清理覆盖面)。
+
+**目标**:可选项「清理后移除扫描根下的空目录」—— 部分删除 / 自定义目录清理后不再残留空目录结构。
+
+**现状(实现前)**
+
+空目录回收只是「整目录规则」的附带行为(`IsWholeDirectory` 才回收);自定义目录或按文件名模式部分删除后,空目录一直残留。
+
+**方案**
+
+1. 设置页「其他选项」新增开关(默认关闭),说明「可能删除你有意保留的空目录结构」;
+2. [Cleaner](../Services/Cleaner.cs) 开启时对所有 `Paths` 规则的扫描根回收空目录(扫描根本身不删),回收数量进 `CleanupReport.EmptyDirectoriesRemoved`,报告输出「另回收空目录 N 个」;关闭时行为与现状完全一致(整目录规则照旧附带回收);
+3. 回收仍按由深到浅、跳过联接点,取消时立即停止。
+
+**影响文件**
+
+- [Core/BroomSettings.cs](../Core/BroomSettings.cs)、[Services/Cleaner.cs](../Services/Cleaner.cs)、[ViewModels/SettingsViewModel.cs](../ViewModels/SettingsViewModel.cs)、[MainWindow.axaml](../MainWindow.axaml)、[ViewModels/MainWindowViewModel.cs](../ViewModels/MainWindowViewModel.cs)
+- [broom.Tests/CleanerTests.cs](../broom.Tests/CleanerTests.cs)、[broom.Tests/SettingsServiceTests.cs](../broom.Tests/SettingsServiceTests.cs)
+
+> 实现说明:计数含「清理后被腾空」与「原本就空」两类子目录,嵌套空目录由深到浅逐级回收(`sub3/inner` 删后 `sub3` 也变空、一并回收)。2 个新测试覆盖开启(4 个目录回收 + 计数正确)与关闭(空目录保留、计数 0),设置往返测试锁定持久化;设置页文案与「系统还原点」卡片里对卷影清理类目的互斥说明同步更新。
+
+**验收标准**
+
+- 开启后清理:扫描根下的空目录被回收,报告显示「另回收空目录 N 个」;扫描根本身保留;
+- 关闭时行为与旧版一致:非整目录规则清理后不回收空目录;
+- 开关状态经设置保存 / 重启后保留;`dotnet test` 全部通过。
+
 ## 依赖关系与建议顺序
 
 | 顺序 | 项 | 理由 |
@@ -636,5 +709,7 @@
 | 15 | 磁盘空间前后对比 | 只动清理器采样与报告文案,与其余各项独立 |
 | 16 | 勾选状态持久化 | 只动设置模型与规则重建,与其余各项独立 |
 | 17 | 报告与清单导出 | 只动报告区 / 工具栏与新增导出器,与其余各项独立 |
+| 18 | 动作型规则(事件日志 / DNS / 还原点与卷影 / WinSxS) | 解锁 backlog 第 6 项遗留、第 10、11 项;动作执行独立成平台服务,与文件清理互不干扰 |
+| 19 | 清理后回收空目录 | 只动清理器空目录回收开关与设置项,与其余各项独立 |
 
 各项相互独立,可单独交付;建议每项完成后跑一次「扫描 → 清理 → 报告」全流程,外加一次 GUI 冒烟测试(启动应用、确认窗口创建、关闭)。

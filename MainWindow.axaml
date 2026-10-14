@@ -458,7 +458,7 @@
                             <CheckBox Content="清理前创建系统还原点(需要管理员权限)"
                                       IsChecked="{Binding SettingsEditor.CreateRestorePointBeforeClean}"/>
                             <TextBlock Classes="muted" TextWrapping="Wrap"
-                                       Text="仅对启用了系统保护的卷有效(通常为系统盘),创建需要数秒到数十秒,Windows 对创建频率另有限制。注意:将来启用「系统还原点与卷影副本清理」类目会删除这些回滚点,两者语义互斥。"/>
+                                       Text="仅对启用了系统保护的卷有效(通常为系统盘),创建需要数秒到数十秒,Windows 对创建频率另有限制。注意:勾选「旧还原点与卷影副本」类目会删除这些回滚点,两者语义互斥。"/>
                         </StackPanel>
                     </Border>
 
@@ -498,6 +498,10 @@
                             </StackPanel>
                             <TextBlock Classes="muted" TextWrapping="Wrap"
                                        Text="“跳过最近修改”按文件的最后写入时间判断,清理前会再次校验;对“清空回收站”不生效。"/>
+                            <CheckBox Content="清理后移除扫描根下的空目录"
+                                      IsChecked="{Binding SettingsEditor.RemoveEmptyDirectories}"/>
+                            <TextBlock Classes="muted" TextWrapping="Wrap"
+                                       Text="清理完成后顺带回收本次扫描根下的空目录;可能删除你有意保留的空目录结构,默认关闭。"/>
                         </StackPanel>
                     </Border>
 

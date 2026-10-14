@@ -21,6 +21,7 @@ public class SettingsServiceTests
         Assert.Equal(0, settings.SecureErasePasses);
         Assert.False(settings.CreateRestorePointBeforeClean);
         Assert.Null(settings.SelectedRuleIds);
+        Assert.False(settings.RemoveEmptyDirectories);
     }
 
     [Fact]
@@ -41,6 +42,7 @@ public class SettingsServiceTests
             SecureErasePasses = 3,
             CreateRestorePointBeforeClean = true,
             SelectedRuleIds = ["user-temp", "browser-cache"],
+            RemoveEmptyDirectories = true,
         };
 
         service.Save(settings);
@@ -58,6 +60,7 @@ public class SettingsServiceTests
         Assert.Equal(3, loaded.SecureErasePasses);
         Assert.True(loaded.CreateRestorePointBeforeClean);
         Assert.Equal(settings.SelectedRuleIds, loaded.SelectedRuleIds);
+        Assert.True(loaded.RemoveEmptyDirectories);
     }
 
     [Fact]

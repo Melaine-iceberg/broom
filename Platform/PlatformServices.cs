@@ -1,3 +1,5 @@
+using broom.Core;
+
 namespace broom.Platform;
 
 /// <summary>平台服务工厂:按当前操作系统选择合适的实现。</summary>
@@ -31,6 +33,16 @@ public static class PlatformServices
         }
 
         return new UnsupportedRestorePointService();
+    }
+
+    public static ICleanupActionService CreateCleanupActionService()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return new WindowsCleanupActionService();
+        }
+
+        return new UnsupportedCleanupActionService();
     }
 }
 
@@ -66,4 +78,13 @@ public sealed class UnsupportedRestorePointService : IRestorePointService
         error = "当前平台暂不支持系统还原点。";
         return false;
     }
+}
+
+/// <summary>非 Windows 平台:动作型清理暂不支持。</summary>
+public sealed class UnsupportedCleanupActionService : ICleanupActionService
+{
+    public bool IsSupported(CleanupAction action) => false;
+
+    public CleanupActionResult Execute(CleanupAction action, IProgress<string>? progress = null, CancellationToken ct = default)
+        => new() { Success = false, Error = "当前平台暂不支持该清理动作。" };
 }
