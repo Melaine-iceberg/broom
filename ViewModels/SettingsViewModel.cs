@@ -26,6 +26,8 @@ public partial class SettingsViewModel : ObservableObject
             ?? QuarantineRetentionOptions[0];
         SelectedSkipRecent = SkipRecentOptions.FirstOrDefault(o => o.Days == settings.SkipRecentDays)
             ?? SkipRecentOptions[0];
+        SelectedSecureErase = SecureEraseOptions.FirstOrDefault(o => o.Passes == settings.SecureErasePasses)
+            ?? SecureEraseOptions[0];
     }
 
     /// <summary>保存结果已就绪时触发(参数为 null 表示取消),窗口据此关闭。</summary>
@@ -69,6 +71,17 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private DayOption _selectedSkipRecent;
+
+    /// <summary>安全擦除的覆写次数选项(0 表示不覆写)。</summary>
+    public IReadOnlyList<SecureEraseOption> SecureEraseOptions { get; } =
+    [
+        new(0, "不覆写"),
+        new(1, "覆写 1 次"),
+        new(3, "覆写 3 次"),
+    ];
+
+    [ObservableProperty]
+    private SecureEraseOption _selectedSecureErase;
 
     [ObservableProperty]
     private bool _quarantineEnabled;
@@ -177,6 +190,7 @@ public partial class SettingsViewModel : ObservableObject
             QuarantineEnabled = QuarantineEnabled,
             QuarantineRetentionDays = SelectedQuarantineRetention.Days,
             SkipRecentDays = SelectedSkipRecent.Days,
+            SecureErasePasses = SelectedSecureErase.Passes,
         };
         error = "";
         return true;
@@ -231,3 +245,6 @@ public sealed record RetentionOption(int Days, string Label);
 
 /// <summary>「跳过最近修改的文件」天数下拉项。</summary>
 public sealed record DayOption(int Days, string Label);
+
+/// <summary>安全擦除的覆写次数下拉项。</summary>
+public sealed record SecureEraseOption(int Passes, string Label);

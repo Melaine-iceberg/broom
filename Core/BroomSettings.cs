@@ -30,6 +30,9 @@ public sealed class BroomSettings
 
     /// <summary>跳过最近 N 天内修改过的文件(0 = 不启用);按最后写入时间判断,扫描与删除前都会校验。</summary>
     public int SkipRecentDays { get; set; }
+
+    /// <summary>安全擦除:真正永久删除前的随机覆写次数(0 = 不覆写,可选 1 / 3)。</summary>
+    public int SecureErasePasses { get; set; }
 }
 
 /// <summary>用户自定义的清理目录。</summary>

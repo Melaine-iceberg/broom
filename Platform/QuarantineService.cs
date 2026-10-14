@@ -32,7 +32,7 @@ public sealed class QuarantineService
     public (int ItemCount, long Bytes) GetUsage() => GetUsage(_rootPath, recursive: true);
 
     /// <summary>删除超过保留天数的会话(0 表示永久保留),返回清理掉的文件数。</summary>
-    public int PurgeExpired(int retentionDays)
+    public int PurgeExpired(int retentionDays, int secureErasePasses = 0)
     {
         if (retentionDays <= 0 || !Directory.Exists(_rootPath))
         {
@@ -48,22 +48,15 @@ public sealed class QuarantineService
                 continue;
             }
 
-            var items = GetUsage(directory, recursive: true).ItemCount;
-            try
-            {
-                Directory.Delete(directory, recursive: true);
-                removed += items;
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-            }
+            var (items, _, _) = DeleteTree(directory, secureErasePasses);
+            removed += items;
         }
 
         return removed;
     }
 
     /// <summary>清空隔离区(不可恢复),返回清掉的项数与字节数。</summary>
-    public bool TryPurgeAll(out int itemsRemoved, out long bytesReleased, out string error)
+    public bool TryPurgeAll(out int itemsRemoved, out long bytesReleased, out string error, int secureErasePasses = 0)
     {
         itemsRemoved = 0;
         bytesReleased = 0;
@@ -76,22 +69,93 @@ public sealed class QuarantineService
         var failed = false;
         foreach (var directory in EnumerateSessions())
         {
-            var (items, bytes) = GetUsage(directory, recursive: true);
-            try
-            {
-                Directory.Delete(directory, recursive: true);
-                itemsRemoved += items;
-                bytesReleased += bytes;
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            var (items, bytes, sessionError) = DeleteTree(directory, secureErasePasses);
+            itemsRemoved += items;
+            bytesReleased += bytes;
+            if (sessionError is not null)
             {
                 // 单个会话删除失败不阻塞其余会话;失败原因回报给用户
                 failed = true;
-                error = ex.Message;
+                error = sessionError;
             }
         }
 
         return !failed;
+    }
+
+    /// <summary>
+    /// 删除一个会话目录。开启安全擦除时逐文件「覆写后删除」再回收空目录;
+    /// 覆写失败的文件保留原样,不整树强删 —— 不让"不可恢复"的承诺被静默跳过。
+    /// </summary>
+    private static (int ItemsRemoved, long BytesRemoved, string? Error) DeleteTree(string directory, int secureErasePasses)
+    {
+        if (secureErasePasses <= 0)
+        {
+            var (items, bytes) = GetUsage(directory, recursive: true);
+            try
+            {
+                Directory.Delete(directory, recursive: true);
+                return (items, bytes, null);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return (0, 0, ex.Message);
+            }
+        }
+
+        var options = new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            IgnoreInaccessible = true,
+            AttributesToSkip = FileAttributes.ReparsePoint,
+        };
+
+        var removed = 0;
+        long removedBytes = 0;
+        string? error = null;
+        foreach (var file in new DirectoryInfo(directory).EnumerateFiles("*", options))
+        {
+            try
+            {
+                var length = file.Length;
+                SecureErase.OverwriteAndDelete(file.FullName, secureErasePasses);
+                removed++;
+                removedBytes += length;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+            {
+                error = ex.Message;
+            }
+        }
+
+        // 只回收空目录;还留着覆写失败文件的目录会保留下来
+        foreach (var sub in new DirectoryInfo(directory).EnumerateDirectories("*", options).OrderByDescending(d => d.FullName.Length))
+        {
+            try
+            {
+                if (!sub.EnumerateFileSystemInfos().Any())
+                {
+                    sub.Delete();
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+
+        try
+        {
+            if (!Directory.EnumerateFileSystemEntries(directory).Any())
+            {
+                Directory.Delete(directory);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            error ??= ex.Message;
+        }
+
+        return (removed, removedBytes, error);
     }
 
     private IEnumerable<string> EnumerateSessions()

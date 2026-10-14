@@ -448,6 +448,20 @@
                             <TextBlock Classes="h2" Text="其他选项"/>
                             <CheckBox Content="默认使用永久删除(不经过回收站)"
                                       IsChecked="{Binding SettingsEditor.DefaultPermanentDelete}"/>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock Text="安全擦除(永久删除前覆写)" VerticalAlignment="Center"/>
+                                <ComboBox Width="132" ItemsSource="{Binding SettingsEditor.SecureEraseOptions}"
+                                          SelectedItem="{Binding SettingsEditor.SelectedSecureErase}"
+                                          ToolTip.Tip="用随机数据覆写后再删除,降低数据恢复的可行性;文件越大、次数越多,清理越慢。">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:SecureEraseOption">
+                                            <TextBlock Text="{Binding Label}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
+                            <TextBlock Classes="muted" TextWrapping="Wrap"
+                                       Text="对 SSD / NVMe 与写时复制文件系统(ReFS、Dev Drive)效果有限。只作用于真正销毁文件的路径:回收站删除与“重启后删除”不覆写,移入隔离区的文件在隔离区清理时才覆写删除;覆写失败的文件保留并计入失败列表。"/>
                             <CheckBox Content="显示高风险类目(例如旧系统备份)"
                                       IsChecked="{Binding SettingsEditor.ShowHighRiskRules}"/>
                             <StackPanel Orientation="Horizontal" Spacing="10">

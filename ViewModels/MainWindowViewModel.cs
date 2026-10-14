@@ -795,7 +795,7 @@ public partial class MainWindowViewModel : ObservableObject
                 return (new QuarantineFileDeleter(_lastQuarantineSession), null);
             }
 
-            return (new PermanentFileDeleter(), null);
+            return (new PermanentFileDeleter(Settings.SecureErasePasses), null);
         }
 
         if (OperatingSystem.IsWindows())
@@ -809,7 +809,7 @@ public partial class MainWindowViewModel : ObservableObject
             return (new QuarantineFileDeleter(_lastQuarantineSession), "当前平台暂不支持回收站,本次改为移入隔离区。");
         }
 
-        return (new PermanentFileDeleter(), "当前平台暂不支持回收站,本次改为永久删除。");
+        return (new PermanentFileDeleter(Settings.SecureErasePasses), "当前平台暂不支持回收站,本次改为永久删除。");
     }
 
     private string BuildReport(CleanupReport report, IFileDeleter deleter, string? warning)
@@ -831,6 +831,16 @@ public partial class MainWindowViewModel : ObservableObject
             sb.AppendLine(Settings.QuarantineRetentionDays > 0
                 ? $"提示:隔离区中的文件仍占用磁盘空间,保留 {Settings.QuarantineRetentionDays} 天后自动删除;期间可在下方“还原”。"
                 : "提示:隔离区中的文件仍占用磁盘空间,会一直保留直到手动清空;期间可在下方“还原”。");
+        }
+
+        if (Settings.SecureErasePasses > 0)
+        {
+            sb.AppendLine(deleter switch
+            {
+                WindowsRecycleBinDeleter => "提示:回收站删除不经过安全擦除;覆写只作用于永久删除与隔离区清理。",
+                QuarantineFileDeleter => $"提示:安全擦除在隔离区清理时生效(覆写 {Settings.SecureErasePasses} 次后删除);移入隔离区本身不覆写。",
+                _ => $"提示:本次删除前已覆写 {Settings.SecureErasePasses} 次;对 SSD / NVMe 与写时复制文件系统效果有限。",
+            });
         }
 
         if (warning is not null)
@@ -973,11 +983,12 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     /// <summary>启动与保存设置时清理过期隔离内容;失败不影响应用运行。</summary>
-    private void PurgeExpiredQuarantine(int retentionDays) => Task.Run(() => _quarantine.PurgeExpired(retentionDays));
+    private void PurgeExpiredQuarantine(int retentionDays) =>
+        Task.Run(() => _quarantine.PurgeExpired(retentionDays, Settings.SecureErasePasses));
 
     private string PurgeQuarantine()
     {
-        if (!_quarantine.TryPurgeAll(out var items, out var bytes, out var error))
+        if (!_quarantine.TryPurgeAll(out var items, out var bytes, out var error, Settings.SecureErasePasses))
         {
             return $"清空隔离区未完成:{error}";
         }
