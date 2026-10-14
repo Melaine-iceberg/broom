@@ -167,4 +167,60 @@ public class CleanerTests
         Assert.False(Directory.Exists(sub));
         Assert.True(Directory.Exists(dir.FullPath));
     }
+
+    [Fact]
+    public async Task Clean_RecordsDiskSpaceDeltaForAffectedDrives()
+    {
+        using var dir = new TempDir();
+        var file = dir.CreateFile("a.tmp", "aaa");
+        var target = Target(Rule1, new ScannedFile(file, 3));
+        var calls = 0;
+        Func<string, long?> probe = _ => ++calls switch
+        {
+            1 => 1000,
+            2 => 1400,
+            _ => throw new InvalidOperationException("探针只应调用两次"),
+        };
+
+        var report = await new Cleaner().CleanAsync([target], new PermanentFileDeleter(), getFreeBytes: probe);
+
+        var delta = Assert.Single(report.DriveSpace);
+        Assert.Equal(Path.GetPathRoot(file), delta.Drive);
+        Assert.Equal(1000, delta.FreeBefore);
+        Assert.Equal(1400, delta.FreeAfter);
+        Assert.Equal(400, delta.FreedBytes);
+    }
+
+    [Fact]
+    public async Task Clean_UnreadableDriveSpace_SkipsComparison()
+    {
+        using var dir = new TempDir();
+        var file = dir.CreateFile("a.tmp", "aaa");
+        var target = Target(Rule1, new ScannedFile(file, 3));
+
+        var report = await new Cleaner().CleanAsync([target], new PermanentFileDeleter(), getFreeBytes: _ => null);
+
+        Assert.Empty(report.DriveSpace);
+    }
+
+    [Fact]
+    public async Task Clean_CancelledStillRecordsDiskSpaceDelta()
+    {
+        using var dir = new TempDir();
+        var first = dir.CreateFile("first.tmp", "aaa");
+        var second = dir.CreateFile("second.tmp", "bbbb");
+        var target1 = Target(Rule1, new ScannedFile(first, 3));
+        var target2 = Target(Rule2, new ScannedFile(second, 4));
+        using var cts = new CancellationTokenSource();
+        var calls = 0;
+        Func<string, long?> probe = _ => ++calls * 100;
+
+        var report = await new Cleaner().CleanAsync(
+            [target1, target2], new DeleteFirstThenCancel(cts), ct: cts.Token, getFreeBytes: probe);
+
+        Assert.True(report.WasCancelled);
+        var delta = Assert.Single(report.DriveSpace);
+        Assert.Equal(100, delta.FreeBefore);
+        Assert.Equal(200, delta.FreeAfter);
+    }
 }

@@ -72,23 +72,14 @@
 
 ## P4 · 体验与分发
 
-### 15. 磁盘空间前后对比
-- **动机**:用户想直接看到「释放了多少」,而不仅是计入的字节数。
-- **方案要点**:清理前后查询目标盘可用空间(`DriveInfo`),在报告中展示差值;可与第 14 项配合展示累计。
-- **涉及**:[Services/Cleaner.cs](../Services/Cleaner.cs) / [ViewModels/MainWindowViewModel.cs](../ViewModels/MainWindowViewModel.cs)、[Core/Formatting.cs](../Core/Formatting.cs)。
-- **规模**:S · **依赖**:可与第 14 项合并实现。
+### 15. 磁盘空间前后对比(2026-10-14 已落地)
+- **去向**:设计与实现见 roadmap 第 15 项。要点:清理器在删除前后按涉及盘符采样可用空间(可注入探针),报告按盘输出「前 → 后(本次释放 +N)」;累计释放的历史统计仍归第 14 项。
 
-### 16. 勾选状态持久化
-- **动机**:规则重建后勾选回到 `Recommended` 默认值,用户偏好被重置。
-- **方案要点**:[Core/BroomSettings.cs](../Core/BroomSettings.cs) 增加「上次勾选的规则 Id 集合」;扫描/重建后恢复。
-- **涉及**:[Core/BroomSettings.cs](../Core/BroomSettings.cs)、[ViewModels/RuleViewModel.cs](../ViewModels/RuleViewModel.cs)、[ViewModels/MainWindowViewModel.cs](../ViewModels/MainWindowViewModel.cs)。
-- **规模**:S。
+### 16. 勾选状态持久化(2026-10-14 已落地)
+- **去向**:设计与实现见 roadmap 第 16 项。要点:`BroomSettings.SelectedRuleIds`(可空,区分「从未保存」与「全不勾」),勾选变化即持久化、批量操作合并写盘;隐藏规则(如高风险)的 Id 保留,重新显示仍按上次选择。
 
-### 17. 报告与清单导出
-- **动机**:报告不能复制;文件明细(分页显示)无法整体导出核对。
-- **方案要点**:报告区「复制」按钮;扫描结果导出 CSV / TXT(路径、大小、规则),使用 Avalonia `StorageProvider` 保存对话框。
-- **涉及**:[ViewModels/MainWindowViewModel.cs](../ViewModels/MainWindowViewModel.cs)、[MainWindow.axaml](../MainWindow.axaml)。
-- **规模**:S。
+### 17. 报告与清单导出(2026-10-14 已落地)
+- **去向**:设计与实现见 roadmap 第 17 项。要点:报告卡片「复制报告」进剪贴板;工具栏「导出明细」经 `StorageProvider` 存 CSV(带 BOM)/ TXT,列为规则 / 路径 / 大小(字节),规则内按体积降序。
 
 ### 18. 多语言(i18n)
 - **动机**:界面与规则文案硬编码中文。

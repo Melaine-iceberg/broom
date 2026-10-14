@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Text;
 using broom.Core;
 using broom.Platform;
@@ -22,6 +23,7 @@ public partial class MainWindowViewModel : ObservableObject
     private IReadOnlyList<RuleScanResult>? _lastScan;
     private QuarantineSession? _lastQuarantineSession;
     private CancellationTokenSource? _cts;
+    private bool _suspendSelectionPersist;
 
     /// <summary>文件路径比较方式(Windows 不区分大小写),与扫描器的排除判定保持一致。</summary>
     private static readonly StringComparer PathComparer = OperatingSystem.IsWindows()
@@ -229,25 +231,43 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void SelectSafeOnly()
     {
-        foreach (var rule in Rules)
+        _suspendSelectionPersist = true;
+        try
         {
-            rule.IsSelected = rule.IsSafe && MatchesFilter(rule);
+            foreach (var rule in Rules)
+            {
+                rule.IsSelected = rule.IsSafe && MatchesFilter(rule);
+            }
+        }
+        finally
+        {
+            _suspendSelectionPersist = false;
         }
 
         UpdateSummary();
+        PersistSelection();
     }
 
     private void SetVisibleSelection(bool selected)
     {
-        foreach (var rule in Rules)
+        _suspendSelectionPersist = true;
+        try
         {
-            if (MatchesFilter(rule))
+            foreach (var rule in Rules)
             {
-                rule.IsSelected = selected;
+                if (MatchesFilter(rule))
+                {
+                    rule.IsSelected = selected;
+                }
             }
+        }
+        finally
+        {
+            _suspendSelectionPersist = false;
         }
 
         UpdateSummary();
+        PersistSelection();
     }
 
     /// <summary>把文件加入排除名单:持久化,并立即从当前扫描结果与界面中移除。</summary>
@@ -781,6 +801,9 @@ public partial class MainWindowViewModel : ObservableObject
             && x.IncludePatterns.SequenceEqual(y.IncludePatterns)
             && x.ExcludePatterns.SequenceEqual(y.ExcludePatterns);
 
+    /// <summary>最近一次完整扫描结果,供「导出明细」使用。</summary>
+    public IReadOnlyList<RuleScanResult> LastScanResults => _lastScan ?? [];
+
     private List<RuleScanResult> GetSelectedResults()
     {
         if (_lastScan is null)
@@ -844,6 +867,16 @@ public partial class MainWindowViewModel : ObservableObject
     {
         var sb = new StringBuilder();
         sb.AppendLine($"{deleter.Name}:清理 {report.TotalDeleted:N0} 项,共 {Formatting.FormatBytes(report.TotalBytesRemoved)}。");
+
+        // 计入的字节数与磁盘实际释放可能不一致(回收站仍占用、覆写 / 稀疏等),用盘符前后对比说话
+        foreach (var delta in report.DriveSpace)
+        {
+            var change = delta.FreedBytes >= 0
+                ? $"本次释放 +{Formatting.FormatBytes(delta.FreedBytes)}"
+                : $"可用不增反减 {Formatting.FormatBytes(-delta.FreedBytes)},可能受其他程序活动影响";
+            sb.AppendLine($"· 磁盘 {delta.Drive.TrimEnd('\\', '/')} 可用空间:{Formatting.FormatBytes(delta.FreeBefore)} → {Formatting.FormatBytes(delta.FreeAfter)}({change})");
+        }
+
         if (restoreNote is not null)
         {
             sb.AppendLine(restoreNote);
@@ -1070,14 +1103,62 @@ public partial class MainWindowViewModel : ObservableObject
     private void RebuildRules()
     {
         Rules.Clear();
-        foreach (var rule in CreateRules())
+        var saved = Settings.SelectedRuleIds;
+        _suspendSelectionPersist = true;
+        try
         {
-            var viewModel = new RuleViewModel(rule, ExcludeFile, ExcludeDirectory, RevealFile);
-            viewModel.PropertyChanged += (_, _) => UpdateSummary();
-            Rules.Add(viewModel);
+            foreach (var rule in CreateRules())
+            {
+                var viewModel = new RuleViewModel(rule, ExcludeFile, ExcludeDirectory, RevealFile)
+                {
+                    IsSelected = ResolveSelection(saved, rule),
+                };
+                viewModel.PropertyChanged += OnRuleChanged;
+                Rules.Add(viewModel);
+            }
+        }
+        finally
+        {
+            _suspendSelectionPersist = false;
         }
 
         RefreshGroups();
+    }
+
+    /// <summary>勾选状态的恢复语义:从未保存过(null)回到规则默认,否则按保存的 Id 集合恢复。</summary>
+    internal static bool ResolveSelection(IReadOnlyList<string>? savedIds, CleanupRule rule)
+        => savedIds is null ? rule.Recommended : savedIds.Contains(rule.Id, StringComparer.OrdinalIgnoreCase);
+
+    private void OnRuleChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        UpdateSummary();
+        if (e.PropertyName == nameof(RuleViewModel.IsSelected) && !_suspendSelectionPersist)
+        {
+            PersistSelection();
+        }
+    }
+
+    /// <summary>
+    /// 记住勾选:只更新当前规则集内的 Id,隐藏(如高风险)或暂未加载的 Id 保留原状态,
+    /// 之后重新显示时仍按用户上次的选择恢复。
+    /// </summary>
+    private void PersistSelection()
+    {
+        var currentIds = Rules.Select(r => r.Rule.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var updated = Settings.SelectedRuleIds is { } saved
+            ? saved.Where(id => !currentIds.Contains(id)).ToList()
+            : [];
+        updated.AddRange(Rules.Where(r => r.IsSelected).Select(r => r.Rule.Id));
+        Settings.SelectedRuleIds = updated;
+
+        try
+        {
+            _settingsService.Save(Settings);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // 勾选记忆是便利功能:保存失败不影响本次会话的选择
+        }
     }
 
     private IReadOnlyList<CleanupRule> CreateRules()

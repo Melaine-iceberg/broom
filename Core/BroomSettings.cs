@@ -36,6 +36,9 @@ public sealed class BroomSettings
 
     /// <summary>清理前尝试创建 Windows 系统还原点(需要管理员权限与已开启的系统保护)。</summary>
     public bool CreateRestorePointBeforeClean { get; set; }
+
+    /// <summary>上次勾选的规则 Id 集合;null 表示从未保存过,恢复规则默认勾选。</summary>
+    public List<string>? SelectedRuleIds { get; set; }
 }
 
 /// <summary>用户自定义的清理目录。</summary>

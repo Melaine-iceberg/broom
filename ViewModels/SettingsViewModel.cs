@@ -10,11 +10,13 @@ public partial class SettingsViewModel : ObservableObject
 {
     private readonly Func<string> _purgeQuarantine;
     private readonly Func<string> _openQuarantine;
+    private readonly List<string>? _selectedRuleIds;
 
     public SettingsViewModel(BroomSettings settings, Func<string> purgeQuarantine, Func<string> openQuarantine)
     {
         _purgeQuarantine = purgeQuarantine;
         _openQuarantine = openQuarantine;
+        _selectedRuleIds = settings.SelectedRuleIds;
         CustomRules = new ObservableCollection<CustomRuleViewModel>(
             settings.CustomRules.Select(rule => CreateRule(rule)));
         ExcludedPathsText = string.Join(Environment.NewLine, settings.ExcludedPaths);
@@ -196,6 +198,7 @@ public partial class SettingsViewModel : ObservableObject
             SkipRecentDays = SelectedSkipRecent.Days,
             SecureErasePasses = SelectedSecureErase.Passes,
             CreateRestorePointBeforeClean = CreateRestorePointBeforeClean,
+            SelectedRuleIds = _selectedRuleIds,
         };
         error = "";
         return true;

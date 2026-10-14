@@ -14,6 +14,7 @@
 > 单元测试项目(2026-10-14):backlog 第 25 项(本文档第 12 项)已落地 —— `broom.Tests` 64 个测试覆盖扫描 / 清理 / 设置 / 规则不变量与 P1 已交付能力,根目录 `dotnet test` 全量回归;详见该项实现说明。
 > CI(2026-10-14):backlog 第 26 项(本文档第 13 项)已落地并真实运行验证 —— 首次运行变红(暴露测试的环境假设)、修复后全绿(run 38529460180);工程基础(#25 测试、#26 CI)就绪。
 > P2 规则扩充(2026-10-14):backlog 第 6–8 项(本文档第 14 项)已落地 —— 系统垃圾 / 应用缓存 / 浏览器覆盖共新增 15 条规则;聊天类只清缓存子目录、浏览器隐私独立成组且默认不勾选;动作型类目(事件日志 / DNS / DriverStore)留待「动作型规则」模型,见第 14 项。
+> P4 三个小件(2026-10-14):backlog 第 15–17 项(本文档第 15–17 项)已落地 —— 磁盘空间前后对比、勾选状态持久化、报告复制与扫描明细导出;验证情况见各项实现说明。
 
 ## 1. 扫描 / 清理取消
 
@@ -516,6 +517,104 @@
 - 勾选「浏览器 Cookie 与登录状态」清理后各浏览器需重新登录;「浏览器历史与会话」不影响书签与已保存的密码;
 - 根目录 `dotnet test` 全部通过,GUI 冒烟通过。
 
+## 15. 磁盘空间前后对比
+
+> 来源:backlog 第 15 项(P4 · 体验与分发)。
+
+**目标**:清理报告直接回答「实际释放了多少」——按本次清理涉及的盘符给出清理前后可用空间与差值,而不是只看计入的字节数。
+
+**现状(实现前)**
+
+- 报告只统计删除项数与字节;回收站删除(仍占用空间)、覆写、并发写盘等场景下,计入值与磁盘实际释放有出入;
+- 用户要自己去资源管理器核对可用空间,报告没有自证能力。
+
+**方案**
+
+1. [Cleaner](../Services/Cleaner.cs) 在删除前后对涉及盘符各采样一次可用空间,差值写入 `CleanupReport.DriveSpace`;含回收站规则时覆盖全部就绪的固定磁盘(回收站分布在各盘),否则按被删文件所在盘;
+2. 采样失败(读不到)的盘静默跳过、不阻塞清理;清理被取消时同样给出已完成部分的对比;
+3. 报告在删除方式提示之前按盘输出「磁盘 X 可用空间:前 → 后(本次释放 +N)」,可用空间不增反减时如实展示并注明可能受其他程序活动影响;
+4. 采样函数可注入(默认 `DriveInfo.AvailableFreeSpace`),单元测试用假探针验证前后值与差值;「累计释放」的历史统计仍归 backlog 第 14 项。
+
+**影响文件**
+
+- [Core/ScanModels.cs](../Core/ScanModels.cs)(`DriveSpaceDelta` 与 `CleanupReport.DriveSpace`)
+- [Services/Cleaner.cs](../Services/Cleaner.cs)(采样与盘符收集)
+- [ViewModels/MainWindowViewModel.cs](../ViewModels/MainWindowViewModel.cs)(报告文案)
+- [broom.Tests/CleanerTests.cs](../broom.Tests/CleanerTests.cs)
+
+> 实现说明:盘符收集与探针都在 Cleaner 内,默认探针读取失败返回 null 即该盘不进对比;报告行放在「清理 N 项」摘要之后。3 个新测试覆盖正常差值(1000 → 1400 = +400)、探针不可用时跳过、取消清理仍输出对比。
+
+**验收标准**
+
+- 清理后报告按盘列出「可用空间 前 → 后(本次释放 +N)」,与资源管理器观察一致(±其他程序活动);
+- 移入回收站的清理显示实际释放接近 0,并保留「回收站仍占用空间」提示;
+- 盘符读取失败时报告无该行且清理正常完成;
+- 根目录 `dotnet test` 全部通过。
+
+## 16. 勾选状态持久化
+
+> 来源:backlog 第 16 项(P4 · 体验与分发)。
+
+**目标**:记住用户上次的勾选 —— 重启应用、保存设置、规则集变化后不再一律回到默认勾选。
+
+**现状(实现前)**
+
+`RuleViewModel` 构造时一律取 `rule.Recommended`;用户辛苦调整的勾选在任何一次规则重建后丢失。
+
+**方案**
+
+1. [BroomSettings](../Core/BroomSettings.cs) 新增 `SelectedRuleIds`(可空列表):null = 从未保存过 → 回到规则默认;非空 → 按 Id 集合恢复(大小写不敏感);
+2. 勾选变化即持久化;批量操作(全选 / 仅安全 / 全不选)与规则重建合并为一次写盘,保存失败只影响记忆、不影响本次会话;
+3. 隐藏规则(如关闭「显示高风险类目」时的高风险项)的 Id 原样保留,重新显示时仍按用户上次的选择;
+4. 设置页保存重建 `BroomSettings` 时原样带过该字段,不被覆盖。
+
+**影响文件**
+
+- [Core/BroomSettings.cs](../Core/BroomSettings.cs)、[ViewModels/SettingsViewModel.cs](../ViewModels/SettingsViewModel.cs)、[ViewModels/MainWindowViewModel.cs](../ViewModels/MainWindowViewModel.cs)
+- [broom.Tests/SettingsServiceTests.cs](../broom.Tests/SettingsServiceTests.cs)、[broom.Tests/RuleSelectionTests.cs](../broom.Tests/RuleSelectionTests.cs)
+
+> 实现说明:恢复语义集中在内部静态方法 `MainWindowViewModel.ResolveSelection`(null → 默认、非空 → Id 集合),由 `RuleSelectionTests` 锁定;`PersistSelection` 只更新当前规则集内的 Id、保留隐藏 Id,`_suspendSelectionPersist` 抑制重建与批量操作期间的逐条写盘。SettingsService 往返测试覆盖 null 与列表两种形态。
+
+**验收标准**
+
+- 调整勾选后重启应用,勾选原样保留;首次运行仍按默认勾选(安全项);
+- 「全不选」后重启:一项都不勾;
+- 关闭再打开「显示高风险类目」,高风险项的勾选状态不变;
+- 设置页保存后勾选不被重置;`dotnet test` 全部通过。
+
+## 17. 报告与清单导出
+
+> 来源:backlog 第 17 项(P4 · 体验与分发)。
+
+**目标**:报告一键复制到剪贴板;扫描到的全部文件可导出 CSV / TXT,分页明细也能整体核对。
+
+**现状(实现前)**
+
+- 报告文本框不能复制,失败清单无法粘给他人;
+- 文件明细分页显示(每批 100 条),几十万文件的整体清单无处可看。
+
+**方案**
+
+1. 报告卡片标题栏加「复制报告」,整篇报告文本进剪贴板(状态栏给反馈);
+2. 清理项工具栏加「导出明细」(未扫描时禁用),`StorageProvider` 保存对话框,按扩展名选格式:CSV(带 BOM,Excel 打开中文不乱码)/ TXT(制表符分隔);
+3. 导出列为「规则 / 路径 / 大小(字节)」,每条规则内按体积降序(与文件明细一致);回收站等无文件列表的规则自然跳过;
+4. 生成逻辑独立成 [Services/ScanExportWriter](../Services/ScanExportWriter.cs)(纯文本、可单测),剪贴板与保存对话框留在窗口代码后置;导出数据源为最近一次完整扫描结果。
+
+**影响文件**
+
+- 新增 [Services/ScanExportWriter.cs](../Services/ScanExportWriter.cs)
+- [MainWindow.axaml](../MainWindow.axaml)、[MainWindow.axaml.cs](../MainWindow.axaml.cs)、[ViewModels/MainWindowViewModel.cs](../ViewModels/MainWindowViewModel.cs)(`LastScanResults`)
+- 新增 [broom.Tests/ScanExportWriterTests.cs](../broom.Tests/ScanExportWriterTests.cs)
+
+> 实现说明:CSV 对含逗号 / 引号 / 换行的字段加引号并双写引号;导出以 UTF-8 BOM 写出、`SetLength(0)` 覆盖同名旧文件;复制走 Avalonia 12 的 `ClipboardExtensions.SetTextAsync`(扩展方法,需要 `Avalonia.Input.Platform` 命名空间)。5 个新测试覆盖表头、引号转义、制表符格式、规则内按大小降序、跳过无文件规则。
+
+**验收标准**
+
+- 「复制报告」后粘贴得到完整报告文本,状态栏提示已复制;
+- 「导出明细」可存 CSV / TXT:Excel 打开 CSV 分列正确、含逗号路径不串列,大小列为纯字节数;
+- 未扫描时导出按钮禁用;取消保存对话框无副作用;
+- `dotnet test` 全部通过,GUI 冒烟通过。
+
 ## 依赖关系与建议顺序
 
 | 顺序 | 项 | 理由 |
@@ -534,5 +633,8 @@
 | 12 | 单元测试项目 | 工程基础,不改产品行为(SettingsService 仅加可注入目录);其余各项的回归防线 |
 | 13 | CI(构建 + 测试) | 工程基础,依赖第 12 项的 `dotnet test` 入口 |
 | 14 | P2 规则扩充(系统垃圾 / 应用缓存 / 浏览器覆盖) | 纯规则数据 + 分组排序,不改引擎;动作型类目留待「动作型规则」模型(第 10 / 11 项的前置) |
+| 15 | 磁盘空间前后对比 | 只动清理器采样与报告文案,与其余各项独立 |
+| 16 | 勾选状态持久化 | 只动设置模型与规则重建,与其余各项独立 |
+| 17 | 报告与清单导出 | 只动报告区 / 工具栏与新增导出器,与其余各项独立 |
 
 各项相互独立,可单独交付;建议每项完成后跑一次「扫描 → 清理 → 报告」全流程,外加一次 GUI 冒烟测试(启动应用、确认窗口创建、关闭)。

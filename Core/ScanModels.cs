@@ -3,6 +3,14 @@ namespace broom.Core;
 /// <summary>扫描发现的一个文件及其大小。</summary>
 public readonly record struct ScannedFile(string Path, long Size);
 
+/// <summary>清理前后某个盘符的可用空间对比。</summary>
+/// <param name="Drive">盘符根目录,例如 "C:\"。</param>
+public readonly record struct DriveSpaceDelta(string Drive, long FreeBefore, long FreeAfter)
+{
+    /// <summary>本次清理释放的空间(可能为负:其他程序同时在写盘)。</summary>
+    public long FreedBytes => FreeAfter - FreeBefore;
+}
+
 /// <summary>单条规则的扫描结果。</summary>
 public sealed class RuleScanResult
 {
@@ -59,4 +67,7 @@ public sealed class CleanupReport
     public long TotalBytesRemoved => Results.Sum(r => r.BytesRemoved);
 
     public int TotalFailures => Results.Sum(r => r.Failures.Count);
+
+    /// <summary>清理前后各盘可用空间对比(只含本次清理涉及、且读取成功的盘符)。</summary>
+    public List<DriveSpaceDelta> DriveSpace { get; } = [];
 }

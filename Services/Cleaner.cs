@@ -15,17 +15,22 @@ public sealed class Cleaner
         IFileDeleter deleter,
         IProgress<CleanProgress>? progress = null,
         CancellationToken ct = default,
-        int skipRecentDays = 0)
-        => Task.Run(() => Clean(targets, deleter, skipRecentDays, progress, ct), ct);
+        int skipRecentDays = 0,
+        Func<string, long?>? getFreeBytes = null)
+        => Task.Run(() => Clean(targets, deleter, skipRecentDays, progress, ct, getFreeBytes), ct);
 
     private static CleanupReport Clean(
         IReadOnlyList<RuleScanResult> targets,
         IFileDeleter deleter,
         int skipRecentDays,
         IProgress<CleanProgress>? progress,
-        CancellationToken ct)
+        CancellationToken ct,
+        Func<string, long?>? getFreeBytes)
     {
         var report = new CleanupReport();
+        var probe = getFreeBytes ?? ProbeFreeBytes;
+        var drives = CollectDrives(targets);
+        var freeBefore = SnapshotFreeSpace(drives, probe);
         var protectModifiedAfter = skipRecentDays > 0 ? DateTime.UtcNow.AddDays(-skipRecentDays) : (DateTime?)null;
         for (var i = 0; i < targets.Count; i++)
         {
@@ -62,6 +67,8 @@ public sealed class Cleaner
             }
         }
 
+        // 清理前后对比:即使取消,已完成部分的实际效果同样给出
+        CaptureDiskSpace(report, drives, probe, freeBefore);
         return report;
     }
 
@@ -71,6 +78,86 @@ public sealed class Cleaner
         for (var i = fromIndex; i < targets.Count; i++)
         {
             report.SkippedRules.Add(targets[i].Rule);
+        }
+    }
+
+    /// <summary>默认的盘符可用空间探针;读取失败返回 null,该盘不进入对比。</summary>
+    private static long? ProbeFreeBytes(string driveRoot)
+    {
+        try
+        {
+            return new DriveInfo(driveRoot).AvailableFreeSpace;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or System.Security.SecurityException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>收集本次清理涉及的盘符:按被删文件所在盘;含回收站规则时覆盖全部就绪的固定磁盘。</summary>
+    private static List<string> CollectDrives(IReadOnlyList<RuleScanResult> targets)
+    {
+        var drives = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var target in targets)
+        {
+            if (target.Rule.Kind == RuleKind.RecycleBin)
+            {
+                AddFixedDrives(drives);
+                continue;
+            }
+
+            foreach (var path in target.Files.Select(f => f.Path).Concat(target.Roots))
+            {
+                var root = Path.GetPathRoot(path);
+                if (!string.IsNullOrEmpty(root))
+                {
+                    drives.Add(root);
+                }
+            }
+        }
+
+        return [.. drives.OrderBy(d => d, StringComparer.OrdinalIgnoreCase)];
+    }
+
+    private static void AddFixedDrives(HashSet<string> drives)
+    {
+        try
+        {
+            foreach (var drive in DriveInfo.GetDrives())
+            {
+                if (drive.DriveType == DriveType.Fixed && drive.IsReady)
+                {
+                    drives.Add(drive.Name);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+        }
+    }
+
+    private static Dictionary<string, long> SnapshotFreeSpace(List<string> drives, Func<string, long?> probe)
+    {
+        var snapshot = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        foreach (var drive in drives)
+        {
+            if (probe(drive) is { } free)
+            {
+                snapshot[drive] = free;
+            }
+        }
+
+        return snapshot;
+    }
+
+    private static void CaptureDiskSpace(CleanupReport report, List<string> drives, Func<string, long?> probe, Dictionary<string, long> freeBefore)
+    {
+        foreach (var drive in drives)
+        {
+            if (freeBefore.TryGetValue(drive, out var before) && probe(drive) is { } after)
+            {
+                report.DriveSpace.Add(new DriveSpaceDelta(drive, before, after));
+            }
         }
     }
 

@@ -20,6 +20,7 @@ public class SettingsServiceTests
         Assert.Equal(0, settings.SkipRecentDays);
         Assert.Equal(0, settings.SecureErasePasses);
         Assert.False(settings.CreateRestorePointBeforeClean);
+        Assert.Null(settings.SelectedRuleIds);
     }
 
     [Fact]
@@ -39,6 +40,7 @@ public class SettingsServiceTests
             SkipRecentDays = 7,
             SecureErasePasses = 3,
             CreateRestorePointBeforeClean = true,
+            SelectedRuleIds = ["user-temp", "browser-cache"],
         };
 
         service.Save(settings);
@@ -55,6 +57,19 @@ public class SettingsServiceTests
         Assert.Equal(7, loaded.SkipRecentDays);
         Assert.Equal(3, loaded.SecureErasePasses);
         Assert.True(loaded.CreateRestorePointBeforeClean);
+        Assert.Equal(settings.SelectedRuleIds, loaded.SelectedRuleIds);
+    }
+
+    [Fact]
+    public void SaveThenLoad_KeepsSelectedRuleIdsNullWhenNeverSaved()
+    {
+        using var dir = new TempDir();
+        var service = new SettingsService(dir.FullPath);
+
+        service.Save(new BroomSettings());
+        var loaded = service.Load();
+
+        Assert.Null(loaded.SelectedRuleIds);
     }
 
     [Fact]
