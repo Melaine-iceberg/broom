@@ -1,0 +1,136 @@
+using broom.Core;
+using broom.ViewModels;
+
+namespace broom.Tests;
+
+public class SettingsViewModelTests
+{
+    private static SettingsViewModel CreateEditor() => new(new BroomSettings(), () => "", () => "");
+
+    [Fact]
+    public void TryBuild_DeduplicatesExcludedPathsIgnoringCase()
+    {
+        var editor = CreateEditor();
+        editor.ExcludedPathsText = string.Join(
+            Environment.NewLine, @"C:\Temp\keep", @"c:\temp\KEEP", @"C:\Temp\keep2");
+        editor.ExcludedFilesText = @"C:\a.txt";
+
+        var ok = editor.TryBuild(out var settings, out _);
+
+        Assert.True(ok);
+        Assert.Equal(2, settings.ExcludedPaths.Count);
+        Assert.Single(settings.ExcludedFiles);
+    }
+
+    [Fact]
+    public void TryBuild_RejectsRelativeExclusionAndNamesTheLine()
+    {
+        var editor = CreateEditor();
+        editor.ExcludedPathsText = @"Temp\relative";
+
+        var ok = editor.TryBuild(out _, out var error);
+
+        Assert.False(ok);
+        Assert.Contains(@"Temp\relative", error);
+    }
+
+    [Fact]
+    public void TryBuild_AllowsEnvironmentVariableExclusions()
+    {
+        var editor = CreateEditor();
+        editor.ExcludedPathsText = "%USERPROFILE%\\keep";
+
+        var ok = editor.TryBuild(out var settings, out _);
+
+        Assert.True(ok);
+        Assert.Single(settings.ExcludedPaths);
+    }
+
+    [Fact]
+    public void Save_RewritesTextWithoutDuplicatesAndReportsCount()
+    {
+        var editor = CreateEditor();
+        editor.ExcludedPathsText = string.Join(Environment.NewLine, @"C:\Temp\keep", @"c:\temp\KEEP");
+
+        var closed = false;
+        editor.CloseRequested += _ => closed = true;
+        editor.SaveCommand.Execute(null);
+
+        Assert.True(closed);
+        Assert.Equal(@"C:\Temp\keep", editor.ExcludedPathsText);
+        Assert.Contains("1", editor.SaveNotice);
+    }
+
+    [Fact]
+    public void Save_InvalidInput_KeepsEditorOpenAndClearsNotice()
+    {
+        var editor = CreateEditor();
+        editor.ExcludedPathsText = "relative";
+        var closed = false;
+        editor.CloseRequested += _ => closed = true;
+
+        editor.SaveCommand.Execute(null);
+
+        Assert.False(closed);
+        Assert.NotEmpty(editor.ErrorText);
+        Assert.Equal("", editor.SaveNotice);
+    }
+
+    [Fact]
+    public void AppendExcludedFileAndPath_SyncTheTextboxes()
+    {
+        var editor = CreateEditor();
+
+        editor.AppendExcludedFile(@"C:\a.txt");
+        editor.AppendExcludedPath(@"C:\keep");
+
+        Assert.Equal(@"C:\a.txt", editor.ExcludedFilesText);
+        Assert.Equal(@"C:\keep", editor.ExcludedPathsText);
+    }
+
+    [Fact]
+    public void TryBuild_FlowsSkipRecentDaysAndSecureEraseIntoModel()
+    {
+        var editor = CreateEditor();
+        editor.SelectedSkipRecent = editor.SkipRecentOptions.First(o => o.Days == 7);
+        editor.SelectedSecureErase = editor.SecureEraseOptions.First(o => o.Passes == 3);
+
+        var ok = editor.TryBuild(out var settings, out _);
+
+        Assert.True(ok);
+        Assert.Equal(7, settings.SkipRecentDays);
+        Assert.Equal(3, settings.SecureErasePasses);
+    }
+
+    [Fact]
+    public void RestorePointOption_DefaultsOffAndRoundTrips()
+    {
+        var editor = CreateEditor();
+        Assert.False(editor.CreateRestorePointBeforeClean);
+
+        editor.CreateRestorePointBeforeClean = true;
+        var ok = editor.TryBuild(out var settings, out _);
+
+        Assert.True(ok);
+        Assert.True(settings.CreateRestorePointBeforeClean);
+    }
+
+    [Fact]
+    public void Constructor_ReadsPersistedValues()
+    {
+        var settings = new BroomSettings
+        {
+            SkipRecentDays = 3,
+            SecureErasePasses = 1,
+            CreateRestorePointBeforeClean = true,
+            ExcludedPaths = [@"C:\keep"],
+        };
+
+        var editor = new SettingsViewModel(settings, () => "", () => "");
+
+        Assert.Equal(3, editor.SelectedSkipRecent.Days);
+        Assert.Equal(1, editor.SelectedSecureErase.Passes);
+        Assert.True(editor.CreateRestorePointBeforeClean);
+        Assert.Equal(@"C:\keep", editor.ExcludedPathsText);
+    }
+}

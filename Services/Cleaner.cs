@@ -126,8 +126,12 @@ public sealed class Cleaner
             result.Failures.Add(new DeleteFailure(path, reason));
         }
 
-        // 只统计真正删除成功的文件体积(跳过的文件不计入释放量)
-        result.BytesRemoved = candidates.Where(f => !failures.ContainsKey(f.Path)).Sum(f => f.Size);
+        // 只统计真正处理过的文件体积:取消时删除器停止处理,未处理的尾部不计入释放量
+        // (IFileDeleter 按传入顺序执行、取消即停,已处理的是 candidates 的前缀)
+        var processed = result.DeletedCount + failures.Count;
+        result.BytesRemoved = candidates.Take(processed)
+            .Where(f => !failures.ContainsKey(f.Path))
+            .Sum(f => f.Size);
     }
 
     private static void RemoveEmptyDirectories(IEnumerable<string> roots, CancellationToken ct)

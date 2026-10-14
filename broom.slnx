@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="broom.csproj" />
+  <Project Path="broom.Tests/broom.Tests.csproj" />
+</Solution>

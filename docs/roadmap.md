@@ -10,6 +10,9 @@
 > P1 落地(2026-10-14):backlog P1 第 1 项的时间过滤部分(本文档第 7 项)与第 2 项(第 8 项)已实现;时间过滤的扫描 / 删除前复核、排除去重与校验经临时校验程序验证(12 项通过),GUI 冒烟测试通过。大小过滤语义未定,不在本期范围。
 > 大小过滤定案(2026-10-14):不做引擎级大小过滤 —— 轻量需求以第 9 项「文件明细大小筛选」承接并已实现,深度需求归 backlog 第 20 项「大文件 / 磁盘占用分析」;评审依据见第 9 项顶部。
 > 安全擦除(2026-10-14):backlog P1 第 3 项(本文档第 10 项)已实现,覆写落在永久删除与隔离区清理两个销毁点;验证情况见该项实现说明。
+> 清理前创建还原点(2026-10-14):backlog P1 第 4 项(本文档第 11 项)已实现 —— **P1「安全与可控」四项全部完成**;验证情况见该项实现说明。
+> 单元测试项目(2026-10-14):backlog 第 25 项(本文档第 12 项)已落地 —— `broom.Tests` 64 个测试覆盖扫描 / 清理 / 设置 / 规则不变量与 P1 已交付能力,根目录 `dotnet test` 全量回归;详见该项实现说明。
+> CI(2026-10-14):backlog 第 26 项(本文档第 13 项)已落地 —— 工程基础(#25 测试、#26 CI)就绪;真实 Actions 运行待推送后核对。
 
 ## 1. 扫描 / 清理取消
 
@@ -363,6 +366,119 @@
 - 关闭覆写:行为与之前完全一致(含"文件不存在视为已清理");
 - 重启应用后设置仍生效;开启时清理报告给出覆写次数与"SSD / 写时复制文件系统效果有限"的提示。
 
+## 11. 清理前创建系统还原点
+
+> 来源:backlog P1 第 4 项(P1 收尾)。
+
+**目标**:批量清理之前自动创建一个 Windows 系统还原点,给系统类目的清理提供一键回滚;创建失败不阻塞清理。
+
+**现状(实现前)**
+
+- 回滚只有隔离区(文件级、有保留期限)一层;系统类目(系统临时、更新缓存、`Windows.old` 等)删除后没有系统级回滚手段;
+- 没有任何还原点相关能力。
+
+**方案**
+
+1. 平台抽象:`Platform/IRestorePointService`(`bool TryCreateRestorePoint(string description, out string error)`);Windows 实现 `Platform/WindowsRestorePointService` P/Invoke `srclient.dll!SRSetRestorePointW`(`BEGIN_SYSTEM_CHANGE` + `MODIFY_SETTINGS`,描述 256 字符内截断),按 `nStatus` 映射失败原因(5 = 需要管理员,1058 = 系统保护未开启,其余给错误码);非 Windows 平台由 [PlatformServices](../Platform/PlatformServices.cs) 返回占位实现;
+2. 设置模型:`Core/BroomSettings.CreateRestorePointBeforeClean`(默认关闭 —— 创建耗时、需要提权、占用系统保护空间,由用户显式开启);
+3. 清理流程:[MainWindowViewModel](../ViewModels/MainWindowViewModel.cs) 的清理在删除前(开启时)后台尝试创建还原点,描述为「broom 清理前还原点(时间)」;结果作为一行并入清理报告:成功给出名称,失败给出原因并注明"本次删除无法通过还原点回滚";
+4. 失败不阻塞:未提权、系统保护未开启、API 失败都只提示,清理照常进行;
+5. UI:设置页新增「系统还原点」卡片(开关 + 说明);说明中注明与 backlog 第 10 项「系统还原点与卷影副本清理」的语义冲突 —— 启用那类清理规则会删掉这些回滚点。
+
+**边界与限制**
+
+- 仅 Windows 且需要管理员权限;还原点只覆盖启用了系统保护的卷(通常为系统盘),对其他盘上的删除无效;
+- Windows 对还原点创建有频率限制(部分版本默认每 24 小时一个),重复创建可能被合并,报告如实反映 API 结果;
+- 与隔离区互补而非替代:隔离区管文件级回滚(可还原单个文件),还原点管系统状态回滚(整体回退);
+- 「重启后删除」的登记写在注册表,还原点回滚后需人工复核该项登记。
+
+**影响文件**
+
+- 新增 `Platform/IRestorePointService.cs`、`Platform/WindowsRestorePointService.cs`;[Platform/PlatformServices.cs](../Platform/PlatformServices.cs)(工厂 + 非 Windows 占位)
+- [Core/BroomSettings.cs](../Core/BroomSettings.cs)、[ViewModels/SettingsViewModel.cs](../ViewModels/SettingsViewModel.cs)、[ViewModels/MainWindowViewModel.cs](../ViewModels/MainWindowViewModel.cs)、[MainWindow.axaml](../MainWindow.axaml)
+
+> 实现说明:结构体按 `RESTOREPOINTINFOW` / `STATEMGRSTATUS` 的原生布局编组(528 / 16 字节,经校验);失败原因按 `nStatus` 映射(5 → 需要管理员,1058 → 系统保护未开启),创建在 `Task.Run` 中执行不阻塞界面。结构体布局、工厂 / 占位实现、真实 API 失败路径(非提权下调用返回「需要管理员权限」)与设置流转经临时校验程序验证(7 项通过);提权 + 系统保护开启下的真实创建需人工验收;GUI 冒烟测试通过。
+
+**验收标准**
+
+- 提权 + 系统保护开启 + 设置开启:清理前创建还原点,「创建还原点」列表出现「broom 清理前还原点(...)」,清理报告给出同样信息;
+- 未提权:报告提示"需要管理员权限,本次跳过",清理照常完成;
+- 系统保护未开启:报告给出对应提示,清理照常完成;
+- 关闭设置:清理过程不调用 API,报告无还原点相关行;
+- 重启应用后设置仍生效;创建失败(任意原因)都不阻塞、不中断本次清理。
+
+## 12. 单元测试项目(回归防线)
+
+> 来源:backlog 第 25 项(工程基础);此前历次功能靠临时校验程序验证,用完即删、不可回归。
+
+**目标**:把扫描 / 清理 / 设置 / 规则不变量固化为可重复运行的单元测试,任何改动都能一键回归;为 CI(backlog 第 26 项)提供 `dotnet test` 入口。
+
+**现状(实现前)**
+
+- 仓库没有任何测试项目;P1 各项的验证程序均为临时产物;
+- [SettingsService](../Services/SettingsService.cs) 写死 `%APPDATA%\broom`,无法在临时目录中隔离测试。
+
+**方案**
+
+1. 新增 `broom.Tests`(xUnit,目标框架与主项目一致),项目引用主工程;`broom.sln` 收纳两个项目,根目录 `dotnet test` 即可全量回归;
+2. 主工程开放内部可见:[broom.csproj](../broom.csproj) 增加 `InternalsVisibleTo("broom.Tests")`(还原点结构体布局等编组测试需要);
+3. 可测性改造(唯一的产品代码改动):[SettingsService](../Services/SettingsService.cs) 构造函数支持注入目录(默认仍为 `%APPDATA%\broom`,行为不变),沿用 `QuarantineService` 根目录可注入的既有做法;
+4. 覆盖范围(backlog 建议 + 已交付能力固化):
+   - **Scanner**:路径模板展开(环境变量 / 通配符)、包含与排除模式、全局排除目录(段边界)与排除文件、`skipRecentDays` 时间过滤;
+   - **Cleaner**:删除与失败统计、取消(`WasCancelled` / `SkippedRules`)、`skipRecentDays` 删除前复核、`BytesRemoved` 只计实际删除;
+   - **SettingsService**:读写往返、文件缺失返回默认值、损坏 JSON 改名 `settings.bad.json` 并回退;
+   - **规则不变量**([WindowsRuleSet](../Rules/WindowsRuleSet.cs)):Id 非空且唯一、显示名 / 类别非空、Paths 类规则路径模板非空、`Recommended` 只出现在安全项、平台标识一致、自定义规则合并;
+   - **P1 已交付能力**:安全擦除(硬链接观察内容已覆写、失败保留、隔离区清理覆写)、设置去重 / 校验、明细大小筛选、还原点结构体编组布局与占位实现。
+5. 不测:真实 GUI 交互(保留冒烟流程)、真实的系统还原点创建(有系统副作用,沿用提权人工验收)、真实回收站 Shell 调用。
+
+**影响文件**
+
+- 新增 `broom.Tests/`(测试项目)、`broom.sln`
+- [broom.csproj](../broom.csproj)、[Services/SettingsService.cs](../Services/SettingsService.cs)
+
+> 实现说明:64 个测试分 8 个测试类,全部使用临时目录、互不共享状态;`broom.slnx`(.NET 10 默认格式)收纳两个项目。测试落地过程中发现并修复一处统计问题:取消时未处理的文件尾部曾被计入 `BytesRemoved`(改为按已处理前缀统计);另做了变异验证 —— 注掉删除前复核后 `Clean_SkipRecentDays_RechecksBeforeDeleting` 变红。`dotnet test` 64/64 通过并重复运行稳定,GUI 冒烟通过。
+
+**验收标准**
+
+- 根目录 `dotnet test` 全部通过,重复运行结果稳定(测试无共享状态,全部使用临时目录);
+- 覆盖范围内的行为均有断言:时间过滤(扫描 + 删除前复核)、排除段边界、取消统计、损坏设置回退、规则不变量、安全擦除覆写语义;
+- 人为破坏任一被测行为(例如去掉删除前复核)后对应测试变红;
+- 主程序行为不变(默认设置路径不落地测试目录,GUI 冒烟通过)。
+
+## 13. CI(构建 + 测试)
+
+> 来源:backlog 第 26 项(工程基础)。
+
+**目标**:每次 push / PR 自动构建并运行单元测试,把第 12 项的回归防线前移到提交时刻;为后续发布打包留出可复用的工作流骨架。
+
+**现状(实现前)**
+
+- 仓库没有 `.github`,PR 无自动构建与测试,问题只能本地发现;
+- `broom.Tests`(第 12 项)已就绪,`dotnet test broom.slnx` 可一键回归。
+
+**方案**
+
+1. 新增 [.github/workflows/ci.yml](../.github/workflows/ci.yml):
+   - 触发:push 到 `main` + 所有 pull_request;
+   - `windows-latest`:回收站 / 提权 / 还原点均为 Windows 能力,测试只在 Windows 上完整生效;
+   - 步骤:checkout → `actions/setup-dotnet`(`10.0.x`,与 `TargetFramework=net10.0` 对齐)→ NuGet 缓存(`actions/cache`,键含 csproj 哈希)→ `dotnet restore` → `dotnet build -c Release --no-restore` → `dotnet test -c Release --no-build`;
+   - 最小权限:`permissions: contents: read`。
+2. CI 用 Release 配置(发布口径;诊断支持包按 `Configuration` 条件裁剪,恰好覆盖两套配置的构建差异);
+3. 本项范围外:多平台矩阵(引擎尚无 macOS / Linux 规则集,见 backlog 第 24 项)、格式检查、发布打包工作流(backlog 第 19 项)。
+
+**影响文件**
+
+- 新增 `.github/workflows/ci.yml`
+
+> 实现说明:工作流含 NuGet 缓存(`actions/cache`,键含 csproj 哈希)与最小权限 `contents: read`;本地已按同组 Release 命令验证(构建 0 警告、64/64 测试通过)。真实推送后的 Actions 运行为最终验收项。
+
+**验收标准**
+
+- 提交并推送后 Actions 出现「CI」工作流,构建 + 64 个测试全绿;
+- 人为制造编译错误或失败测试后,CI 变红并体现在 PR 状态上;
+- 工作流只带 `contents: read` 最小权限;
+- 本地按同一组 Release 命令执行与 CI 一致且通过。
+
 ## 依赖关系与建议顺序
 
 | 顺序 | 项 | 理由 |
@@ -377,5 +493,8 @@
 | 8 | 排除操作增强 | 复用文件明细与排除持久化,与第 7 项独立,可并行 |
 | 9 | 文件明细大小筛选 | 只动明细展示层,与其余各项独立 |
 | 10 | 安全擦除(覆写删除) | 只动删除路径与设置项;覆写落在永久删除与隔离区清理两处销毁点 |
+| 11 | 清理前创建系统还原点 | 只动清理前置步骤与设置项,新增平台服务,与其余各项独立 |
+| 12 | 单元测试项目 | 工程基础,不改产品行为(SettingsService 仅加可注入目录);其余各项的回归防线 |
+| 13 | CI(构建 + 测试) | 工程基础,依赖第 12 项的 `dotnet test` 入口 |
 
 各项相互独立,可单独交付;建议每项完成后跑一次「扫描 → 清理 → 报告」全流程,外加一次 GUI 冒烟测试(启动应用、确认窗口创建、关闭)。

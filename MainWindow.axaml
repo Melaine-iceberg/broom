@@ -442,6 +442,19 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- 系统还原点 -->
+                    <Border Classes="card">
+                        <StackPanel Spacing="12">
+                            <TextBlock Classes="h2" Text="系统还原点"/>
+                            <TextBlock Classes="muted" TextWrapping="Wrap"
+                                       Text="开启后在每次清理前尝试创建 Windows 系统还原点,为系统类目的清理提供一键回滚;失败不会阻塞清理,原因写进清理报告。"/>
+                            <CheckBox Content="清理前创建系统还原点(需要管理员权限)"
+                                      IsChecked="{Binding SettingsEditor.CreateRestorePointBeforeClean}"/>
+                            <TextBlock Classes="muted" TextWrapping="Wrap"
+                                       Text="仅对启用了系统保护的卷有效(通常为系统盘),创建需要数秒到数十秒,Windows 对创建频率另有限制。注意:将来启用「系统还原点与卷影副本清理」类目会删除这些回滚点,两者语义互斥。"/>
+                        </StackPanel>
+                    </Border>
+
                     <!-- 其他选项 -->
                     <Border Classes="card">
                         <StackPanel Spacing="12">

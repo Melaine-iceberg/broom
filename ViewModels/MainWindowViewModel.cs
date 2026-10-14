@@ -16,6 +16,7 @@ public partial class MainWindowViewModel : ObservableObject
     private readonly SettingsService _settingsService = new();
     private readonly IElevationService _elevation = PlatformServices.CreateElevationService();
     private readonly IRebootDeleteService _rebootDeletes = PlatformServices.CreateRebootDeleteService();
+    private readonly IRestorePointService _restorePoints = PlatformServices.CreateRestorePointService();
     private readonly QuarantineService _quarantine = new();
     private readonly List<DeleteFailure> _pendingRebootDeletes = [];
     private IReadOnlyList<RuleScanResult>? _lastScan;
@@ -563,6 +564,14 @@ public partial class MainWindowViewModel : ObservableObject
         var cancelled = false;
         try
         {
+            // 先建回滚点再动手;失败(未提权 / 系统保护未开启)只提示,不阻塞清理
+            string? restoreNote = null;
+            if (Settings.CreateRestorePointBeforeClean)
+            {
+                StatusText = "正在创建系统还原点…";
+                restoreNote = await Task.Run(CreateRestorePointNote);
+            }
+
             var (deleter, warning) = CreateDeleter();
             var progress = new Progress<CleanProgress>(p =>
             {
@@ -571,7 +580,7 @@ public partial class MainWindowViewModel : ObservableObject
             });
 
             var report = await _cleaner.CleanAsync(selected, deleter, progress, cts.Token, Settings.SkipRecentDays);
-            ReportText = BuildReport(report, deleter, warning);
+            ReportText = BuildReport(report, deleter, warning, restoreNote);
             SetPendingRebootDeletes(report);
             QuarantineCount = _lastQuarantineSession?.RestorableCount ?? 0;
             cancelled = report.WasCancelled;
@@ -812,10 +821,34 @@ public partial class MainWindowViewModel : ObservableObject
         return (new PermanentFileDeleter(Settings.SecureErasePasses), "当前平台暂不支持回收站,本次改为永久删除。");
     }
 
-    private string BuildReport(CleanupReport report, IFileDeleter deleter, string? warning)
+    /// <summary>清理前创建系统还原点;失败不阻塞清理,返回的说明文字并入清理报告。</summary>
+    private string CreateRestorePointNote()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return "未创建系统还原点:当前平台暂不支持。";
+        }
+
+        if (!IsElevated)
+        {
+            return "未创建系统还原点:需要管理员权限(可点击“以管理员身份重启”),本次跳过。";
+        }
+
+        var description = $"broom 清理前还原点({DateTime.Now:yyyy-MM-dd HH:mm})";
+        return _restorePoints.TryCreateRestorePoint(description, out var error)
+            ? $"已创建系统还原点:{description}。"
+            : $"未创建系统还原点:{error}清理继续,本次删除无法通过还原点回滚。";
+    }
+
+    private string BuildReport(CleanupReport report, IFileDeleter deleter, string? warning, string? restoreNote)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"{deleter.Name}:清理 {report.TotalDeleted:N0} 项,共 {Formatting.FormatBytes(report.TotalBytesRemoved)}。");
+        if (restoreNote is not null)
+        {
+            sb.AppendLine(restoreNote);
+        }
+
         if (report.WasCancelled)
         {
             sb.AppendLine("清理已取消,以上为已完成的部分。");

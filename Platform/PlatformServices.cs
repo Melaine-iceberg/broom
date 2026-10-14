@@ -22,6 +22,16 @@ public static class PlatformServices
 
         return new UnsupportedRebootDeleteService();
     }
+
+    public static IRestorePointService CreateRestorePointService()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return new WindowsRestorePointService();
+        }
+
+        return new UnsupportedRestorePointService();
+    }
 }
 
 /// <summary>非 Windows 平台:不支持管理员提权。</summary>
@@ -44,6 +54,16 @@ public sealed class UnsupportedRebootDeleteService : IRebootDeleteService
     public bool TrySchedule(string path, out string error)
     {
         error = "当前平台暂不支持重启后删除。";
+        return false;
+    }
+}
+
+/// <summary>非 Windows 平台:不支持系统还原点。</summary>
+public sealed class UnsupportedRestorePointService : IRestorePointService
+{
+    public bool TryCreateRestorePoint(string description, out string error)
+    {
+        error = "当前平台暂不支持系统还原点。";
         return false;
     }
 }

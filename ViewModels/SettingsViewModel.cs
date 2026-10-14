@@ -28,6 +28,7 @@ public partial class SettingsViewModel : ObservableObject
             ?? SkipRecentOptions[0];
         SelectedSecureErase = SecureEraseOptions.FirstOrDefault(o => o.Passes == settings.SecureErasePasses)
             ?? SecureEraseOptions[0];
+        CreateRestorePointBeforeClean = settings.CreateRestorePointBeforeClean;
     }
 
     /// <summary>保存结果已就绪时触发(参数为 null 表示取消),窗口据此关闭。</summary>
@@ -82,6 +83,9 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private SecureEraseOption _selectedSecureErase;
+
+    [ObservableProperty]
+    private bool _createRestorePointBeforeClean;
 
     [ObservableProperty]
     private bool _quarantineEnabled;
@@ -191,6 +195,7 @@ public partial class SettingsViewModel : ObservableObject
             QuarantineRetentionDays = SelectedQuarantineRetention.Days,
             SkipRecentDays = SelectedSkipRecent.Days,
             SecureErasePasses = SelectedSecureErase.Passes,
+            CreateRestorePointBeforeClean = CreateRestorePointBeforeClean,
         };
         error = "";
         return true;

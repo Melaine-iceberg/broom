@@ -12,9 +12,10 @@ public sealed class SettingsService
     private readonly string _directory;
     private readonly string _filePath;
 
-    public SettingsService()
+    /// <param name="directory">设置目录;留空时使用 %APPDATA%\broom(测试可注入临时目录隔离)。</param>
+    public SettingsService(string? directory = null)
     {
-        _directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "broom");
+        _directory = directory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "broom");
         _filePath = Path.Combine(_directory, "settings.json");
     }
 

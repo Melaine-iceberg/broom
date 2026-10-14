@@ -9,6 +9,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- 测试项目位于子目录,避免主工程的默认通配把它编进来 -->
+    <Compile Remove="broom.Tests\**" />
+    <None Remove="broom.Tests\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="broom.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.4" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />

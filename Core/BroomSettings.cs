@@ -33,6 +33,9 @@ public sealed class BroomSettings
 
     /// <summary>安全擦除:真正永久删除前的随机覆写次数(0 = 不覆写,可选 1 / 3)。</summary>
     public int SecureErasePasses { get; set; }
+
+    /// <summary>清理前尝试创建 Windows 系统还原点(需要管理员权限与已开启的系统保护)。</summary>
+    public bool CreateRestorePointBeforeClean { get; set; }
 }
 
 /// <summary>用户自定义的清理目录。</summary>
