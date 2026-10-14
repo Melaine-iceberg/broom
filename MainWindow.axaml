@@ -282,8 +282,9 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <!-- 清理报告 -->
-                <Border Grid.Row="4" Classes="card" Margin="0,16,0,0" MaxHeight="230"
+                <!-- 清理报告 + 清理历史 -->
+                <Grid Grid.Row="4" RowDefinitions="Auto,Auto">
+                <Border Grid.Row="0" Classes="card" Margin="0,16,0,0" MaxHeight="230"
                         IsVisible="{Binding HasReport}">
                     <DockPanel>
                         <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto">
@@ -317,6 +318,37 @@
                         </ScrollViewer>
                     </DockPanel>
                 </Border>
+
+                    <!-- 清理历史:本次 / 累计释放与最近记录 -->
+                    <Border Grid.Row="1" Classes="card" Margin="0,12,0,0">
+                        <StackPanel Spacing="8">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Classes="h2" Text="清理历史" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Classes="muted" VerticalAlignment="Center"
+                                           Text="{Binding HistorySummaryText}"/>
+                            </Grid>
+                            <ScrollViewer MaxHeight="128">
+                                <ItemsControl ItemsSource="{Binding HistoryItems}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:HistoryItemViewModel">
+                                            <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,1">
+                                                <TextBlock Grid.Column="0" Classes="muted" Width="82"
+                                                           Text="{Binding TimeText}"/>
+                                                <TextBlock Grid.Column="1" Classes="muted"
+                                                           Text="{Binding DetailText}"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Grid.Column="2" Classes="muted" Margin="12,0,0,0"
+                                                           Text="{Binding SizeText}"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                            <TextBlock Classes="muted" TextWrapping="Wrap"
+                                       Text="每次清理(含自动清理与命令行)都会记录到 %APPDATA%\broom\history.json,重启后累计数据仍在。"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
             </Grid>
 
             <!-- ──────── 设置页 ──────── -->
@@ -459,6 +491,97 @@
                                       IsChecked="{Binding SettingsEditor.CreateRestorePointBeforeClean}"/>
                             <TextBlock Classes="muted" TextWrapping="Wrap"
                                        Text="仅对启用了系统保护的卷有效(通常为系统盘),创建需要数秒到数十秒,Windows 对创建频率另有限制。注意:勾选「旧还原点与卷影副本」类目会删除这些回滚点,两者语义互斥。"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 自动化与托盘 -->
+                    <Border Classes="card">
+                        <StackPanel Spacing="12">
+                            <TextBlock Classes="h2" Text="自动化与托盘"/>
+                            <TextBlock Classes="muted" TextWrapping="Wrap"
+                                       Text="开启自动清理后 broom 常驻托盘,到点按下面的范围清理;一律移入回收站(不永久删除),结果计入清理历史并弹出通知。"/>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock Text="频率" VerticalAlignment="Center"/>
+                                <ComboBox Width="132"
+                                          ItemsSource="{Binding SettingsEditor.AutoCleanFrequencyOptions}"
+                                          SelectedItem="{Binding SettingsEditor.SelectedAutoCleanFrequency}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:AutoCleanFrequencyOption">
+                                            <TextBlock Text="{Binding Label}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <TextBlock Text="时刻" VerticalAlignment="Center"
+                                           IsVisible="{Binding SettingsEditor.IsAutoCleanEnabled}"/>
+                                <ComboBox Width="112" IsVisible="{Binding SettingsEditor.IsAutoCleanEnabled}"
+                                          ItemsSource="{Binding SettingsEditor.AutoCleanHourOptions}"
+                                          SelectedItem="{Binding SettingsEditor.SelectedAutoCleanHour}"
+                                          ToolTip.Tip="按本地时间执行;错过时刻(如关机 / 休眠)顺延到下一次,不补跑。">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:AutoCleanHourOption">
+                                            <TextBlock Text="{Binding Label}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="10"
+                                        IsVisible="{Binding SettingsEditor.IsWeekly}">
+                                <TextBlock Text="每周" VerticalAlignment="Center"/>
+                                <ComboBox Width="132"
+                                          ItemsSource="{Binding SettingsEditor.AutoCleanDayOfWeekOptions}"
+                                          SelectedItem="{Binding SettingsEditor.SelectedAutoCleanDayOfWeek}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:AutoCleanDayOfWeekOption">
+                                            <TextBlock Text="{Binding Label}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="10"
+                                        IsVisible="{Binding SettingsEditor.IsMonthly}">
+                                <TextBlock Text="每月" VerticalAlignment="Center"/>
+                                <ComboBox Width="132"
+                                          ItemsSource="{Binding SettingsEditor.AutoCleanDayOfMonthOptions}"
+                                          SelectedItem="{Binding SettingsEditor.SelectedAutoCleanDayOfMonth}"
+                                          ToolTip.Tip="每月按日期执行(1–28,避免短月份跳过)。">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:AutoCleanDayOfMonthOption">
+                                            <TextBlock Text="{Binding Label}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="10"
+                                        IsVisible="{Binding SettingsEditor.IsAutoCleanEnabled}">
+                                <TextBlock Text="清理范围" VerticalAlignment="Center"/>
+                                <ComboBox Width="184"
+                                          ItemsSource="{Binding SettingsEditor.AutoCleanScopeOptions}"
+                                          SelectedItem="{Binding SettingsEditor.SelectedAutoCleanScope}"
+                                          ToolTip.Tip="自动删除必须可预期:推荐只清安全项;“上次勾选的项目”按清理页当前的选择执行。">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:AutoCleanScopeOption">
+                                            <TextBlock Text="{Binding Label}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
+                            <CheckBox Content="关闭主窗口时最小化到托盘(保持后台定时清理)"
+                                      IsChecked="{Binding SettingsEditor.CloseToTray}"/>
+                            <TextBlock Classes="muted" TextWrapping="Wrap"
+                                       Text="托盘图标左键打开主界面,右键菜单可“立即清理”或真正退出。自动清理只在 broom 运行时执行;需要关机后仍可清理时,用命令行接入 Windows 计划任务:broom --clean safe --yes --report %APPDATA%\broom\auto-clean.txt。"/>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock Text="磁盘空间提醒" VerticalAlignment="Center"/>
+                                <ComboBox Width="156"
+                                          ItemsSource="{Binding SettingsEditor.LowDiskOptions}"
+                                          SelectedItem="{Binding SettingsEditor.SelectedLowDisk}"
+                                          ToolTip.Tip="固定磁盘可用空间低于阈值时弹出通知;每块盘只提醒一次,恢复后再次跌破会再提醒。">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:LowDiskOption">
+                                            <TextBlock Text="{Binding Label}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
                         </StackPanel>
                     </Border>
 

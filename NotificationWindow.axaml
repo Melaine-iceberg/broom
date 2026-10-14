@@ -1,0 +1,25 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="broom.NotificationWindow"
+        Title="broom 通知"
+        Width="360" SizeToContent="Height"
+        CanResize="False"
+        WindowDecorations="None"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Topmost="True"
+        Background="Transparent"
+        WindowStartupLocation="Manual">
+
+    <Border Margin="8" Padding="14" CornerRadius="10"
+            Background="{DynamicResource Brush.Surface}"
+            BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1"
+            PointerPressed="OnPointerPressed">
+        <StackPanel Spacing="4">
+            <TextBlock x:Name="TitleText" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Brush.Text}"/>
+            <TextBlock x:Name="MessageText" TextWrapping="Wrap" FontSize="12"
+                       Foreground="{DynamicResource Brush.TextSecondary}"/>
+        </StackPanel>
+    </Border>
+</Window>

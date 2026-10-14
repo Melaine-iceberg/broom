@@ -133,4 +133,41 @@ public class SettingsViewModelTests
         Assert.True(editor.CreateRestorePointBeforeClean);
         Assert.Equal(@"C:\keep", editor.ExcludedPathsText);
     }
+
+    [Fact]
+    public void AutomationOptions_FlowIntoModel()
+    {
+        var editor = CreateEditor();
+        editor.SelectedAutoCleanFrequency = editor.AutoCleanFrequencyOptions.Single(o => o.Frequency == AutoCleanFrequency.Weekly);
+        editor.SelectedAutoCleanHour = editor.AutoCleanHourOptions.Single(o => o.Hour == 5);
+        editor.SelectedAutoCleanDayOfWeek = editor.AutoCleanDayOfWeekOptions.Single(o => o.DayOfWeek == 3);
+        editor.SelectedAutoCleanDayOfMonth = editor.AutoCleanDayOfMonthOptions.Single(o => o.DayOfMonth == 20);
+        editor.SelectedAutoCleanScope = editor.AutoCleanScopeOptions.Single(o => o.Scope == AutoCleanScope.SelectedRules);
+        editor.CloseToTray = false;
+        editor.SelectedLowDisk = editor.LowDiskOptions.Single(o => o.ThresholdGb == 50);
+
+        var ok = editor.TryBuild(out var settings, out _);
+
+        Assert.True(ok);
+        Assert.Equal(AutoCleanFrequency.Weekly, settings.AutoCleanFrequency);
+        Assert.Equal(5, settings.AutoCleanHour);
+        Assert.Equal(3, settings.AutoCleanDayOfWeek);
+        Assert.Equal(20, settings.AutoCleanDayOfMonth);
+        Assert.Equal(AutoCleanScope.SelectedRules, settings.AutoCleanScope);
+        Assert.False(settings.CloseToTray);
+        Assert.Equal(50, settings.LowDiskThresholdGb);
+        Assert.True(editor.IsWeekly);
+        Assert.False(editor.IsMonthly);
+    }
+
+    [Fact]
+    public void AutomationOptions_DefaultsKeepAutoCleanOff()
+    {
+        var editor = CreateEditor();
+
+        Assert.False(editor.IsAutoCleanEnabled);
+        Assert.False(editor.IsWeekly);
+        Assert.False(editor.IsMonthly);
+        Assert.True(editor.CloseToTray);
+    }
 }

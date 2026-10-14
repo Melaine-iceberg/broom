@@ -22,6 +22,13 @@ public class SettingsServiceTests
         Assert.False(settings.CreateRestorePointBeforeClean);
         Assert.Null(settings.SelectedRuleIds);
         Assert.False(settings.RemoveEmptyDirectories);
+        Assert.Equal(AutoCleanFrequency.Off, settings.AutoCleanFrequency);
+        Assert.Equal(2, settings.AutoCleanHour);
+        Assert.Equal(1, settings.AutoCleanDayOfWeek);
+        Assert.Equal(1, settings.AutoCleanDayOfMonth);
+        Assert.Equal(AutoCleanScope.SafeOnly, settings.AutoCleanScope);
+        Assert.True(settings.CloseToTray);
+        Assert.Equal(20, settings.LowDiskThresholdGb);
     }
 
     [Fact]
@@ -43,6 +50,13 @@ public class SettingsServiceTests
             CreateRestorePointBeforeClean = true,
             SelectedRuleIds = ["user-temp", "browser-cache"],
             RemoveEmptyDirectories = true,
+            AutoCleanFrequency = AutoCleanFrequency.Weekly,
+            AutoCleanHour = 3,
+            AutoCleanDayOfWeek = 6,
+            AutoCleanDayOfMonth = 15,
+            AutoCleanScope = AutoCleanScope.SelectedRules,
+            CloseToTray = false,
+            LowDiskThresholdGb = 50,
         };
 
         service.Save(settings);
@@ -61,6 +75,13 @@ public class SettingsServiceTests
         Assert.True(loaded.CreateRestorePointBeforeClean);
         Assert.Equal(settings.SelectedRuleIds, loaded.SelectedRuleIds);
         Assert.True(loaded.RemoveEmptyDirectories);
+        Assert.Equal(AutoCleanFrequency.Weekly, loaded.AutoCleanFrequency);
+        Assert.Equal(3, loaded.AutoCleanHour);
+        Assert.Equal(6, loaded.AutoCleanDayOfWeek);
+        Assert.Equal(15, loaded.AutoCleanDayOfMonth);
+        Assert.Equal(AutoCleanScope.SelectedRules, loaded.AutoCleanScope);
+        Assert.False(loaded.CloseToTray);
+        Assert.Equal(50, loaded.LowDiskThresholdGb);
     }
 
     [Fact]

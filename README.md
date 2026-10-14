@@ -16,6 +16,9 @@ Windows 磁盘清理工具:把「什么是垃圾」写成纯数据规则,先扫�
 - **随时中止**:扫描 / 清理支持取消,取消时仍产出部分清理报告
 - **管理员提权**:系统目录类规则标记「需要管理员权限」,可在应用内一键重启提权
 - **规则管理**:自定义清理目录(含包含 / 排除模式)、搜索、风险筛选、排序,分组展示
+- **命令行 / 无人值守**:`broom --scan|--clean [safe|all] --dry-run --report out.txt --yes`,约定退出码,可接入 Windows 计划任务或脚本
+- **自动化与托盘**:每周 / 每月 / 每天定时自动清理(范围可预期:仅安全项或上次勾选,一律走回收站),托盘常驻、可关闭窗口后继续运行;磁盘可用空间低于阈值时弹出提醒
+- **清理历史**:每次清理(含自动清理与命令行)计入 `%APPDATA%\broom\history.json`,界面展示「本次释放 / 累计释放」与最近记录
 
 ## 构建与运行
 
@@ -29,6 +32,24 @@ dotnet publish -c Release       # 发布(打包分发方案见 backlog 第 19 �
 ```
 
 默认以普通权限运行;清理系统目录(如 `C:\Windows\Temp`、Prefetch)需要管理员权限,清理失败时应用会提示一键重启提权。
+
+## 命令行与自动化
+
+不启动界面直接跑扫描 / 清理(同一套引擎与设置,排除项、时间过滤、隔离区行为与界面一致):
+
+```powershell
+broom --scan --report scan.txt            # 只读扫描并把报告存为文件
+broom --clean safe --dry-run              # 预演:按“仅安全项”扫描并输出报告,不删除
+broom --clean safe --yes --report clean.txt   # 无人值守清理安全项(计划任务 / 脚本用)
+broom --clean all --yes                   # 清理全部规则(含谨慎与高风险,不可逆类目也会执行)
+```
+
+- `--clean [safe|all]`:`safe`(默认)只清安全项;`all` 含谨慎与高风险项 —— 不可逆类目会真正执行,请确认后再用
+- `--yes` 必须显式给出才会跳过确认;缺少时会提示 `[y/N]`,拒绝或无输入即取消
+- 退出码:`0` 成功;`1` 有失败项或运行错误;`2` 参数错误;`3` 未确认或被取消
+- 接入 Windows 计划任务示例:`schtasks /create /tn "broom auto clean" /sc weekly /tr "broom.exe --clean safe --yes --report %APPDATA%\broom\auto-clean.txt"`
+
+界面内可开启定时自动清理(设置 → 自动化与托盘):每天 / 每周 / 每月到点执行,范围为仅安全项或上次勾选的项目,一律移入回收站(不永久删除),结果计入清理历史并弹出通知。自动清理只在 broom 运行时执行;关闭主窗口默认最小化到托盘保持常驻,托盘菜单可「立即清理」或真正退出。
 
 ## 清理规则总览
 
@@ -60,16 +81,18 @@ dotnet publish -c Release       # 发布(打包分发方案见 backlog 第 19 �
 
 | 内容 | 位置 |
 |---|---|
-| 设置(自定义目录、排除规则、默认选项) | `%APPDATA%\broom\settings.json` |
+| 设置(自定义目录、排除规则、默认选项、自动化) | `%APPDATA%\broom\settings.json` |
+| 清理历史与累计统计(含自动清理 / 命令行) | `%APPDATA%\broom\history.json`,最多保留 500 条 |
 | 隔离区(永久删除暂存、可还原) | `%LOCALAPPDATA%\broom\quarantine`,按清理会话分目录,按保留天数自动清理 |
 | 重启后删除登记 | 由系统在下次启动时处理,无需人工干预 |
 
 ## 项目结构
 
 ```
-Core/       规则与数据模型、路径模板展开、格式化
+Core/       规则与数据模型、路径模板展开、格式化、清理历史
 Rules/      Windows 内置规则集(纯数据)
-Services/   扫描器、清理器、设置持久化
+Services/   扫描器、清理器、设置与历史持久化、清理工作流、自动清理与磁盘看门通知
+Cli/        命令行模式:参数解析与无人值守执行
 Platform/   Windows 能力:回收站、提权、隔离区、重删、还原点、安全擦除
 ViewModels/ MVVM 视图模型(CommunityToolkit.Mvvm)
 Styles/     主题变量与控件样式(深浅色双主题)

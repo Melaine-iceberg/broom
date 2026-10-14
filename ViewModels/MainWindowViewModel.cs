@@ -12,13 +12,12 @@ namespace broom.ViewModels;
 
 public partial class MainWindowViewModel : ObservableObject
 {
-    private readonly Scanner _scanner = new();
-    private readonly Cleaner _cleaner = new();
     private readonly SettingsService _settingsService = new();
     private readonly IElevationService _elevation = PlatformServices.CreateElevationService();
     private readonly IRebootDeleteService _rebootDeletes = PlatformServices.CreateRebootDeleteService();
-    private readonly IRestorePointService _restorePoints = PlatformServices.CreateRestorePointService();
     private readonly QuarantineService _quarantine = new();
+    private readonly CleanupWorkflow _workflow;
+    private readonly CleanupHistoryService _historyService = new();
     private readonly List<DeleteFailure> _pendingRebootDeletes = [];
     private IReadOnlyList<RuleScanResult>? _lastScan;
     private QuarantineSession? _lastQuarantineSession;
@@ -32,6 +31,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     public MainWindowViewModel()
     {
+        _workflow = new CleanupWorkflow(_quarantine);
         Settings = _settingsService.Load();
         IsElevated = _elevation.IsElevated;
         PermanentDelete = Settings.DefaultPermanentDelete;
@@ -40,6 +40,7 @@ public partial class MainWindowViewModel : ObservableObject
         RebuildRules();
         ResetSettingsEditor();
         UpdateSummary();
+        RefreshHistory();
         PurgeExpiredQuarantine(Settings.QuarantineRetentionDays);
     }
 
@@ -172,6 +173,16 @@ public partial class MainWindowViewModel : ObservableObject
     public bool CanScheduleRebootDelete => PendingRebootCount > 0 && IsElevated && _rebootDeletes.IsSupported;
 
     public string ScheduleRebootDeleteText => $"安排重启后删除({PendingRebootCount})";
+
+    /// <summary>「本次释放 / 累计释放」摘要;历史为空且本次未清理时为占位文案。</summary>
+    [ObservableProperty]
+    private string _historySummaryText = "暂无清理历史";
+
+    /// <summary>最近的清理记录(新的在前)。</summary>
+    public ObservableCollection<HistoryItemViewModel> HistoryItems { get; } = [];
+
+    /// <summary>本会话内清理释放的累计字节数(重启应用后归零;累计值看历史)。</summary>
+    private long _sessionFreedBytes;
 
     [RelayCommand]
     private async Task ScanAsync()
@@ -584,15 +595,13 @@ public partial class MainWindowViewModel : ObservableObject
         var cancelled = false;
         try
         {
-            // 先建回滚点再动手;失败(未提权 / 系统保护未开启)只提示,不阻塞清理
-            string? restoreNote = null;
+            // 还原点创建在工作流内部完成;失败(未提权 / 系统保护未开启)只提示,不阻塞清理
             if (Settings.CreateRestorePointBeforeClean)
             {
                 StatusText = "正在创建系统还原点…";
-                restoreNote = await Task.Run(CreateRestorePointNote);
             }
 
-            var (deleter, warning) = CreateDeleter();
+            var request = new CleanupRequest { Settings = Settings, PermanentDelete = PermanentDelete, IsElevated = IsElevated };
             var progress = new Progress<CleanProgress>(p =>
             {
                 ProgressValue = p.RuleCount == 0 ? 0 : p.RuleIndex * 100.0 / p.RuleCount;
@@ -601,12 +610,13 @@ public partial class MainWindowViewModel : ObservableObject
                     : $"正在清理:{p.RuleName}";
             });
 
-            var report = await _cleaner.CleanAsync(selected, deleter, progress, cts.Token, Settings.SkipRecentDays,
-                removeEmptyDirectories: Settings.RemoveEmptyDirectories);
-            ReportText = BuildReport(report, deleter, warning, restoreNote);
-            SetPendingRebootDeletes(report);
+            var outcome = await _workflow.CleanAsync(selected, request, progress, cts.Token);
+            _lastQuarantineSession = outcome.QuarantineSession;
+            ReportText = BuildReport(outcome);
+            SetPendingRebootDeletes(outcome.Report);
             QuarantineCount = _lastQuarantineSession?.RestorableCount ?? 0;
-            cancelled = report.WasCancelled;
+            RecordCleanup(outcome.Report, CleanupHistoryEntry.SourceManual);
+            cancelled = outcome.Report.WasCancelled;
             StatusText = cancelled ? "已取消清理,报告中为已完成的部分。" : "清理完成。";
         }
         catch (OperationCanceledException)
@@ -658,7 +668,7 @@ public partial class MainWindowViewModel : ObservableObject
                     : $"正在扫描:{p.RuleName}";
             });
 
-            var results = await _scanner.ScanAsync(Rules.Select(r => r.Rule).ToList(), Settings.ExcludedPaths, Settings.ExcludedFiles, progress, cts.Token, Settings.SkipRecentDays);
+            var results = await _workflow.ScanAsync(Rules.Select(r => r.Rule).ToList(), Settings, progress, cts.Token);
             _lastScan = results;
             ApplyScanResults(results);
 
@@ -820,93 +830,93 @@ public partial class MainWindowViewModel : ObservableObject
         return _lastScan.Where(r => selectedRules.Contains(r.Rule)).ToList();
     }
 
-    private (IFileDeleter Deleter, string? Warning) CreateDeleter()
+    /// <summary>把一次清理计入历史,并刷新「本次释放 / 累计释放」与趋势列表;写历史失败不影响清理结果。</summary>
+    private void RecordCleanup(CleanupReport report, string source)
     {
-        _lastQuarantineSession = null;
-        if (PermanentDelete)
+        _sessionFreedBytes += report.TotalBytesRemoved;
+        try
         {
-            if (Settings.QuarantineEnabled)
-            {
-                // "永久删除"改为先移入隔离区:可在报告里还原,超过保留天数后自动清理
-                _lastQuarantineSession = _quarantine.CreateSession();
-                return (new QuarantineFileDeleter(_lastQuarantineSession), null);
-            }
-
-            return (new PermanentFileDeleter(Settings.SecureErasePasses), null);
+            _historyService.Append(CleanupHistoryEntry.FromReport(report, source));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
         }
 
-        if (OperatingSystem.IsWindows())
-        {
-            return (new WindowsRecycleBinDeleter(), null);
-        }
-
-        if (Settings.QuarantineEnabled)
-        {
-            _lastQuarantineSession = _quarantine.CreateSession();
-            return (new QuarantineFileDeleter(_lastQuarantineSession), "当前平台暂不支持回收站,本次改为移入隔离区。");
-        }
-
-        return (new PermanentFileDeleter(Settings.SecureErasePasses), "当前平台暂不支持回收站,本次改为永久删除。");
+        RefreshHistory();
     }
 
-    /// <summary>清理前创建系统还原点;失败不阻塞清理,返回的说明文字并入清理报告。</summary>
-    private string CreateRestorePointNote()
+    /// <summary>重新读取清理历史(启动时、清理后与外部自动清理完成后调用)。</summary>
+    public void RefreshHistory()
     {
-        if (!OperatingSystem.IsWindows())
+        var entries = _historyService.Load();
+        HistoryItems.Clear();
+        foreach (var entry in entries.AsEnumerable().Reverse().Take(6))
         {
-            return "未创建系统还原点:当前平台暂不支持。";
+            HistoryItems.Add(new HistoryItemViewModel(entry));
         }
 
-        if (!IsElevated)
+        var totalBytes = entries.Sum(e => e.BytesRemoved);
+        var parts = new List<string>();
+        if (_sessionFreedBytes > 0)
         {
-            return "未创建系统还原点:需要管理员权限(可点击“以管理员身份重启”),本次跳过。";
+            parts.Add($"本次释放 {Formatting.FormatBytes(_sessionFreedBytes)}");
         }
 
-        var description = $"broom 清理前还原点({DateTime.Now:yyyy-MM-dd HH:mm})";
-        return _restorePoints.TryCreateRestorePoint(description, out var error)
-            ? $"已创建系统还原点:{description}。"
-            : $"未创建系统还原点:{error}清理继续,本次删除无法通过还原点回滚。";
+        if (entries.Count > 0)
+        {
+            parts.Add($"累计释放 {Formatting.FormatBytes(totalBytes)}");
+            parts.Add($"共 {entries.Count:N0} 次清理");
+        }
+
+        HistorySummaryText = parts.Count == 0 ? "暂无清理历史" : string.Join(" · ", parts);
     }
 
-    private string BuildReport(CleanupReport report, IFileDeleter deleter, string? warning, string? restoreNote)
+    /// <summary>界面之外(自动清理 / 托盘“立即清理”)完成清理后同步历史与状态栏。</summary>
+    public void NotifyExternalClean(string summary, CleanupReport? report, string source)
     {
-        var sb = new StringBuilder();
-        sb.AppendLine($"{deleter.Name}:清理 {report.TotalDeleted:N0} 项,共 {Formatting.FormatBytes(report.TotalBytesRemoved)}。");
-
-        // 计入的字节数与磁盘实际释放可能不一致(回收站仍占用、覆写 / 稀疏等),用盘符前后对比说话
-        foreach (var delta in report.DriveSpace)
+        if (report is not null)
         {
-            var change = delta.FreedBytes >= 0
-                ? $"本次释放 +{Formatting.FormatBytes(delta.FreedBytes)}"
-                : $"可用不增反减 {Formatting.FormatBytes(-delta.FreedBytes)},可能受其他程序活动影响";
-            sb.AppendLine($"· 磁盘 {delta.Drive.TrimEnd('\\', '/')} 可用空间:{Formatting.FormatBytes(delta.FreeBefore)} → {Formatting.FormatBytes(delta.FreeAfter)}({change})");
+            RecordCleanup(report, source);
+        }
+        else
+        {
+            RefreshHistory();
         }
 
-        if (restoreNote is not null)
+        StatusText = summary;
+    }
+
+    private string BuildReport(CleanupOutcome outcome)
+    {
+        var report = outcome.Report;
+        var deleter = outcome.Deleter;
+        var notes = new List<string>();
+
+        if (outcome.RestorePointNote is not null)
         {
-            sb.AppendLine(restoreNote);
+            notes.Add(outcome.RestorePointNote);
         }
 
         if (report.WasCancelled)
         {
-            sb.AppendLine("清理已取消,以上为已完成的部分。");
+            notes.Add("清理已取消,以上为已完成的部分。");
         }
 
         if (deleter is WindowsRecycleBinDeleter)
         {
-            sb.AppendLine("提示:移入回收站的文件仍占用磁盘空间,清空回收站后才会真正释放。");
+            notes.Add("提示:移入回收站的文件仍占用磁盘空间,清空回收站后才会真正释放。");
         }
 
         if (deleter is QuarantineFileDeleter quarantineDeleter && quarantineDeleter.Session.RestorableCount > 0)
         {
-            sb.AppendLine(Settings.QuarantineRetentionDays > 0
+            notes.Add(Settings.QuarantineRetentionDays > 0
                 ? $"提示:隔离区中的文件仍占用磁盘空间,保留 {Settings.QuarantineRetentionDays} 天后自动删除;期间可在下方“还原”。"
                 : "提示:隔离区中的文件仍占用磁盘空间,会一直保留直到手动清空;期间可在下方“还原”。");
         }
 
         if (Settings.SecureErasePasses > 0)
         {
-            sb.AppendLine(deleter switch
+            notes.Add(deleter switch
             {
                 WindowsRecycleBinDeleter => "提示:回收站删除不经过安全擦除;覆写只作用于永久删除与隔离区清理。",
                 QuarantineFileDeleter => $"提示:安全擦除在隔离区清理时生效(覆写 {Settings.SecureErasePasses} 次后删除);移入隔离区本身不覆写。",
@@ -914,50 +924,20 @@ public partial class MainWindowViewModel : ObservableObject
             });
         }
 
-        if (warning is not null)
+        if (outcome.Warning is not null)
         {
-            sb.AppendLine(warning);
+            notes.Add(outcome.Warning);
         }
 
-        foreach (var result in report.Results)
-        {
-            if (result.DeletedCount == 0 && result.Failures.Count == 0 && result.Summary.Length == 0)
-            {
-                continue;
-            }
+        var footer = !IsElevated && report.Results.Any(r => r.Rule.RequiresAdmin && r.Failures.Count > 0)
+            ? "部分失败可通过提权重试 —— 点击右上角“以管理员身份重启”。"
+            : null;
 
-            // 动作型规则没有逐个删除的文件,用执行摘要代替计数
-            var summary = result.Summary.Length > 0
-                ? result.Summary
-                : $"{result.DeletedCount:N0} 项 / {Formatting.FormatBytes(result.BytesRemoved)}";
-            sb.AppendLine($"· {result.Rule.DisplayName}:{summary}");
-            foreach (var failure in result.Failures.Take(10))
-            {
-                sb.AppendLine($"    ✗ {failure.Path}({failure.Reason})");
-            }
-
-            if (result.Failures.Count > 10)
-            {
-                sb.AppendLine($"    …其余 {result.Failures.Count - 10} 项失败未列出");
-            }
-        }
-
-        if (report.EmptyDirectoriesRemoved > 0)
-        {
-            sb.AppendLine($"· 另回收空目录 {report.EmptyDirectoriesRemoved:N0} 个。");
-        }
-
-        if (report.SkippedRules.Count > 0)
-        {
-            sb.AppendLine($"· 未执行的规则:{string.Join("、", report.SkippedRules.Select(r => r.DisplayName))}");
-        }
-
-        if (!IsElevated && report.Results.Any(r => r.Rule.RequiresAdmin && r.Failures.Count > 0))
-        {
-            sb.AppendLine("部分失败可通过提权重试 —— 点击右上角“以管理员身份重启”。");
-        }
-
-        return sb.ToString().TrimEnd();
+        return ReportTextBuilder.Build(
+            report,
+            $"{deleter.Name}:清理 {report.TotalDeleted:N0} 项,共 {Formatting.FormatBytes(report.TotalBytesRemoved)}。",
+            notes,
+            footer);
     }
 
     private void UpdateSummary()
@@ -1175,14 +1155,5 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    private IReadOnlyList<CleanupRule> CreateRules()
-    {
-        var rules = WindowsRuleSet.Create(Settings).AsEnumerable();
-        if (!Settings.ShowHighRiskRules)
-        {
-            rules = rules.Where(r => r.Risk != RiskLevel.High);
-        }
-
-        return rules.ToList();
-    }
+    private IReadOnlyList<CleanupRule> CreateRules() => CleanupWorkflow.CreateRules(Settings);
 }

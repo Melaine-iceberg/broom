@@ -42,6 +42,50 @@ public sealed class BroomSettings
 
     /// <summary>清理后移除扫描根下的空目录(默认关闭;可能删除用户有意保留的空目录结构)。</summary>
     public bool RemoveEmptyDirectories { get; set; }
+
+    /// <summary>自动清理频率(Off = 关闭)。</summary>
+    public AutoCleanFrequency AutoCleanFrequency { get; set; } = AutoCleanFrequency.Off;
+
+    /// <summary>自动清理的执行时刻(本地时间,0–23 点)。</summary>
+    public int AutoCleanHour { get; set; } = 2;
+
+    /// <summary>每周自动清理的星期几(0 = 周日 … 6 = 周六),仅 <see cref="AutoCleanFrequency.Weekly"/> 生效。</summary>
+    public int AutoCleanDayOfWeek { get; set; } = 1;
+
+    /// <summary>每月自动清理的日期(1–28),仅 <see cref="AutoCleanFrequency.Monthly"/> 生效。</summary>
+    public int AutoCleanDayOfMonth { get; set; } = 1;
+
+    /// <summary>自动清理的范围:仅安全项(默认)或上次勾选的项目。</summary>
+    public AutoCleanScope AutoCleanScope { get; set; } = AutoCleanScope.SafeOnly;
+
+    /// <summary>关闭主窗口时最小化到托盘(保持后台定时清理与磁盘空间提醒);托盘菜单可真正退出。</summary>
+    public bool CloseToTray { get; set; } = true;
+
+    /// <summary>固定磁盘可用空间低于该阈值(GB)时提醒;0 = 不提醒。</summary>
+    public int LowDiskThresholdGb { get; set; } = 20;
+}
+
+/// <summary>自动清理的执行频率。</summary>
+public enum AutoCleanFrequency
+{
+    /// <summary>不自动清理。</summary>
+    Off,
+
+    Daily,
+
+    Weekly,
+
+    Monthly,
+}
+
+/// <summary>自动清理的项目范围。</summary>
+public enum AutoCleanScope
+{
+    /// <summary>只清理风险等级为“安全”的规则(默认,自动删除可预期)。</summary>
+    SafeOnly,
+
+    /// <summary>清理上次勾选的规则(从未保存过勾选时按规则默认勾选)。</summary>
+    SelectedRules,
 }
 
 /// <summary>用户自定义的清理目录。</summary>
@@ -71,6 +115,7 @@ public sealed class CustomRule
     UseStringEnumConverter = true,
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(BroomSettings))]
+[JsonSerializable(typeof(List<CleanupHistoryEntry>))]
 internal sealed partial class BroomJsonContext : JsonSerializerContext
 {
 }

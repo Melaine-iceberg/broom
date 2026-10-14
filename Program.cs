@@ -1,5 +1,7 @@
 ﻿using Avalonia;
 using System;
+using System.Threading;
+using broom.Cli;
 
 namespace broom;
 
@@ -9,8 +11,25 @@ class Program
     // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
     // yet and stuff might break.
     [STAThread]
-    public static void Main(string[] args) => BuildAvaloniaApp()
-        .StartWithClassicDesktopLifetime(args);
+    public static int Main(string[] args)
+    {
+        // 命令行 / 无人值守模式:不启动界面,扫描与清理直接跑完并返回退出码
+        if (CommandLineParser.LooksLikeCliRequest(args))
+        {
+            ConsoleHelper.EnsureConsole();
+            using var cts = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, e) =>
+            {
+                e.Cancel = true;
+                cts.Cancel();
+            };
+
+            return CliRunner.Run(args, Console.Out, Console.Error, ct: cts.Token);
+        }
+
+        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        return 0;
+    }
 
     // Avalonia configuration, don't remove; also used by visual designer.
     public static AppBuilder BuildAvaloniaApp()

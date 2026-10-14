@@ -32,6 +32,19 @@ public partial class SettingsViewModel : ObservableObject
             ?? SecureEraseOptions[0];
         CreateRestorePointBeforeClean = settings.CreateRestorePointBeforeClean;
         RemoveEmptyDirectories = settings.RemoveEmptyDirectories;
+        SelectedAutoCleanFrequency = AutoCleanFrequencyOptions.FirstOrDefault(o => o.Frequency == settings.AutoCleanFrequency)
+            ?? AutoCleanFrequencyOptions[0];
+        SelectedAutoCleanHour = AutoCleanHourOptions.FirstOrDefault(o => o.Hour == settings.AutoCleanHour)
+            ?? AutoCleanHourOptions[2];
+        SelectedAutoCleanDayOfWeek = AutoCleanDayOfWeekOptions.FirstOrDefault(o => o.DayOfWeek == settings.AutoCleanDayOfWeek)
+            ?? AutoCleanDayOfWeekOptions[0];
+        SelectedAutoCleanDayOfMonth = AutoCleanDayOfMonthOptions.FirstOrDefault(o => o.DayOfMonth == settings.AutoCleanDayOfMonth)
+            ?? AutoCleanDayOfMonthOptions[0];
+        SelectedAutoCleanScope = AutoCleanScopeOptions.FirstOrDefault(o => o.Scope == settings.AutoCleanScope)
+            ?? AutoCleanScopeOptions[0];
+        CloseToTray = settings.CloseToTray;
+        SelectedLowDisk = LowDiskOptions.FirstOrDefault(o => o.ThresholdGb == settings.LowDiskThresholdGb)
+            ?? LowDiskOptions[0];
     }
 
     /// <summary>保存结果已就绪时触发(参数为 null 表示取消),窗口据此关闭。</summary>
@@ -92,6 +105,82 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _removeEmptyDirectories;
+
+    /// <summary>自动清理频率选项。</summary>
+    public IReadOnlyList<AutoCleanFrequencyOption> AutoCleanFrequencyOptions { get; } =
+    [
+        new(AutoCleanFrequency.Off, "关闭"),
+        new(AutoCleanFrequency.Daily, "每天"),
+        new(AutoCleanFrequency.Weekly, "每周"),
+        new(AutoCleanFrequency.Monthly, "每月"),
+    ];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAutoCleanEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsWeekly))]
+    [NotifyPropertyChangedFor(nameof(IsMonthly))]
+    private AutoCleanFrequencyOption _selectedAutoCleanFrequency;
+
+    public bool IsAutoCleanEnabled => SelectedAutoCleanFrequency.Frequency != AutoCleanFrequency.Off;
+
+    public bool IsWeekly => SelectedAutoCleanFrequency.Frequency == AutoCleanFrequency.Weekly;
+
+    public bool IsMonthly => SelectedAutoCleanFrequency.Frequency == AutoCleanFrequency.Monthly;
+
+    /// <summary>自动清理时刻(本地时间)。</summary>
+    public IReadOnlyList<AutoCleanHourOption> AutoCleanHourOptions { get; } =
+        Enumerable.Range(0, 24).Select(h => new AutoCleanHourOption(h, $"{h:00}:00")).ToList();
+
+    [ObservableProperty]
+    private AutoCleanHourOption _selectedAutoCleanHour;
+
+    /// <summary>每周自动清理的星期几。</summary>
+    public IReadOnlyList<AutoCleanDayOfWeekOption> AutoCleanDayOfWeekOptions { get; } =
+    [
+        new(1, "周一"),
+        new(2, "周二"),
+        new(3, "周三"),
+        new(4, "周四"),
+        new(5, "周五"),
+        new(6, "周六"),
+        new(0, "周日"),
+    ];
+
+    [ObservableProperty]
+    private AutoCleanDayOfWeekOption _selectedAutoCleanDayOfWeek;
+
+    /// <summary>每月自动清理的日期(1–28,避免短月份跳过)。</summary>
+    public IReadOnlyList<AutoCleanDayOfMonthOption> AutoCleanDayOfMonthOptions { get; } =
+        Enumerable.Range(1, 28).Select(d => new AutoCleanDayOfMonthOption(d, $"{d} 日")).ToList();
+
+    [ObservableProperty]
+    private AutoCleanDayOfMonthOption _selectedAutoCleanDayOfMonth;
+
+    /// <summary>自动清理范围选项。</summary>
+    public IReadOnlyList<AutoCleanScopeOption> AutoCleanScopeOptions { get; } =
+    [
+        new(AutoCleanScope.SafeOnly, "仅安全项(推荐)"),
+        new(AutoCleanScope.SelectedRules, "上次勾选的项目"),
+    ];
+
+    [ObservableProperty]
+    private AutoCleanScopeOption _selectedAutoCleanScope;
+
+    [ObservableProperty]
+    private bool _closeToTray;
+
+    /// <summary>磁盘空间提醒阈值(GB;0 = 不提醒)。</summary>
+    public IReadOnlyList<LowDiskOption> LowDiskOptions { get; } =
+    [
+        new(0, "不提醒"),
+        new(10, "低于 10 GB"),
+        new(20, "低于 20 GB"),
+        new(50, "低于 50 GB"),
+        new(100, "低于 100 GB"),
+    ];
+
+    [ObservableProperty]
+    private LowDiskOption _selectedLowDisk;
 
     [ObservableProperty]
     private bool _quarantineEnabled;
@@ -204,6 +293,13 @@ public partial class SettingsViewModel : ObservableObject
             CreateRestorePointBeforeClean = CreateRestorePointBeforeClean,
             SelectedRuleIds = _selectedRuleIds,
             RemoveEmptyDirectories = RemoveEmptyDirectories,
+            AutoCleanFrequency = SelectedAutoCleanFrequency.Frequency,
+            AutoCleanHour = SelectedAutoCleanHour.Hour,
+            AutoCleanDayOfWeek = SelectedAutoCleanDayOfWeek.DayOfWeek,
+            AutoCleanDayOfMonth = SelectedAutoCleanDayOfMonth.DayOfMonth,
+            AutoCleanScope = SelectedAutoCleanScope.Scope,
+            CloseToTray = CloseToTray,
+            LowDiskThresholdGb = SelectedLowDisk.ThresholdGb,
         };
         error = "";
         return true;
@@ -261,3 +357,21 @@ public sealed record DayOption(int Days, string Label);
 
 /// <summary>安全擦除的覆写次数下拉项。</summary>
 public sealed record SecureEraseOption(int Passes, string Label);
+
+/// <summary>自动清理频率下拉项。</summary>
+public sealed record AutoCleanFrequencyOption(AutoCleanFrequency Frequency, string Label);
+
+/// <summary>自动清理时刻(小时)下拉项。</summary>
+public sealed record AutoCleanHourOption(int Hour, string Label);
+
+/// <summary>每周自动清理的星期几下拉项。</summary>
+public sealed record AutoCleanDayOfWeekOption(int DayOfWeek, string Label);
+
+/// <summary>每月自动清理的日期下拉项。</summary>
+public sealed record AutoCleanDayOfMonthOption(int DayOfMonth, string Label);
+
+/// <summary>自动清理范围下拉项。</summary>
+public sealed record AutoCleanScopeOption(AutoCleanScope Scope, string Label);
+
+/// <summary>磁盘空间提醒阈值下拉项(GB;0 = 不提醒)。</summary>
+public sealed record LowDiskOption(int ThresholdGb, string Label);

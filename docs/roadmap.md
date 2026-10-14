@@ -16,6 +16,7 @@
 > P2 规则扩充(2026-10-14):backlog 第 6–8 项(本文档第 14 项)已落地 —— 系统垃圾 / 应用缓存 / 浏览器覆盖共新增 15 条规则;聊天类只清缓存子目录、浏览器隐私独立成组且默认不勾选;动作型类目(事件日志 / DNS / DriverStore)留待「动作型规则」模型,见第 14 项。
 > P4 三个小件(2026-10-14):backlog 第 15–17 项(本文档第 15–17 项)已落地 —— 磁盘空间前后对比、勾选状态持久化、报告复制与扫描明细导出;验证情况见各项实现说明。
 > P2 收口(2026-10-14):「动作型规则」模型落地(本文档第 18 项),backlog 第 10、11 项与第 6 项遗留的事件日志 / DNS 类目随之实现;backlog 第 9 项(本文档第 19 项)以「清理后移除空目录」开关落地 —— **P2 全部完成**,仅 DriverStore 类目继续遗留。
+> P3 自动化(2026-10-14):backlog 第 12–14 项(本文档第 20–22 项)已落地 —— 定时自动清理 + 托盘常驻、命令行 / 无人值守、清理历史与累计统计;扫描 / 清理流程下沉为 `CleanupWorkflow`,GUI、CLI 与自动清理共用一条流水线。**P3 全部完成**;验证情况见各项实现说明。
 
 ## 1. 扫描 / 清理取消
 
@@ -688,6 +689,109 @@
 - 关闭时行为与旧版一致:非整目录规则清理后不回收空目录;
 - 开关状态经设置保存 / 重启后保留;`dotnet test` 全部通过。
 
+## 20. 定时 / 阈值自动清理 + 托盘常驻
+
+> 来源:backlog 第 12 项(P3 · 自动化)。
+
+**目标**:长期免维护 —— 到点自动清理、磁盘空间紧张时主动提醒;自动删除必须可预期、有报告、可关闭。
+
+**现状(实现前)**
+
+- 没有任何定时能力、托盘图标与通知;清理只能在主界面手动触发;
+- 报告只存在于内存(第 22 项落地前重启即丢),自动清理的效果无处可查。
+
+**方案**
+
+1. 设置项:[BroomSettings](../Core/BroomSettings.cs) 新增 `AutoCleanFrequency`(关闭 / 每天 / 每周 / 每月)、`AutoCleanHour`(0–23)、`AutoCleanDayOfWeek`(每周)、`AutoCleanDayOfMonth`(每月 1–28,避免短月份跳过)、`AutoCleanScope`(仅安全项 / 上次勾选)、`CloseToTray`(关窗最小化到托盘)、`LowDiskThresholdGb`(磁盘提醒阈值,0 = 关闭);
+2. 排期:[ScheduleCalculator](../Services/ScheduleCalculator.cs) 纯函数计算「锚点之后的下一次执行时刻(本地时间)」;[AutoCleanScheduler](../Services/AutoCleanScheduler.cs) 30 秒轮询,设置变化自动重新锚定(改完设置不补跑),错过的时刻(休眠 / 关机)顺延到下一次、不做补偿执行;
+3. 执行:[AutoCleanService](../Services/AutoCleanService.cs) —— `SelectRules` 按范围过滤(仅安全项 = `RiskLevel.Safe`;上次勾选 = 持久化勾选集合,从未保存时回规则默认,与界面恢复语义一致),扫描后清理,**一律走回收站**(不因「默认永久删除」销毁文件),结果写历史并出摘要;运行重入保护;
+4. 托盘:`TrayIcon` + `NativeMenu`(打开 broom / 立即清理(按自动清理设置) / 退出);关闭主窗口默认隐藏到托盘(可关),托盘「退出」才是真正退出进程;
+5. 磁盘看门:[DiskSpaceWatcher](../Services/DiskSpaceWatcher.cs) 10 分钟采样固定磁盘,低于阈值弹通知;每块盘只提醒一次,恢复到阈值以上后重新武装;
+6. 通知:[DesktopNotifier](../Services/DesktopNotifier.cs) + [NotificationWindow](../NotificationWindow.axaml) 右下角短暂提示(8 秒自动关闭、点击即关,主窗口隐藏时同样可见),并同步托盘提示文字。
+
+**影响文件**
+
+- [Core/BroomSettings.cs](../Core/BroomSettings.cs)、[ViewModels/SettingsViewModel.cs](../ViewModels/SettingsViewModel.cs)、[MainWindow.axaml](../MainWindow.axaml)(设置卡片)
+- 新增 [Services/ScheduleCalculator.cs](../Services/ScheduleCalculator.cs)、[Services/AutoCleanScheduler.cs](../Services/AutoCleanScheduler.cs)、[Services/AutoCleanService.cs](../Services/AutoCleanService.cs)、[Services/DiskSpaceWatcher.cs](../Services/DiskSpaceWatcher.cs)、[Services/DesktopNotifier.cs](../Services/DesktopNotifier.cs)、[NotificationWindow.axaml](../NotificationWindow.axaml)
+- [App.axaml.cs](../App.axaml.cs)(托盘与定时器装配)、[MainWindow.axaml.cs](../MainWindow.axaml.cs)(关窗进托盘)、[broom.csproj](../broom.csproj)(`Assets/broom.ico`)
+- [broom.Tests/AutoCleanServiceTests.cs](../broom.Tests/AutoCleanServiceTests.cs)、[broom.Tests/ScheduleCalculatorTests.cs](../broom.Tests/ScheduleCalculatorTests.cs)、[broom.Tests/SettingsServiceTests.cs](../broom.Tests/SettingsServiceTests.cs)
+
+> 实现说明:**选择「应用内定时 + 托盘」而非 Windows 计划任务** —— 不需要管理员权限、不解析 schtasks 输出、失败可见;关机后仍需执行的场景用第 21 项的 CLI 接入计划任务(设置页与 README 给出命令)。自动删除语义收紧为「一律回收站 + 仅按设置范围」,与第 21 项 `--clean safe` 一致。验证:排期计算 / 规则范围选择 / 低磁盘判定单测;GUI 冒烟通过,并把 `lowDiskThresholdGb` 临时调高实测触发通知路径(托盘 + 提示窗)15 秒无异常。
+
+**验收标准**
+
+- 设置页「自动化与托盘」可配置频率 / 时刻 / 范围 / 磁盘阈值,保存后跨启动保留;
+- 到点自动清理:只清范围内的项目、移入回收站,完成后弹出通知(清理项数与释放量),清理历史出现一条「自动清理」记录;
+- 关闭主窗口后应用留在托盘,左键 / 菜单「打开」恢复窗口;托盘「退出」后进程结束;
+- 磁盘可用空间低于阈值时弹出提醒,同盘不重复提醒,恢复后再跌破会再次提醒;
+- 频率设为「关闭」后不再自动清理;错过执行时刻(关机 / 休眠)不补跑。
+
+## 21. 命令行 CLI / 无人值守
+
+> 来源:backlog 第 13 项(P3 · 自动化)。
+
+**目标**:脚本化与自动化 —— 不启动界面完成扫描 / 清理,约定参数与退出码。
+
+**现状(实现前)**
+
+- [Program.cs](../Program.cs) 直接忽略命令行参数;扫描 / 清理编排埋在 [MainWindowViewModel](../ViewModels/MainWindowViewModel.cs) 里(还原点、删除器创建、报告拼装都依附 UI 状态)。
+
+**方案**
+
+1. 流程下沉:新增 [CleanupWorkflow](../Services/CleanupWorkflow.cs)(规则构建、扫描、清理前置还原点、删除器选择、清理执行)与 [ReportTextBuilder](../Services/ReportTextBuilder.cs)(报告正文),GUI、CLI 与自动清理共用;ViewModel 只保留界面状态与交互;
+2. 参数:[Cli/CommandLineParser.cs](../Cli/CommandLineParser.cs) 支持 `--scan`、`--clean [safe|all]`、`--dry-run`、`--report <路径>`、`--yes`、`--help`;未知参数、缺动作、`--report` 缺路径一律报错(避免无人值守静默跑偏);
+3. 执行:[Cli/CliRunner.cs](../Cli/CliRunner.cs) —— 扫描输出各规则条目与大小(`--scan` / `--dry-run` 只读),清理前无 `--yes` 则确认(`[y/N]`,拒绝或无输入即取消),清理结果写历史并输出 / 存盘报告;
+4. 范围语义:`--scan` 全量只读;`--clean safe`(默认)仅安全项;`--clean all` 全部规则(含谨慎与高风险,不可逆类目会真正执行);删除方式沿用设置里的默认(回收站 / 永久删除 + 隔离区);
+5. 退出码:`0` 成功;`1` 有失败项或运行错误;`2` 参数错误;`3` 未确认或被取消;[Cli/ConsoleHelper.cs](../Cli/ConsoleHelper.cs) 在 WinExe 无控制台场景附加 / 分配控制台(UTF-8),Ctrl+C 取消走退出码 3。
+
+**影响文件**
+
+- [Program.cs](../Program.cs)(命令行分发)、[ViewModels/MainWindowViewModel.cs](../ViewModels/MainWindowViewModel.cs)(改用工作流)
+- 新增 [Cli/CommandLineParser.cs](../Cli/CommandLineParser.cs)、[Cli/CliRunner.cs](../Cli/CliRunner.cs)、[Cli/ConsoleHelper.cs](../Cli/ConsoleHelper.cs)、[Services/CleanupWorkflow.cs](../Services/CleanupWorkflow.cs)、[Services/ReportTextBuilder.cs](../Services/ReportTextBuilder.cs)
+- [broom.Tests/CommandLineParserTests.cs](../broom.Tests/CommandLineParserTests.cs)、[broom.Tests/ReportTextBuilderTests.cs](../broom.Tests/ReportTextBuilderTests.cs)
+
+> 实现说明:GUI 报告正文改为走 `ReportTextBuilder`(注记与脚注仍由调用方按序提供),避免两套格式漂移;实测 `--help`(退出码 0)、`--scan --report`(报告文件落盘、只读)、`--clean safe` 无 `--yes` 且输入关闭(退出码 3、未删除任何文件)、标准输出重定向(UTF-8 落文件);`broom.Tests` 158 项全绿。
+
+**验收标准**
+
+- `broom --scan` 输出各规则可清理条目数与大小,全程只读;
+- `broom --clean safe --dry-run` 输出报告但不删除;
+- `broom --clean safe --yes --report out.txt` 无人值守完成清理并生成报告文件,清理历史出现一条「命令行」记录;
+- 缺 `--yes` 时出现确认提示,拒绝 / 无输入返回退出码 3 且不删除;
+- 未知参数返回退出码 2 并打印用法;`dotnet test` 全部通过。
+
+## 22. 清理历史与累计统计
+
+> 来源:backlog 第 14 项(P3 · 自动化)。
+
+**目标**:报告不再重启即丢 —— 「本次释放 / 累计释放」是核心成就指标,并能看到最近的清理趋势。
+
+**现状(实现前)**
+
+清理报告只存在内存,重启即丢;没有累计口径,自动清理 / 命令行清理的效果也无处可查。
+
+**方案**
+
+1. 数据:[Core/CleanupHistory.cs](../Core/CleanupHistory.cs) —— 每条记录含时间(UTC)、来源(manual / scheduled / cli)、条目数、字节数、失败数、是否取消、逐条规则清理量;
+2. 存储:[CleanupHistoryService](../Services/CleanupHistoryService.cs) 追加写 `%APPDATA%\broom\history.json`(JSON,与设置同目录),上限 500 条丢弃最旧;文件损坏改名 `history.bad.json` 后从空历史开始,不影响清理;
+3. 写入:界面手动清理、自动清理、命令行清理三处都写(`CleanupHistoryEntry.FromReport` 从清理报告映射);写历史失败只提示不回滚清理结果;
+4. 展示:清理页新增「清理历史」卡片 —— `本次释放`(本会话)/ `累计释放`(历史合计)/ 累计次数,下方最近 6 条(时间 · 条目 · 来源 · 释放量)。
+
+**影响文件**
+
+- 新增 [Core/CleanupHistory.cs](../Core/CleanupHistory.cs)、[Services/CleanupHistoryService.cs](../Services/CleanupHistoryService.cs)
+- [Core/BroomSettings.cs](../Core/BroomSettings.cs)(JSON 上下文注册历史类型)、[ViewModels/MainWindowViewModel.cs](../ViewModels/MainWindowViewModel.cs)、[ViewModels/HistoryItemViewModel.cs](../ViewModels/HistoryItemViewModel.cs)、[MainWindow.axaml](../MainWindow.axaml)
+- [broom.Tests/CleanupHistoryServiceTests.cs](../broom.Tests/CleanupHistoryServiceTests.cs)、[broom.Tests/SettingsServiceTests.cs](../broom.Tests/SettingsServiceTests.cs)
+
+> 实现说明:「本次释放」是会话内累计(重启归零),「累计释放」读历史合计,两者并列展示;自动清理 / 命令行的记录同样进入累计。验证:历史读写 / 累计求和 / 损坏回退 / 500 条截断 / 报告映射单测,`dotnet test` 158 项全绿;GUI 冒烟确认卡片渲染。
+
+**验收标准**
+
+- 清理后清理页出现「本次释放 X」,重启应用后「累计释放」仍包含该次;
+- 自动清理 / `broom --clean` 后历史分别出现「自动清理」「命令行」记录;
+- 累计口径含条目数与字节数,最近记录列表按时间倒序;
+- history.json 损坏时应用正常启动、历史清零并保留 `history.bad.json`;`dotnet test` 全部通过。
+
 ## 依赖关系与建议顺序
 
 | 顺序 | 项 | 理由 |
@@ -711,5 +815,8 @@
 | 17 | 报告与清单导出 | 只动报告区 / 工具栏与新增导出器,与其余各项独立 |
 | 18 | 动作型规则(事件日志 / DNS / 还原点与卷影 / WinSxS) | 解锁 backlog 第 6 项遗留、第 10、11 项;动作执行独立成平台服务,与文件清理互不干扰 |
 | 19 | 清理后回收空目录 | 只动清理器空目录回收开关与设置项,与其余各项独立 |
+| 20 | 定时 / 阈值自动清理 + 托盘常驻 | 复用第 21 项下沉的清理工作流;托盘 / 通知 / 排期为独立服务 |
+| 21 | 命令行 CLI / 无人值守 | 先把扫描 / 清理流程从 ViewModel 下沉为服务,是第 20 项自动清理的前置 |
+| 22 | 清理历史与累计统计 | 只加历史服务与清理页统计;第 20、21 项的清理结果同样写入 |
 
 各项相互独立,可单独交付;建议每项完成后跑一次「扫描 → 清理 → 报告」全流程,外加一次 GUI 冒烟测试(启动应用、确认窗口创建、关闭)。

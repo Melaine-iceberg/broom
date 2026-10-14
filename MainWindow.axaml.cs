@@ -14,6 +14,11 @@ public partial class MainWindow : Window
 {
     private readonly MainWindowViewModel _viewModel;
 
+    /// <summary>托盘菜单“退出”或提权重启请求退出时置位:关闭窗口不再被拦截。</summary>
+    public bool ExitRequested { get; set; }
+
+    public MainWindowViewModel ViewModel => _viewModel;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -21,7 +26,24 @@ public partial class MainWindow : Window
         DataContext = _viewModel;
 
         // 新实例已以管理员身份启动,退出当前实例完成“重启”
-        _viewModel.RestartRequested += (_, _) => Close();
+        _viewModel.RestartRequested += (_, _) =>
+        {
+            ExitRequested = true;
+            Close();
+        };
+    }
+
+    /// <summary>关闭主窗口时按设置最小化到托盘(保持后台定时清理与磁盘提醒)。</summary>
+    protected override void OnClosing(WindowClosingEventArgs e)
+    {
+        if (!ExitRequested && _viewModel.Settings.CloseToTray)
+        {
+            e.Cancel = true;
+            Hide();
+            return;
+        }
+
+        base.OnClosing(e);
     }
 
     private async void CopyReport_Click(object? sender, RoutedEventArgs e)
