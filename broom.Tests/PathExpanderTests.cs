@@ -25,9 +25,19 @@ public class PathExpanderTests
     public void Expand_EnvironmentVariables_AreResolved()
     {
         using var dir = new TempDir();
-        var template = Path.Combine("%TEMP%", Path.GetFileName(dir.FullPath));
+        var sub = dir.CreateDir("sub");
 
-        Assert.Equal(new[] { dir.FullPath }, PathExpander.Expand(template).ToList());
+        // 不用 %TEMP% 之类的系统变量:CI 上它们可能是 8.3 短路径(如 RUNNER~1),
+        // 与 GetTempPath 的长路径表示不一致;自定义变量让断言只验证展开行为本身。
+        Environment.SetEnvironmentVariable("BROOM_TEST_ROOT", dir.FullPath);
+        try
+        {
+            Assert.Equal(new[] { sub }, PathExpander.Expand(Path.Combine("%BROOM_TEST_ROOT%", "sub")).ToList());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("BROOM_TEST_ROOT", null);
+        }
     }
 
     [Fact]
