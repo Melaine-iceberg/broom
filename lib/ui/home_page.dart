@@ -1237,11 +1237,13 @@ class _InlineBanner extends StatelessWidget {
   const _InlineBanner({
     required this.message,
     this.isError = false,
+    this.icon,
     this.onClose,
   });
 
   final String message;
   final bool isError;
+  final IconData? icon;
   final VoidCallback? onClose;
 
   @override
@@ -1269,7 +1271,9 @@ class _InlineBanner extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            isError ? Icons.error_outline_rounded : Icons.info_outline_rounded,
+            isError
+                ? Icons.error_outline_rounded
+                : (icon ?? Icons.info_outline_rounded),
             size: 18,
             color: foreground,
           ),
@@ -1498,6 +1502,21 @@ class _PreviewView extends StatelessWidget {
           ),
         if (controller.scanTruncated)
           _InlineBanner(message: context.t('文件数量超过单次扫描上限，预览与清理仅包含已找到的部分。')),
+        if (controller.lockProbeRunning)
+          _InlineBanner(
+            icon: Icons.lock_outline_rounded,
+            message: context.tf('正在检测被占用的文件…（{checked} / {total}）', {
+              'checked': formatCount(controller.lockProbeChecked),
+              'total': formatCount(controller.lockProbeTotal),
+            }),
+          )
+        else if (controller.possiblyLockedCount > 0)
+          _InlineBanner(
+            icon: Icons.lock_outline_rounded,
+            message: context.tf('有 {count} 个文件可能正被其他程序占用，清理时会跳过并单独报告。', {
+              'count': formatCount(controller.possiblyLockedCount),
+            }),
+          ),
         Row(
           children: [
             Expanded(
@@ -1782,6 +1801,29 @@ class _RuleResultCard extends StatelessWidget {
                           ),
                         ),
                       ],
+                      if (controller.possiblyLockedCountForRule(rule.id)
+                          case final lockedCount when lockedCount > 0) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.lock_outline_rounded,
+                              size: 13,
+                              color: scheme.tertiary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              context.tf('{count} 个文件可能被占用', {
+                                'count': formatCount(lockedCount),
+                              }),
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: scheme.tertiary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -1863,6 +1905,31 @@ class _CleanActionBar extends StatelessWidget {
                     color: scheme.onSurfaceVariant,
                   ),
                 ),
+                if (controller.selectedPossiblyLockedCount > 0) ...[
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.lock_outline_rounded,
+                        size: 13,
+                        color: scheme.tertiary,
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          context.tf('已选文件中有 {count} 个可能被占用，清理时会跳过', {
+                            'count': formatCount(
+                              controller.selectedPossiblyLockedCount,
+                            ),
+                          }),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: scheme.tertiary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -1982,10 +2049,15 @@ class _CleaningView extends StatelessWidget {
                     ),
                     const Spacer(),
                     Text(
-                      context.tf('已移动 {count} 项 · {bytes}', {
-                        'count': formatCount(progress?.moved ?? 0),
-                        'bytes': formatBytes(progress?.movedBytes ?? 0),
-                      }),
+                      progress != null && progress.skipped > 0
+                          ? context.tf('已移动 {moved} 项 · 已跳过 {skipped} 项', {
+                              'moved': formatCount(progress.moved),
+                              'skipped': formatCount(progress.skipped),
+                            })
+                          : context.tf('已移动 {count} 项 · {bytes}', {
+                              'count': formatCount(progress?.moved ?? 0),
+                              'bytes': formatBytes(progress?.movedBytes ?? 0),
+                            }),
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),
@@ -2131,7 +2203,9 @@ class _DoneView extends StatelessWidget {
                           '未处理的文件可以继续清理。',
                         )
                       : noMoves
-                      ? context.t('没有文件成功移入隔离区，可以稍后重试。')
+                      ? report.skippedCount > 0
+                            ? context.t('没有文件移入隔离区；被占用或已不存在的文件已跳过。')
+                            : context.t('没有文件成功移入隔离区，可以稍后重试。')
                       : context.t(
                           '文件已安全移动到隔离区，可随时恢复。'
                           '释放隔离区后才会回收磁盘空间。',
@@ -2174,6 +2248,85 @@ class _DoneView extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (report.skippedCount > 0) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: scheme.secondaryContainer.withValues(alpha: 0.35),
+                      borderRadius: BorderRadius.circular(13),
+                      border: Border.all(
+                        color: scheme.outlineVariant.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.lock_outline_rounded,
+                              size: 17,
+                              color: scheme.onSecondaryContainer,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                context.tf('{count} 个文件已跳过', {
+                                  'count': report.skippedCount,
+                                }),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: scheme.onSecondaryContainer,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          context.t(
+                            '这些文件可能正被其他程序占用，或已不存在。'
+                            '它们保留在原处，没有被修改。',
+                          ),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: scheme.onSecondaryContainer.withValues(
+                              alpha: 0.9,
+                            ),
+                            height: 1.45,
+                          ),
+                        ),
+                        for (final skip in report.skips.take(3)) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            '• ${fileNameOf(skip.path)}：${skip.reason}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: scheme.onSecondaryContainer.withValues(
+                                alpha: 0.85,
+                              ),
+                            ),
+                          ),
+                        ],
+                        if (report.skips.length > 3)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              context.tf('还有 {count} 条未显示…', {
+                                'count': report.skips.length - 3,
+                              }),
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: scheme.onSecondaryContainer.withValues(
+                                  alpha: 0.75,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
                 if (report.failureCount > 0) ...[
                   const SizedBox(height: 14),
                   Container(
@@ -2198,17 +2351,26 @@ class _DoneView extends StatelessWidget {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                context.tf(
-                                  '{count} 个文件未能清理，'
-                                  '可能被程序占用，或已被加入排除列表。',
-                                  {'count': report.failureCount},
-                                ),
+                                context.tf('{count} 个文件清理失败。', {
+                                  'count': report.failureCount,
+                                }),
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: scheme.onTertiaryContainer,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ),
                           ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          context.t('请检查文件权限、磁盘空间或路径状态后重试。'),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: scheme.onTertiaryContainer.withValues(
+                              alpha: 0.9,
+                            ),
+                            height: 1.45,
+                          ),
                         ),
                         for (final failure in report.failures.take(3)) ...[
                           const SizedBox(height: 6),

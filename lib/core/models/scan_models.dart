@@ -19,6 +19,7 @@ class JunkItem {
     required this.path,
     required this.size,
     required this.modified,
+    this.possiblyLocked = false,
   });
 
   final String ruleId;
@@ -26,6 +27,19 @@ class JunkItem {
   final String path;
   final int size;
   final DateTime modified;
+
+  /// Preview-only hint that another process may block moving this file.
+  /// Cleanup re-checks and reports the actual outcome.
+  final bool possiblyLocked;
+
+  JunkItem copyWith({bool? possiblyLocked}) => JunkItem(
+    ruleId: ruleId,
+    rootPath: rootPath,
+    path: path,
+    size: size,
+    modified: modified,
+    possiblyLocked: possiblyLocked ?? this.possiblyLocked,
+  );
 }
 
 class ScanProgress {

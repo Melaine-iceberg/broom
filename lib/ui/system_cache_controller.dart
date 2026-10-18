@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../core/clean/system_cache_cleaner.dart';
 import '../core/models/scan_models.dart';
 import '../core/models/system_models.dart';
+import '../core/platform/file_lock_probe.dart';
 import '../core/platform/system_access.dart';
 import '../l10n/broom_strings.dart';
 import '../core/platform/system_cache_platform.dart';
@@ -30,13 +33,16 @@ class SystemCacheController extends ChangeNotifier {
     required this.cleaner,
     this.quarantineRoot,
     ScanService Function()? scanServiceFactory,
-  }) : _scanServiceFactory = scanServiceFactory ?? ScanService.new;
+    FileLockProbe? lockProbe,
+  }) : _scanServiceFactory = scanServiceFactory ?? ScanService.new,
+       _lockProbe = lockProbe ?? const NoopFileLockProbe();
 
   final SystemCachePlatform platform;
   final SystemAccess access;
   final SystemCacheCleaner cleaner;
   final String? quarantineRoot;
   final ScanService Function() _scanServiceFactory;
+  final FileLockProbe _lockProbe;
 
   SystemCachePhase _phase = SystemCachePhase.idle;
   bool _isElevated = false;
@@ -57,6 +63,12 @@ class SystemCacheController extends ChangeNotifier {
   bool _cleanCancelRequested = false;
   ScanService? _scanService;
   bool _disposed = false;
+  int _lockProbeGeneration = 0;
+  bool _lockProbeRunning = false;
+  int _lockProbeChecked = 0;
+  int _lockProbeTotal = 0;
+  final Map<String, int> _lockedCountByRule = <String, int>{};
+  final Map<String, ({int resultIndex, int itemIndex})> _itemLocations = {};
 
   SystemCachePhase get phase => _phase;
   bool get isElevated => _isElevated;
@@ -77,6 +89,23 @@ class SystemCacheController extends ChangeNotifier {
   bool get isBusy =>
       _phase == SystemCachePhase.scanning ||
       _phase == SystemCachePhase.cleaning;
+  bool get lockProbeRunning => _lockProbeRunning;
+  int get lockProbeChecked => _lockProbeChecked;
+  int get lockProbeTotal => _lockProbeTotal;
+
+  int possiblyLockedCountForRule(String ruleId) =>
+      _lockedCountByRule[ruleId] ?? 0;
+
+  int get selectedPossiblyLockedCount {
+    var count = 0;
+    for (final result in _results) {
+      if (!_selectedRuleIds.contains(result.rule.id)) continue;
+      for (final item in result.items) {
+        if (item.possiblyLocked) count++;
+      }
+    }
+    return count;
+  }
 
   bool isRuleSelected(String ruleId) => _selectedRuleIds.contains(ruleId);
 
@@ -167,6 +196,7 @@ class SystemCacheController extends ChangeNotifier {
     );
     _results = const [];
     _selectedRuleIds = <String>{};
+    _resetLockProbeState();
     _scanDirectoryErrors = 0;
     _scanTruncated = false;
     _lastReport = null;
@@ -218,6 +248,7 @@ class SystemCacheController extends ChangeNotifier {
         _notice = tr('没有发现可清理的系统缓存。');
       }
       _notify();
+      _startLockProbe();
     } catch (error) {
       _phase = SystemCachePhase.idle;
       _error = trf('扫描失败：{error}', {'error': error});
@@ -257,6 +288,7 @@ class SystemCacheController extends ChangeNotifier {
     final items = selectedItems;
     if (items.isEmpty) return;
 
+    _cancelLockProbe();
     _phase = SystemCachePhase.cleaning;
     _cleanCancelRequested = false;
     _cleanStage = selectedServices.isEmpty
@@ -312,6 +344,7 @@ class SystemCacheController extends ChangeNotifier {
   }
 
   void returnToIdle() {
+    _resetLockProbeState();
     _phase = SystemCachePhase.idle;
     _results = const [];
     _selectedRuleIds = <String>{};
@@ -365,9 +398,85 @@ class SystemCacheController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _resetLockProbeState() {
+    _lockProbeGeneration++;
+    _lockProbeRunning = false;
+    _lockProbeChecked = 0;
+    _lockProbeTotal = 0;
+    _lockedCountByRule.clear();
+    _itemLocations.clear();
+  }
+
+  void _cancelLockProbe() {
+    _lockProbeGeneration++;
+    _lockProbeRunning = false;
+  }
+
+  void _startLockProbe() {
+    _itemLocations.clear();
+    _lockedCountByRule.clear();
+    final paths = <String>[];
+    for (var resultIndex = 0; resultIndex < _results.length; resultIndex++) {
+      final items = _results[resultIndex].items;
+      for (var itemIndex = 0; itemIndex < items.length; itemIndex++) {
+        final item = items[itemIndex];
+        _itemLocations[item.path] = (
+          resultIndex: resultIndex,
+          itemIndex: itemIndex,
+        );
+        paths.add(item.path);
+        if (!item.possiblyLocked) continue;
+        _lockedCountByRule[item.ruleId] =
+            (_lockedCountByRule[item.ruleId] ?? 0) + 1;
+      }
+    }
+    if (paths.isEmpty) return;
+    final generation = ++_lockProbeGeneration;
+    _lockProbeRunning = true;
+    _lockProbeChecked = 0;
+    _lockProbeTotal = paths.length;
+    _notify();
+    unawaited(_runLockProbe(generation, paths));
+  }
+
+  Future<void> _runLockProbe(int generation, List<String> paths) async {
+    var lastNotifyAt = DateTime.fromMillisecondsSinceEpoch(0);
+    await runLockProbe(
+      probe: _lockProbe,
+      paths: paths,
+      isActive: () => !_disposed && generation == _lockProbeGeneration,
+      onBatch: (lockedPaths, checked) async {
+        _lockProbeChecked = checked;
+        for (final path in lockedPaths) {
+          _markPossiblyLocked(path);
+        }
+        final now = DateTime.now();
+        if (now.difference(lastNotifyAt) >= const Duration(milliseconds: 120)) {
+          lastNotifyAt = now;
+          _notify();
+        }
+      },
+    );
+    if (_disposed || generation != _lockProbeGeneration) return;
+    _lockProbeRunning = false;
+    _notify();
+  }
+
+  void _markPossiblyLocked(String path) {
+    final location = _itemLocations[path];
+    if (location == null) return;
+    final result = _results[location.resultIndex];
+    final current = result.items[location.itemIndex];
+    if (current.possiblyLocked) return;
+    result.items[location.itemIndex] = current.copyWith(possiblyLocked: true);
+    _lockedCountByRule[current.ruleId] =
+        (_lockedCountByRule[current.ruleId] ?? 0) + 1;
+  }
+
   @override
   void dispose() {
     _disposed = true;
+    _lockProbeGeneration++;
     _scanService?.dispose();
     _scanService = null;
     super.dispose();

@@ -195,7 +195,9 @@ void main() {
 
     expect(interrupted.cancelled, isTrue);
     expect(interrupted.movedCount, 0);
-    expect(interrupted.failureCount, 1);
+    expect(interrupted.skippedCount, 1);
+    expect(interrupted.skips.single.reason, contains('不存在'));
+    expect(interrupted.failureCount, 0);
     expect(interrupted.remainingCount, 1);
     expect(interrupted.sessionId, isNotNull);
 
@@ -208,7 +210,8 @@ void main() {
     final resumed = await quarantine.resumeClean(interrupted.sessionId!);
 
     expect(resumed.movedCount, 1);
-    expect(resumed.failureCount, 1);
+    expect(resumed.skippedCount, 1);
+    expect(resumed.failureCount, 0);
     expect(resumed.remainingCount, 0);
     expect(await movable.exists(), isFalse);
     expect(
@@ -710,8 +713,9 @@ void main() {
 
     expect(report.sessionId, isNull);
     expect(report.movedCount, 0);
-    expect(report.failureCount, 1);
-    expect(report.failures.single.reason, contains('排除'));
+    expect(report.skippedCount, 1);
+    expect(report.skips.single.reason, contains('排除'));
+    expect(report.failureCount, 0);
     expect(await file.readAsString(), 'keep-me');
     expect(await service.listSessions(), isEmpty);
   });
@@ -740,4 +744,61 @@ void main() {
     expect(retry.sessionRemoved, isTrue);
     expect(await file.readAsString(), 'alpha');
   });
+
+  test('classifies a file held by another process as skipped', () async {
+    final file = await createFile('locked.txt', 'locked-content');
+    final script = File(p.windows.join(temp.path, 'hold_lock.ps1'));
+    final ready = File(p.windows.join(temp.path, 'lock.ready'));
+    const scriptText = r'''
+$ErrorActionPreference = 'Stop'
+$target = $args[0]
+$ready = $args[1]
+$stream = [System.IO.File]::Open($target, 'Open', 'Read', 'None')
+try {
+  Set-Content -LiteralPath $ready -Value 'ready' -NoNewline
+  Start-Sleep -Seconds 60
+} finally {
+  $stream.Close()
+}
+''';
+    await script.writeAsString(scriptText);
+    final process = await Process.start('powershell.exe', [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      script.path,
+      file.path,
+      ready.path,
+    ]);
+
+    try {
+      final deadline = DateTime.now().add(const Duration(seconds: 15));
+      while (!await ready.exists()) {
+        if (DateTime.now().isAfter(deadline)) {
+          fail('文件锁辅助进程未能在超时前启动');
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+
+      final report = await quarantine.clean([await itemFor(file)]);
+
+      expect(report.movedCount, 0);
+      expect(report.skippedCount, 1);
+      expect(report.skips.single.reason, contains('占用'));
+      expect(report.failureCount, 0);
+      expect(
+        await FileSystemEntity.type(file.path, followLinks: false),
+        FileSystemEntityType.file,
+      );
+      expect(await quarantine.listSessions(), isEmpty);
+    } finally {
+      process.kill();
+      await process.exitCode.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => -1,
+      );
+    }
+    expect(await file.readAsString(), 'locked-content');
+  }, skip: Platform.isWindows ? false : 'Windows only');
 }

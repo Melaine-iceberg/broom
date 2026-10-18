@@ -67,3 +67,30 @@ std::string Utf8FromUtf16(const wchar_t* utf16_string) {
   }
   return utf8_string;
 }
+
+std::wstring Utf16FromUtf8(const std::string& utf8_string) {
+  if (utf8_string.empty()) {
+    return std::wstring();
+  }
+  const int length = ::MultiByteToWideChar(
+      CP_UTF8, MB_ERR_INVALID_CHARS, utf8_string.data(),
+      static_cast<int>(utf8_string.size()), nullptr, 0);
+  if (length <= 0) {
+    return std::wstring();
+  }
+  std::wstring output(length, L'\0');
+  ::MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, utf8_string.data(),
+                        static_cast<int>(utf8_string.size()), output.data(),
+                        length);
+  return output;
+}
+
+std::wstring ToExtendedWindowsPath(const std::wstring& path) {
+  if (path.empty() || path.rfind(L"\\\\?\\", 0) == 0) {
+    return path;
+  }
+  if (path.rfind(L"\\\\", 0) == 0) {
+    return L"\\\\?\\UNC\\" + path.substr(2);
+  }
+  return L"\\\\?\\" + path;
+}

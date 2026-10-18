@@ -1,11 +1,27 @@
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/models/system_models.dart';
+import 'package:broom/core/platform/file_lock_probe.dart';
 import 'package:broom/core/platform/system_access.dart';
 import 'package:broom/ui/system_cache_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import 'support/system_cache_fakes.dart';
+
+class _FakeLockProbe implements FileLockProbe {
+  _FakeLockProbe(this.lockedPaths, {this.error});
+
+  final Set<String> lockedPaths;
+  final Object? error;
+  final List<List<String>> batches = [];
+
+  @override
+  Future<List<bool>> probePossiblyLocked(List<String> paths) async {
+    batches.add(List.of(paths));
+    if (error != null) throw error!;
+    return [for (final path in paths) lockedPaths.contains(path)];
+  }
+}
 
 void main() {
   const updateRoot = r'C:\Windows\SoftwareDistribution\Download';
@@ -253,6 +269,79 @@ void main() {
     expect(controller.accessChecked, isTrue);
     expect(controller.isElevated, isFalse);
     expect(controller.accessError, contains('拒绝访问'));
+  });
+
+  test('marks possibly locked files without changing rule selection', () async {
+    final items = sampleItems();
+    final probe = _FakeLockProbe({items.first.path});
+    final probeController = SystemCacheController(
+      platform: platform,
+      access: access,
+      cleaner: cleaner,
+      quarantineRoot: quarantineRoot,
+      scanServiceFactory: () => scanner,
+      lockProbe: probe,
+    );
+    addTearDown(probeController.dispose);
+
+    await probeController.scan();
+    await pumpEventQueue();
+
+    expect(probeController.phase, SystemCachePhase.preview);
+    expect(probeController.lockProbeRunning, isFalse);
+    expect(probeController.lockProbeChecked, 3);
+    expect(probeController.lockProbeTotal, 3);
+    expect(
+      probeController.possiblyLockedCountForRule('windows.update_cache'),
+      1,
+    );
+    expect(probeController.selectedCount, 0);
+    expect(probeController.selectedPossiblyLockedCount, 0);
+    expect(
+      probe.batches.single.toSet(),
+      items.map((item) => item.path).toSet(),
+    );
+
+    probeController.toggleRule('windows.update_cache');
+    expect(probeController.selectedCount, 2);
+    expect(probeController.selectedPossiblyLockedCount, 1);
+    expect(
+      probeController.results.first.items
+          .firstWhere((item) => item.path == items.first.path)
+          .possiblyLocked,
+      isTrue,
+    );
+  });
+
+  test('keeps the preview usable when lock probing is unavailable', () async {
+    final probe = _FakeLockProbe(
+      const {},
+      error: const FileLockProbeException('缺少原生通道'),
+    );
+    final probeController = SystemCacheController(
+      platform: platform,
+      access: access,
+      cleaner: cleaner,
+      quarantineRoot: quarantineRoot,
+      scanServiceFactory: () => scanner,
+      lockProbe: probe,
+    );
+    addTearDown(probeController.dispose);
+
+    await probeController.scan();
+    await pumpEventQueue();
+
+    expect(probeController.phase, SystemCachePhase.preview);
+    expect(probeController.lockProbeRunning, isFalse);
+    expect(probeController.results, hasLength(2));
+    expect(
+      probeController.possiblyLockedCountForRule('windows.update_cache'),
+      0,
+    );
+
+    probeController.selectAllRules();
+    expect(probeController.selectedCount, 3);
+    expect(probeController.selectedPossiblyLockedCount, 0);
   });
 
   test('elevation relaunch reports cancellation without errors', () async {

@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import '../models/clean_models.dart';
 import '../models/scan_models.dart';
 import '../models/system_models.dart';
+import '../platform/filesystem_error.dart';
 import '../platform/windows_path.dart';
 import '../safety/path_guard.dart';
 import 'system_services.dart';
@@ -42,8 +43,10 @@ class FileSystemCacheCleaner implements SystemCacheCleaner {
     bool Function()? isCancelled,
   }) async {
     final failures = <CleanFailure>[];
+    final skips = <CleanFailure>[];
     final serviceIssues = <String>[];
     var failureCount = 0;
+    var skippedCount = 0;
     var deletedCount = 0;
     var deletedBytes = 0;
     var processed = 0;
@@ -54,6 +57,21 @@ class FileSystemCacheCleaner implements SystemCacheCleaner {
       failureCount++;
       if (failures.length < maxFailureDetails) {
         failures.add(CleanFailure(path: path, reason: reason));
+      }
+    }
+
+    void recordSkip(String path, String reason) {
+      skippedCount++;
+      if (skips.length < maxFailureDetails) {
+        skips.add(CleanFailure(path: path, reason: reason));
+      }
+    }
+
+    void recordAttemptError(String path, FileSystemException error) {
+      if (_isSkippableError(error)) {
+        recordSkip(path, _failureReason(error));
+      } else {
+        recordFailure(path, _failureReason(error));
       }
     }
 
@@ -70,6 +88,7 @@ class FileSystemCacheCleaner implements SystemCacheCleaner {
           total: items.length,
           deleted: deletedCount,
           deletedBytes: deletedBytes,
+          skipped: skippedCount,
           currentPath: currentPath,
         ),
       );
@@ -78,6 +97,8 @@ class FileSystemCacheCleaner implements SystemCacheCleaner {
     SystemCleanReport buildReport() => SystemCleanReport(
       deletedCount: deletedCount,
       deletedBytes: deletedBytes,
+      skippedCount: skippedCount,
+      skips: List.unmodifiable(skips),
       failureCount: failureCount,
       failures: List.unmodifiable(failures),
       cancelled: cancelled,
@@ -120,17 +141,24 @@ class FileSystemCacheCleaner implements SystemCacheCleaner {
           continue;
         }
 
-        final type = await FileSystemEntity.type(
-          WindowsPath.forIo(item.path),
-          followLinks: false,
-        );
+        final FileSystemEntityType type;
+        try {
+          type = await FileSystemEntity.type(
+            WindowsPath.forIo(item.path),
+            followLinks: false,
+          );
+        } on FileSystemException catch (error) {
+          recordAttemptError(item.path, error);
+          report(currentPath: item.path);
+          continue;
+        }
         if (type == FileSystemEntityType.link) {
-          recordFailure(item.path, '跳过符号链接或 junction');
+          recordSkip(item.path, '跳过符号链接或 junction');
           report(currentPath: item.path);
           continue;
         }
         if (type != FileSystemEntityType.file) {
-          recordFailure(item.path, '文件已不存在或不是普通文件');
+          recordSkip(item.path, '文件已不存在或不是普通文件');
           report(currentPath: item.path);
           continue;
         }
@@ -139,7 +167,7 @@ class FileSystemCacheCleaner implements SystemCacheCleaner {
         try {
           size = await File(WindowsPath.forIo(item.path)).length();
         } on FileSystemException catch (error) {
-          recordFailure(item.path, _failureReason(error));
+          recordAttemptError(item.path, error);
           report(currentPath: item.path);
           continue;
         }
@@ -147,7 +175,7 @@ class FileSystemCacheCleaner implements SystemCacheCleaner {
         try {
           await File(WindowsPath.forIo(item.path)).delete();
         } on FileSystemException catch (error) {
-          recordFailure(item.path, _failureReason(error));
+          recordAttemptError(item.path, error);
           report(currentPath: item.path);
           continue;
         }
@@ -221,6 +249,12 @@ class FileSystemCacheCleaner implements SystemCacheCleaner {
         ? rootKey
         : '$rootKey${p.windows.separator}';
     return candidateKey.startsWith(prefix);
+  }
+
+  static bool _isSkippableError(FileSystemException error) {
+    if (isFileLockConflict(error)) return true;
+    final code = error.osError?.errorCode;
+    return code == 2 || code == 3;
   }
 
   static String _failureReason(FileSystemException error) {

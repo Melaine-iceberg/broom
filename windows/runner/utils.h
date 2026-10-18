@@ -12,6 +12,13 @@ void CreateAndAttachConsole();
 // encoded in UTF-8. Returns an empty std::string on failure.
 std::string Utf8FromUtf16(const wchar_t* utf16_string);
 
+// Converts a UTF-8 string to UTF-16. Returns an empty std::wstring on failure.
+std::wstring Utf16FromUtf8(const std::string& utf8_string);
+
+// Prefixes an absolute Windows path with \\?\ or \\?\UNC\ so file APIs accept
+// it regardless of MAX_PATH. Already-prefixed paths are returned unchanged.
+std::wstring ToExtendedWindowsPath(const std::wstring& path);
+
 // Gets the command line arguments passed in as a std::vector<std::string>,
 // encoded in UTF-8. Returns an empty std::vector<std::string> on failure.
 std::vector<std::string> GetCommandLineArguments();

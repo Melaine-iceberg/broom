@@ -14,22 +14,6 @@ namespace {
 
 constexpr char kChannelName[] = "broom/file_metadata";
 
-std::wstring WideFromUtf8(const std::string& input) {
-  if (input.empty()) {
-    return std::wstring();
-  }
-  const int length = ::MultiByteToWideChar(
-      CP_UTF8, MB_ERR_INVALID_CHARS, input.data(),
-      static_cast<int>(input.size()), nullptr, 0);
-  if (length <= 0) {
-    return std::wstring();
-  }
-  std::wstring output(length, L'\0');
-  ::MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, input.data(),
-                        static_cast<int>(input.size()), output.data(), length);
-  return output;
-}
-
 std::string DescriptionForError(DWORD error) {
   wchar_t* buffer = nullptr;
   const DWORD length = ::FormatMessageW(
@@ -124,19 +108,9 @@ bool ToFileTime(int64_t value, FILETIME* out) {
   return true;
 }
 
-std::wstring ToExtendedPath(const std::wstring& path) {
-  if (path.empty() || path.rfind(L"\\\\?\\", 0) == 0) {
-    return path;
-  }
-  if (path.rfind(L"\\\\", 0) == 0) {
-    return L"\\\\?\\UNC\\" + path.substr(2);
-  }
-  return L"\\\\?\\" + path;
-}
-
 HANDLE OpenForSecurity(const std::wstring& path, DWORD access) {
   return ::CreateFileW(
-      ToExtendedPath(path).c_str(), access,
+      ToExtendedWindowsPath(path).c_str(), access,
       FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
       OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
 }
@@ -147,7 +121,7 @@ DWORD ApplyFileTimes(const std::wstring& path, const FILETIME* created,
     return ERROR_SUCCESS;
   }
   HANDLE handle = ::CreateFileW(
-      ToExtendedPath(path).c_str(), FILE_WRITE_ATTRIBUTES,
+      ToExtendedWindowsPath(path).c_str(), FILE_WRITE_ATTRIBUTES,
       FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
       OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
   if (handle == INVALID_HANDLE_VALUE) {
@@ -160,7 +134,7 @@ DWORD ApplyFileTimes(const std::wstring& path, const FILETIME* created,
 }
 
 DWORD ApplyReadOnly(const std::wstring& path, bool read_only) {
-  const std::wstring io_path = ToExtendedPath(path);
+  const std::wstring io_path = ToExtendedWindowsPath(path);
   const DWORD attributes = ::GetFileAttributesW(io_path.c_str());
   if (attributes == INVALID_FILE_ATTRIBUTES) {
     return ::GetLastError();
@@ -220,7 +194,7 @@ DaclResult ReadDacl(const std::wstring& path) {
 }
 
 DWORD ApplyDacl(const std::wstring& path, const std::string& sddl) {
-  const std::wstring wide_sddl = WideFromUtf8(sddl);
+  const std::wstring wide_sddl = Utf16FromUtf8(sddl);
   if (wide_sddl.empty()) {
     return ERROR_INVALID_DATA;
   }
@@ -290,7 +264,7 @@ void FileMetadataChannel::HandleMethodCall(
     result->Error("invalid_path", "A file path is required.");
     return;
   }
-  const std::wstring wide_path = WideFromUtf8(*path);
+  const std::wstring wide_path = Utf16FromUtf8(*path);
   if (wide_path.empty()) {
     result->Error("invalid_path", "The file path is not valid UTF-8.");
     return;

@@ -1,4 +1,5 @@
 import 'package:broom/app.dart';
+import 'package:broom/core/models/clean_models.dart';
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/models/system_models.dart';
 import 'package:broom/ui/system_cache_controller.dart';
@@ -145,5 +146,59 @@ void main() {
     expect(controller.phase, SystemCachePhase.done);
     expect(find.text('清理完成'), findsOneWidget);
     expect(find.textContaining('2.0 KB'), findsWidgets);
+  });
+
+  testWidgets('separates skipped files from failures in the done view', (
+    tester,
+  ) async {
+    final access = FakeSystemAccess();
+    final item = _item();
+    final scanner = FakeScanService(
+      result: ScanResult(
+        items: [item],
+        scannedFiles: 1,
+        directoryErrors: 0,
+        truncated: false,
+        cancelled: false,
+      ),
+    );
+    final cleaner = FakeSystemCacheCleaner(
+      report: SystemCleanReport(
+        deletedCount: 0,
+        deletedBytes: 0,
+        skippedCount: 1,
+        skips: [CleanFailure(path: item.path, reason: '文件正被其他程序占用')],
+        failureCount: 1,
+        failures: [CleanFailure(path: item.path, reason: '没有访问权限')],
+        cancelled: false,
+        serviceIssues: const [],
+      ),
+    );
+    final controller = _controller(
+      access: access,
+      cleaner: cleaner,
+      scanner: scanner,
+    );
+    await _pumpPage(tester, controller);
+
+    await tester.tap(find.text('扫描系统缓存'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byType(Checkbox).first);
+    await tester.tap(find.byType(Checkbox).first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, '永久删除 1 项'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('我明白系统缓存将被永久删除，且无法撤销'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '永久删除'));
+    await tester.pumpAndSettle();
+
+    expect(controller.phase, SystemCachePhase.done);
+    expect(find.text('1 个文件已跳过'), findsOneWidget);
+    expect(find.textContaining('这些文件可能正被系统占用'), findsOneWidget);
+    expect(find.text('1 个文件删除失败'), findsOneWidget);
+    expect(find.textContaining('文件正被其他程序占用'), findsOneWidget);
+    expect(find.textContaining('没有访问权限'), findsOneWidget);
   });
 }

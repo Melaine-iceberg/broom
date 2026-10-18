@@ -194,8 +194,69 @@ void main() {
     );
 
     expect(report.deletedCount, 0);
-    expect(report.failures.single.reason, '文件已不存在或不是普通文件');
+    expect(report.skippedCount, 1);
+    expect(report.skips.single.reason, '文件已不存在或不是普通文件');
+    expect(report.failureCount, 0);
   });
+
+  test('classifies a locked file as skipped without deleting it', () async {
+    final file = await createFile(root, 'locked.cab');
+    final script = File(p.join(temp.path, 'hold_lock.ps1'));
+    final ready = File(p.join(temp.path, 'lock.ready'));
+    const scriptText = r'''
+$ErrorActionPreference = 'Stop'
+$target = $args[0]
+$ready = $args[1]
+$stream = [System.IO.File]::Open($target, 'Open', 'Read', 'None')
+try {
+  Set-Content -LiteralPath $ready -Value 'ready' -NoNewline
+  Start-Sleep -Seconds 60
+} finally {
+  $stream.Close()
+}
+''';
+    await script.writeAsString(scriptText);
+    final process = await Process.start('powershell.exe', [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      script.path,
+      file.path,
+      ready.path,
+    ]);
+
+    try {
+      final deadline = DateTime.now().add(const Duration(seconds: 15));
+      while (!await ready.exists()) {
+        if (DateTime.now().isAfter(deadline)) {
+          fail('文件锁辅助进程未能在超时前启动');
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+
+      final report = await cleaner.clean(
+        items: [await itemFor(file)],
+        rootsByRule: {
+          'windows.update_cache': [root.path],
+        },
+        serviceNames: const [],
+      );
+
+      expect(report.deletedCount, 0);
+      expect(report.skippedCount, 1);
+      expect(report.skips.single.reason, contains('占用'));
+      expect(report.failureCount, 0);
+      expect(await file.exists(), isTrue);
+    } finally {
+      process.kill();
+      await process.exitCode.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => -1,
+      );
+    }
+    expect(await file.readAsString(), 'locked.cab');
+  }, skip: Platform.isWindows ? false : 'Windows only');
 
   test('stops after cancellation and restarts services', () async {
     final files = [
@@ -311,8 +372,9 @@ void main() {
       serviceNames: const [],
     );
 
-    expect(report.failureCount, 1);
-    expect(report.failures.single.reason, contains('符号链接'));
+    expect(report.skippedCount, 1);
+    expect(report.skips.single.reason, contains('符号链接'));
+    expect(report.failureCount, 0);
     expect(await target.exists(), isTrue);
   });
 }

@@ -2007,6 +2007,8 @@ String _resumeMessage(CleanReport report) {
   final parts = <String>[
     if (report.movedCount > 0)
       trf('已继续清理 {count} 个文件', {'count': report.movedCount}),
+    if (report.skippedCount > 0)
+      trf('跳过 {count} 个被占用或已不存在的文件', {'count': report.skippedCount}),
     if (report.failureCount > 0)
       trf('{count} 个文件未能清理', {'count': report.failureCount}),
   ];

@@ -607,12 +607,14 @@ class _SystemRuleCard extends StatelessWidget {
   const _SystemRuleCard({
     required this.rule,
     this.result,
+    this.lockedCount = 0,
     this.selected = false,
     this.onToggle,
   });
 
   final SystemCacheRule rule;
   final SystemRuleResult? result;
+  final int lockedCount;
   final bool selected;
   final VoidCallback? onToggle;
 
@@ -725,6 +727,28 @@ class _SystemRuleCard extends StatelessWidget {
                           ),
                           height: 1.4,
                         ),
+                      ),
+                    ],
+                    if (lockedCount > 0) ...[
+                      const SizedBox(height: 5),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.lock_outline_rounded,
+                            size: 13,
+                            color: scheme.tertiary,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            context.tf('{count} 个文件可能被占用', {
+                              'count': formatCount(lockedCount),
+                            }),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: scheme.tertiary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ],
@@ -885,6 +909,34 @@ class _PreviewView extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
               ],
+              if (controller.lockProbeRunning) ...[
+                AnalysisBanner(
+                  message: context.tf('正在检测被占用的文件…（{checked} / {total}）', {
+                    'checked': formatCount(controller.lockProbeChecked),
+                    'total': formatCount(controller.lockProbeTotal),
+                  }),
+                ),
+                const SizedBox(height: 12),
+              ] else if (controller.results.any(
+                (result) =>
+                    controller.possiblyLockedCountForRule(result.rule.id) > 0,
+              )) ...[
+                AnalysisBanner(
+                  message: context.tf('有 {count} 个文件可能正被其他程序占用，清理时会跳过并单独报告。', {
+                    'count': formatCount(
+                      controller.results.fold<int>(
+                        0,
+                        (total, result) =>
+                            total +
+                            controller.possiblyLockedCountForRule(
+                              result.rule.id,
+                            ),
+                      ),
+                    ),
+                  }),
+                ),
+                const SizedBox(height: 12),
+              ],
               const _ReviewWarning(),
               const SizedBox(height: 14),
               Container(
@@ -964,6 +1016,9 @@ class _PreviewView extends StatelessWidget {
                           child: _SystemRuleCard(
                             rule: result.rule,
                             result: result,
+                            lockedCount: controller.possiblyLockedCountForRule(
+                              result.rule.id,
+                            ),
                             selected: controller.isRuleSelected(result.rule.id),
                             onToggle: () =>
                                 controller.toggleRule(result.rule.id),
@@ -1038,6 +1093,31 @@ class _ActionBar extends StatelessWidget {
                     color: scheme.onSurfaceVariant,
                   ),
                 ),
+                if (controller.selectedPossiblyLockedCount > 0) ...[
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.lock_outline_rounded,
+                        size: 13,
+                        color: scheme.tertiary,
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          context.tf('已选文件中有 {count} 个可能被占用，清理时会跳过', {
+                            'count': formatCount(
+                              controller.selectedPossiblyLockedCount,
+                            ),
+                          }),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: scheme.tertiary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -1266,14 +1346,26 @@ class _DoneView extends StatelessWidget {
                   ],
                 ),
               ),
+              if (report.skippedCount > 0) ...[
+                const SizedBox(height: 14),
+                _IssuePanel(
+                  icon: Icons.lock_outline_rounded,
+                  title: context.tf('{count} 个文件已跳过', {
+                    'count': report.skippedCount,
+                  }),
+                  body: context.t('这些文件可能正被系统占用，或已不存在。它们保留在原处，没有被修改。'),
+                  failures: report.skips,
+                  isServiceIssue: false,
+                ),
+              ],
               if (report.failureCount > 0) ...[
                 const SizedBox(height: 14),
                 _IssuePanel(
                   icon: Icons.warning_amber_rounded,
-                  title: context.tf('{count} 个文件未能删除', {
+                  title: context.tf('{count} 个文件删除失败', {
                     'count': report.failureCount,
                   }),
-                  body: context.t('通常是因为文件正被系统占用。可以关闭相关窗口或稍后重试。'),
+                  body: context.t('请检查访问权限、磁盘状态或服务占用情况后重试。'),
                   failures: report.failures,
                   isServiceIssue: false,
                 ),

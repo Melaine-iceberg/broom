@@ -15,6 +15,14 @@ String describeFilesystemError(Object error) {
   return error.toString();
 }
 
+/// True when another handle blocks the access Broom needs (to read, move or
+/// delete). These are transient skips rather than hard failures.
+bool isFileLockConflict(Object error) {
+  if (error is! FileSystemException) return false;
+  final code = error.osError?.errorCode;
+  return code == 32 || code == 33;
+}
+
 const _messages = <int, String>{
   2: '文件或目录不存在',
   3: '文件或目录不存在',

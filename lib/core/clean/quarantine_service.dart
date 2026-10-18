@@ -216,10 +216,12 @@ class QuarantineService {
     bool Function()? isCancelled,
   }) async {
     final failures = <CleanFailure>[];
+    final skips = <CleanFailure>[];
     final filesDir = Directory(p.windows.join(sessionDir.path, 'files'));
     final priorEntries = await _readEntries(sessionDir);
     var sequence = _maxSequence(priorEntries);
     var failureCount = 0;
+    var skippedCount = 0;
     var movedCount = 0;
     var movedBytes = 0;
     var processed = 0;
@@ -231,6 +233,21 @@ class QuarantineService {
       failureCount++;
       if (failures.length < _maxFailureDetails) {
         failures.add(CleanFailure(path: path, reason: _failureReason(error)));
+      }
+    }
+
+    void recordSkip(String path, Object reason) {
+      skippedCount++;
+      if (skips.length < _maxFailureDetails) {
+        skips.add(CleanFailure(path: path, reason: _failureReason(reason)));
+      }
+    }
+
+    void recordAttemptError(String path, Object error) {
+      if (_isSkippableError(error)) {
+        recordSkip(path, error);
+      } else {
+        recordFailure(path, error);
       }
     }
 
@@ -247,6 +264,7 @@ class QuarantineService {
           processed: processed,
           total: items.length,
           movedBytes: movedBytes,
+          skipped: skippedCount,
           currentPath: currentPath,
         ),
       );
@@ -256,6 +274,8 @@ class QuarantineService {
       sessionId: sessionRemoved ? null : sessionId,
       movedCount: movedCount,
       movedBytes: movedBytes,
+      skippedCount: skippedCount,
+      skips: List.unmodifiable(skips),
       failureCount: failureCount,
       failures: List.unmodifiable(failures),
       cancelled: cancelled,
@@ -276,7 +296,7 @@ class QuarantineService {
         processed++;
 
         if (_exclusions.excludes(item.path)) {
-          recordFailure(item.path, '位于排除列表中，已跳过');
+          recordSkip(item.path, '位于排除列表中，已跳过');
           report(currentPath: item.path);
           continue;
         }
@@ -294,12 +314,12 @@ class QuarantineService {
             followLinks: false,
           );
         } on FileSystemException catch (error) {
-          recordFailure(item.path, error);
+          recordAttemptError(item.path, error);
           report(currentPath: item.path);
           continue;
         }
         if (type != FileSystemEntityType.file) {
-          recordFailure(item.path, '文件已不存在或不是普通文件');
+          recordSkip(item.path, '文件已不存在或不是普通文件');
           report(currentPath: item.path);
           continue;
         }
@@ -309,14 +329,14 @@ class QuarantineService {
         try {
           final stat = await File(WindowsPath.forIo(item.path)).stat();
           if (stat.type != FileSystemEntityType.file) {
-            recordFailure(item.path, '文件已不存在或不是普通文件');
+            recordSkip(item.path, '文件已不存在或不是普通文件');
             report(currentPath: item.path);
             continue;
           }
           size = stat.size;
           metadata = await _captureMetadata(item.path);
         } on FileSystemException catch (error) {
-          recordFailure(item.path, error);
+          recordAttemptError(item.path, error);
           report(currentPath: item.path);
           continue;
         }
@@ -355,19 +375,27 @@ class QuarantineService {
 
         // Write the undo record before moving: a crash can leave an unused
         // record, but never an unrecorded file inside the quarantine.
+        final writer = entriesFile;
+        final entryStart = await writer.position();
         try {
-          await entriesFile.writeString('${jsonEncode(entry)}\n');
-          await entriesFile.flush();
+          await writer.writeString('${jsonEncode(entry)}\n');
+          await writer.flush();
         } on FileSystemException catch (error) {
           recordFailure(item.path, '无法写入撤销记录：${_failureReason(error)}');
           report(force: true, currentPath: item.path);
           break;
         }
 
+        final destinationPath = p.windows.join(filesDir.path, storedName);
         try {
-          await _moveFile(item.path, p.windows.join(filesDir.path, storedName));
+          await _moveFile(item.path, destinationPath);
         } on FileSystemException catch (error) {
-          recordFailure(item.path, error);
+          await _discardEntryWithoutStoredFile(
+            writer,
+            entryStart,
+            destinationPath,
+          );
+          recordAttemptError(item.path, error);
           report(currentPath: item.path);
           continue;
         }
@@ -1048,6 +1076,37 @@ class QuarantineService {
   }
 
   static String _failureReason(Object error) => describeFilesystemError(error);
+
+  static bool _isSkippableError(Object error) {
+    if (isFileLockConflict(error)) return true;
+    if (error is FileSystemException) {
+      final code = error.osError?.errorCode;
+      return code == 2 || code == 3;
+    }
+    return false;
+  }
+
+  /// Removes the just-written undo record when a failed move left nothing in
+  /// the quarantine. If a partial copy exists, the record is kept so the file
+  /// can still be restored or purged.
+  static Future<void> _discardEntryWithoutStoredFile(
+    RandomAccessFile writer,
+    int entryStart,
+    String storedPath,
+  ) async {
+    try {
+      final type = await FileSystemEntity.type(
+        WindowsPath.forIo(storedPath),
+        followLinks: false,
+      );
+      if (type != FileSystemEntityType.notFound) return;
+      await writer.truncate(entryStart);
+      await writer.setPosition(entryStart);
+      await writer.flush();
+    } on FileSystemException {
+      // An extra entry without a stored file is harmless and can be purged.
+    }
+  }
 
   Future<FileMetadata?> _captureMetadata(String path) async {
     try {

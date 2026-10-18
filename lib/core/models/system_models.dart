@@ -70,6 +70,7 @@ class SystemCleanProgress {
     required this.total,
     required this.deleted,
     required this.deletedBytes,
+    this.skipped = 0,
     this.currentPath,
   });
 
@@ -77,6 +78,7 @@ class SystemCleanProgress {
   final int total;
   final int deleted;
   final int deletedBytes;
+  final int skipped;
   final String? currentPath;
 }
 
@@ -88,14 +90,19 @@ class SystemCleanReport {
     required this.failures,
     required this.cancelled,
     required this.serviceIssues,
+    this.skippedCount = 0,
+    this.skips = const [],
   });
 
   final int deletedCount;
   final int deletedBytes;
+  final int skippedCount;
+  final List<CleanFailure> skips;
   final int failureCount;
   final List<CleanFailure> failures;
   final bool cancelled;
   final List<String> serviceIssues;
 
   bool get hasServiceIssues => serviceIssues.isNotEmpty;
+  bool get hasIssues => skippedCount > 0 || failureCount > 0;
 }

@@ -27,6 +27,7 @@ class RuleDetailPage extends StatelessWidget {
         final bool? selection = controller.ruleSelectionValue(rule.id);
         final selectedCount = controller.selectedCountForRule(rule.id);
         final selectedBytes = controller.selectedBytesForRule(rule.id);
+        final lockedCount = controller.possiblyLockedCountForRule(rule.id);
 
         return Scaffold(
           appBar: AppBar(
@@ -42,10 +43,16 @@ class RuleDetailPage extends StatelessWidget {
                 Text(context.strings.ruleTitle(rule)),
                 const SizedBox(height: 1),
                 Text(
-                  context.tf('{count} 个文件 · {bytes}', {
-                    'count': formatCount(result.items.length),
-                    'bytes': formatBytes(result.totalBytes),
-                  }),
+                  lockedCount > 0
+                      ? context.tf('{count} 个文件 · {bytes} · {locked} 个可能被占用', {
+                          'count': formatCount(result.items.length),
+                          'bytes': formatBytes(result.totalBytes),
+                          'locked': formatCount(lockedCount),
+                        })
+                      : context.tf('{count} 个文件 · {bytes}', {
+                          'count': formatCount(result.items.length),
+                          'bytes': formatBytes(result.totalBytes),
+                        }),
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -100,6 +107,34 @@ class RuleDetailPage extends StatelessWidget {
                                     style: theme.textTheme.labelSmall?.copyWith(
                                       color: scheme.onSurfaceVariant,
                                     ),
+                                  ),
+                                ],
+                                if (lockedCount > 0) ...[
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Icon(
+                                        Icons.lock_outline_rounded,
+                                        size: 14,
+                                        color: scheme.tertiary,
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Expanded(
+                                        child: Text(
+                                          context.t(
+                                            '标记为“可能被占用”的文件仍可勾选；'
+                                            '清理时会跳过被占用的文件并单独报告。',
+                                          ),
+                                          style: theme.textTheme.labelSmall
+                                              ?.copyWith(
+                                                color: scheme.tertiary,
+                                                height: 1.4,
+                                              ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ],
@@ -252,9 +287,13 @@ class _FileRow extends StatelessWidget {
                 borderRadius: BorderRadius.circular(9),
               ),
               child: Icon(
-                Icons.insert_drive_file_outlined,
+                item.possiblyLocked
+                    ? Icons.lock_outline_rounded
+                    : Icons.insert_drive_file_outlined,
                 size: 17,
-                color: scheme.onSurfaceVariant,
+                color: item.possiblyLocked
+                    ? scheme.tertiary
+                    : scheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(width: 12),
@@ -262,13 +301,30 @@ class _FileRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    fileNameOf(item.path),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w500,
-                    ),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          fileNameOf(item.path),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      if (item.possiblyLocked) ...[
+                        const SizedBox(width: 6),
+                        Tooltip(
+                          message: context.t('可能正被其他程序占用，清理时会跳过'),
+                          child: Icon(
+                            Icons.lock_outline_rounded,
+                            size: 14,
+                            color: scheme.tertiary,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 2),
                   Tooltip(

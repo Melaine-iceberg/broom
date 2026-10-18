@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:broom/core/models/cleaner_rule.dart';
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/platform/cleaner_platform.dart';
+import 'package:broom/core/platform/file_lock_probe.dart';
 import 'package:broom/core/safety/path_guard.dart';
 import 'package:broom/core/scan/scan_service.dart';
 import 'package:broom/core/settings/exclusion_store.dart';
@@ -70,6 +71,21 @@ class _RecordingScanService extends ScanService {
   }
 }
 
+class _FakeLockProbe implements FileLockProbe {
+  _FakeLockProbe(this.lockedPaths, {this.error});
+
+  final Set<String> lockedPaths;
+  final Object? error;
+  final List<List<String>> batches = [];
+
+  @override
+  Future<List<bool>> probePossiblyLocked(List<String> paths) async {
+    batches.add(List.of(paths));
+    if (error != null) throw error!;
+    return [for (final path in paths) lockedPaths.contains(path)];
+  }
+}
+
 void main() {
   late Directory temp;
   late Directory rootA;
@@ -108,6 +124,7 @@ void main() {
     required _RecordingScanService scanner,
     required List<CleanerRule> rules,
     required Map<String, List<String>> rootsByRule,
+    FileLockProbe? lockProbe,
   }) {
     return CleanController(
       platform: _TestPlatform(definedRules: rules, rootsByRule: rootsByRule),
@@ -115,6 +132,7 @@ void main() {
       quarantine: FakeQuarantineService(),
       exclusions: exclusions,
       scanServiceFactory: () => scanner,
+      lockProbe: lockProbe,
     );
   }
 
@@ -326,5 +344,96 @@ void main() {
     expect(scanner.jobs, isNull);
     expect(controller.phase, CleanPhase.idle);
     expect(controller.notice, contains('没有找到'));
+  });
+
+  test(
+    'marks possibly locked preview items without changing selection',
+    () async {
+      final first = JunkItem(
+        ruleId: 'test.rule',
+        rootPath: rootA.path,
+        path: p.windows.join(rootA.path, 'first.tmp'),
+        size: 10,
+        modified: DateTime(2026, 10, 18),
+      );
+      final second = JunkItem(
+        ruleId: 'test.rule',
+        rootPath: rootA.path,
+        path: p.windows.join(rootA.path, 'second.tmp'),
+        size: 25,
+        modified: DateTime(2026, 10, 18),
+      );
+      final scanner = _RecordingScanService(items: [first, second]);
+      final probe = _FakeLockProbe({first.path});
+      final rule = createRule();
+      final controller = createController(
+        exclusions: createStore(),
+        scanner: scanner,
+        rules: [rule],
+        rootsByRule: {
+          rule.id: [rootA.path],
+        },
+        lockProbe: probe,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      await controller.scan();
+      await pumpEventQueue();
+
+      expect(controller.phase, CleanPhase.preview);
+      expect(controller.lockProbeRunning, isFalse);
+      expect(controller.lockProbeChecked, 2);
+      expect(controller.lockProbeTotal, 2);
+      expect(controller.possiblyLockedCount, 1);
+      expect(controller.possiblyLockedCountForRule(rule.id), 1);
+      expect(controller.selectedCount, 2);
+      expect(controller.selectedPossiblyLockedCount, 1);
+      final items = controller.results.single.items;
+      expect(
+        items.firstWhere((item) => item.path == first.path).possiblyLocked,
+        isTrue,
+      );
+      expect(
+        items.firstWhere((item) => item.path == second.path).possiblyLocked,
+        isFalse,
+      );
+      expect(probe.batches.single.toSet(), {first.path, second.path});
+    },
+  );
+
+  test('keeps preview usable when lock probing is unavailable', () async {
+    final item = JunkItem(
+      ruleId: 'test.rule',
+      rootPath: rootA.path,
+      path: p.windows.join(rootA.path, 'file.tmp'),
+      size: 10,
+      modified: DateTime(2026, 10, 18),
+    );
+    final scanner = _RecordingScanService(items: [item]);
+    final probe = _FakeLockProbe(
+      const {},
+      error: const FileLockProbeException('缺少原生通道'),
+    );
+    final rule = createRule();
+    final controller = createController(
+      exclusions: createStore(),
+      scanner: scanner,
+      rules: [rule],
+      rootsByRule: {
+        rule.id: [rootA.path],
+      },
+      lockProbe: probe,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    await controller.scan();
+    await pumpEventQueue();
+
+    expect(controller.phase, CleanPhase.preview);
+    expect(controller.lockProbeRunning, isFalse);
+    expect(controller.possiblyLockedCount, 0);
+    expect(controller.selectedCount, 1);
   });
 }

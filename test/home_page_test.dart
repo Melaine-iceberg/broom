@@ -3,10 +3,13 @@ import 'dart:ui';
 
 import 'package:broom/app.dart';
 import 'package:broom/core/clean/quarantine_service.dart';
+import 'package:broom/core/models/clean_models.dart';
 import 'package:broom/core/models/cleaner_rule.dart';
+import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/platform/cleaner_platform.dart';
 import 'package:broom/core/rules/windows_rules.dart';
 import 'package:broom/core/safety/path_guard.dart';
+import 'package:broom/core/scan/scan_service.dart';
 import 'package:broom/core/settings/exclusion_store.dart';
 import 'package:broom/core/shell/system_shell.dart';
 import 'package:broom/ui/clean_controller.dart';
@@ -81,6 +84,38 @@ class _FixedRootsPlatform implements CleanerPlatform {
 
   @override
   Future<List<String>> resolveRoots(CleanerRule rule) async => roots;
+}
+
+class _FixedScanService extends ScanService {
+  _FixedScanService(this.items);
+
+  final List<JunkItem> items;
+
+  @override
+  Future<ScanResult> scan({
+    required List<ScanJob> jobs,
+    required List<String> excludedPaths,
+    void Function(ScanProgress progress)? onProgress,
+  }) async => ScanResult(
+    items: items,
+    scannedFiles: items.length,
+    directoryErrors: 0,
+    truncated: false,
+    cancelled: false,
+  );
+}
+
+class _ReportingQuarantineService extends FakeQuarantineService {
+  _ReportingQuarantineService(this.report);
+
+  final CleanReport report;
+
+  @override
+  Future<CleanReport> clean(
+    List<JunkItem> items, {
+    void Function(CleanProgress progress)? onProgress,
+    bool Function()? isCancelled,
+  }) async => report;
 }
 
 ExclusionStore _exclusionsStore() => ExclusionStore(
@@ -344,5 +379,66 @@ void main() {
 
     expect(find.text('排除项'), findsOneWidget);
     expect(find.text(kept.path), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('reports skipped files separately from failures', (tester) async {
+    tester.view.physicalSize = const Size(1200, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const root = r'C:\broom_widget_test\cache';
+    final item = JunkItem(
+      ruleId: 'test.cache',
+      rootPath: root,
+      path: p.windows.join(root, 'locked.tmp'),
+      size: 42,
+      modified: DateTime(2026, 10, 18),
+    );
+    const rule = CleanerRule(
+      id: 'test.cache',
+      title: '测试缓存',
+      category: '测试',
+      description: '测试用缓存规则',
+      pathPatterns: [],
+    );
+    final controller = CleanController(
+      platform: _FixedRootsPlatform(rule: rule, roots: [root]),
+      guard: PathGuard(protectedRoots: const []),
+      quarantine: _ReportingQuarantineService(
+        CleanReport(
+          sessionId: null,
+          movedCount: 0,
+          movedBytes: 0,
+          skippedCount: 1,
+          skips: [CleanFailure(path: item.path, reason: '文件正被其他程序占用')],
+          failureCount: 1,
+          failures: [CleanFailure(path: item.path, reason: '没有访问权限')],
+          cancelled: false,
+        ),
+      ),
+      exclusions: _exclusionsStore(),
+      scanServiceFactory: () => _FixedScanService([item]),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    await controller.scan();
+
+    await tester.pumpWidget(
+      BroomApp(controller: controller, systemShell: _FakeSystemShell()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(controller.phase, CleanPhase.preview);
+    await controller.cleanSelected();
+    await tester.pumpAndSettle();
+
+    expect(controller.phase, CleanPhase.done);
+    expect(find.textContaining('没有文件移入隔离区'), findsOneWidget);
+    expect(find.text('1 个文件已跳过'), findsOneWidget);
+    expect(find.textContaining('这些文件可能正被其他程序占用'), findsOneWidget);
+    expect(find.textContaining('文件正被其他程序占用'), findsOneWidget);
+    expect(find.text('1 个文件清理失败。'), findsOneWidget);
+    expect(find.textContaining('没有访问权限'), findsOneWidget);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 }

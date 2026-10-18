@@ -144,6 +144,16 @@ const translationsEn = <String, String>{
   '取消扫描': 'Cancel scan',
   '有 {count} 个目录无法读取，已自动跳过。': '{count, plural, one{# folder could not be read and was skipped.} other{# folders could not be read and were skipped.}}',
   '文件数量超过单次扫描上限，预览与清理仅包含已找到的部分。': 'The file limit for one scan was reached. Preview and cleaning include only the files found.',
+  '正在检测被占用的文件…（{checked} / {total}）':
+      'Checking for files in use… ({checked} / {total})',
+  '有 {count} 个文件可能正被其他程序占用，清理时会跳过并单独报告。': '{count, plural, one{# file may be in use by another program and will be skipped and reported separately during cleaning.} other{# files may be in use by other programs and will be skipped and reported separately during cleaning.}}',
+  '{count} 个文件可能被占用': '{count, plural, one{# file possibly in use} other{# files possibly in use}}',
+  '已选文件中有 {count} 个可能被占用，清理时会跳过': '{count, plural, one{# selected file may be in use and will be skipped} other{# selected files may be in use and will be skipped}}',
+  '可能正被其他程序占用，清理时会跳过':
+      'May be in use by another program and will be skipped during cleaning',
+  '标记为“可能被占用”的文件仍可勾选；清理时会跳过被占用的文件并单独报告。': 'Files marked "Possibly in use" can still be selected; cleaning skips files that are in use and reports them separately.',
+  '{count} 个文件 · {bytes} · {locked} 个可能被占用':
+      '{count} files · {bytes} · {locked} possibly in use',
   '扫描结果': 'Scan results',
   '没有发现可清理的文件': 'No cleanable files found',
   '发现 {count} 个文件 · {bytes}，请选择要清理的内容。':
@@ -163,18 +173,32 @@ const translationsEn = <String, String>{
       'Files are kept in quarantine and can be undone afterwards.',
   '{processed} / {total} 项': '{processed} / {total}',
   '已移动 {count} 项 · {bytes}': 'Moved {count} items · {bytes}',
+  '已移动 {moved} 项 · 已跳过 {skipped} 项': 'Moved {moved} · skipped {skipped}',
   '正在停止…': 'Stopping…',
   '停止清理': 'Stop cleaning',
   '清理已停止': 'Cleaning stopped',
   '没有文件被移动': 'No files were moved',
+  '没有文件移入隔离区': 'No files were moved',
   '清理完成': 'Cleaning complete',
   '已停止清理，已经移动的文件仍保存在隔离区中，未处理的文件可以继续清理。': 'Cleaning stopped. Files already moved remain in quarantine, and the remaining files can be cleaned from quarantine.',
   '没有文件成功移入隔离区，可以稍后重试。':
       'No files were moved to quarantine. You can try again later.',
+  '没有文件移入隔离区；被占用或已不存在的文件已跳过。': 'No files were moved to quarantine; files that were in use or no longer exist were skipped.',
   '文件已安全移动到隔离区，可随时恢复。释放隔离区后才会回收磁盘空间。': 'Files were safely moved to quarantine and can be restored at any time. Disk space is reclaimed only after releasing quarantine.',
   '已暂存': 'Staged',
   '移入隔离区': 'Moved',
   '{count} 个文件': '{count, plural, one{# file} other{# files}}',
+  '{count} 个文件已跳过':
+      '{count, plural, one{# file was skipped} other{# files were skipped}}',
+  '这些文件可能正被其他程序占用，或已不存在。它们保留在原处，没有被修改。': 'These files may be in use or no longer exist. They were left untouched at their original paths.',
+  '这些文件可能正被系统占用，或已不存在。它们保留在原处，没有被修改。': 'These files may be in use or no longer exist. They were left untouched at their original paths.',
+  '{count} 个文件删除失败': '{count, plural, one{# file could not be deleted} other{# files could not be deleted}}',
+  '请检查访问权限、磁盘状态或服务占用情况后重试。':
+      'Check access permissions, disk state, or service usage and try again.',
+  '{count} 个文件清理失败。': '{count, plural, one{# file could not be cleaned.} other{# files could not be cleaned.}}',
+  '请检查文件权限、磁盘空间或路径状态后重试。':
+      'Check file permissions, disk space, or path state and try again.',
+  '跳过 {count} 个被占用或已不存在的文件': '{count, plural, one{Skipped # file that was in use or missing} other{Skipped # files that were in use or missing}}',
   '{count} 个文件未能清理，可能被程序占用，或已被加入排除列表。': '{count, plural, one{# file could not be cleaned. It may be in use or newly excluded.} other{# files could not be cleaned. They may be in use or newly excluded.}}',
   '还有 {count} 条未显示…': '{count} more not shown…',
   '管理隔离区': 'Manage quarantine',

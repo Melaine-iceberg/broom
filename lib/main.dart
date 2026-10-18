@@ -10,6 +10,7 @@ import 'core/clean/quarantine_service.dart';
 import 'core/clean/system_cache_cleaner.dart';
 import 'core/clean/system_services.dart';
 import 'core/platform/cleaner_platform.dart';
+import 'core/platform/file_lock_probe.dart';
 import 'core/platform/system_access.dart';
 import 'core/platform/system_cache_platform.dart';
 import 'core/safety/path_guard.dart';
@@ -72,6 +73,7 @@ void main(List<String> args) {
     quarantine: quarantine,
     exclusions: exclusions,
     isRuleEnabled: settings.isRuleEnabled,
+    lockProbe: createFileLockProbe(),
   );
   unawaited(_initializeBroom(controller, retention));
 
@@ -81,6 +83,7 @@ void main(List<String> args) {
     access: systemAccess,
     cleaner: FileSystemCacheCleaner(services: WindowsServiceManager()),
     quarantineRoot: quarantineRoot,
+    lockProbe: createFileLockProbe(),
   );
 
   _runBroom(

@@ -157,4 +157,63 @@ void main() {
 
     expect(controller.selectedCount, 2);
   });
+
+  testWidgets('marks files that may be locked', (tester) async {
+    tester.view.physicalSize = const Size(1200, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final temp = Directory.systemTemp.createTempSync('broom_rule_detail_lock_');
+    addTearDown(() {
+      if (temp.existsSync()) temp.deleteSync(recursive: true);
+    });
+    final root = Directory(p.windows.join(temp.path, 'cache'))
+      ..createSync(recursive: true);
+    final locked = JunkItem(
+      ruleId: 'test.cache',
+      rootPath: root.path,
+      path: p.windows.join(root.path, 'locked.tmp'),
+      size: 10,
+      modified: DateTime(2026, 10, 18),
+      possiblyLocked: true,
+    );
+    const rule = CleanerRule(
+      id: 'test.cache',
+      title: '测试缓存',
+      category: '测试',
+      description: '测试规则',
+      pathPatterns: [],
+    );
+    final exclusions = ExclusionStore(
+      filePath: p.windows.join(temp.path, 'exclusions.json'),
+    );
+    await exclusions.ensureLoaded();
+    final controller = CleanController(
+      platform: _Platform(rule: rule, roots: [root.path]),
+      guard: PathGuard(protectedRoots: const []),
+      quarantine: FakeQuarantineService(),
+      exclusions: exclusions,
+      scanServiceFactory: () => _FakeScanService([locked]),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    await controller.scan();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildBroomTheme(Brightness.light),
+        home: RuleDetailPage(
+          controller: controller,
+          result: controller.results.single,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('1 个可能被占用'), findsOneWidget);
+    expect(find.byIcon(Icons.lock_outline_rounded), findsWidgets);
+    expect(find.byTooltip('可能正被其他程序占用，清理时会跳过'), findsOneWidget);
+    expect(find.textContaining('仍可勾选'), findsOneWidget);
+  });
 }

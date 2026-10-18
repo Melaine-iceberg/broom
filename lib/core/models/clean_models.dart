@@ -11,6 +11,7 @@ class CleanProgress {
     required this.processed,
     required this.total,
     required this.movedBytes,
+    this.skipped = 0,
     this.currentPath,
   });
 
@@ -18,6 +19,7 @@ class CleanProgress {
   final int processed;
   final int total;
   final int movedBytes;
+  final int skipped;
   final String? currentPath;
 }
 
@@ -29,18 +31,29 @@ class CleanReport {
     required this.failureCount,
     required this.failures,
     required this.cancelled,
+    this.skippedCount = 0,
+    this.skips = const [],
     this.remainingCount = 0,
   });
 
   final String? sessionId;
   final int movedCount;
   final int movedBytes;
+
+  /// Files that could not be cleaned because of a blocking condition such as
+  /// another program's file lock, a disappeared file, or an exclusion. These
+  /// files stay untouched at their original paths.
+  final int skippedCount;
+  final List<CleanFailure> skips;
+
   final int failureCount;
   final List<CleanFailure> failures;
   final bool cancelled;
   final int remainingCount;
 
   bool get resumable => remainingCount > 0;
+
+  bool get hasIssues => skippedCount > 0 || failureCount > 0;
 }
 
 enum UndoConflictPolicy { skip, keepBoth, overwrite }
