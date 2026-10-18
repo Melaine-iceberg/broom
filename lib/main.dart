@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import 'app.dart';
+import 'core/clean/quarantine_retention_service.dart';
 import 'core/clean/quarantine_service.dart';
 import 'core/clean/system_cache_cleaner.dart';
 import 'core/clean/system_services.dart';
@@ -12,6 +13,7 @@ import 'core/platform/system_access.dart';
 import 'core/platform/system_cache_platform.dart';
 import 'core/safety/path_guard.dart';
 import 'core/settings/exclusion_store.dart';
+import 'core/settings/quarantine_policy_store.dart';
 import 'platform/window_chrome.dart';
 import 'ui/clean_controller.dart';
 import 'ui/system_cache_controller.dart';
@@ -48,13 +50,19 @@ void main(List<String> args) {
     guard: guard,
     exclusions: exclusions,
   );
+  final retention = QuarantineRetentionService(
+    quarantine: quarantine,
+    store: QuarantinePolicyStore(
+      filePath: QuarantinePolicyStore.defaultFilePath(quarantineRoot),
+    ),
+  );
   final controller = CleanController(
     platform: platform,
     guard: guard,
     quarantine: quarantine,
     exclusions: exclusions,
   );
-  unawaited(controller.initialize());
+  unawaited(_initializeBroom(controller, retention));
 
   final systemAccess = createSystemAccess();
   final systemCacheController = SystemCacheController(
@@ -68,11 +76,22 @@ void main(List<String> args) {
     BroomApp(
       controller: controller,
       systemCacheController: systemCacheController,
+      quarantineRetention: retention,
       analysisInitialDirectory: _downloadsDirectory(platform.environment),
       analysisExcludedPaths: [quarantineRoot],
       startInSystemCache: args.contains('--system-cache'),
     ),
   );
+}
+
+// Apply the quarantine retention policy before loading pending sessions so the
+// home page counts reflect anything auto-purged at startup.
+Future<void> _initializeBroom(
+  CleanController controller,
+  QuarantineRetentionService retention,
+) async {
+  await retention.ensureInitialized();
+  await controller.initialize();
 }
 
 String? _downloadsDirectory(Map<String, String> environment) {

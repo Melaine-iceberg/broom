@@ -1,17 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
+import '../core/clean/quarantine_retention_service.dart';
 import '../core/clean/quarantine_service.dart';
 import '../core/models/clean_models.dart';
+import '../core/models/quarantine_policy_models.dart';
 import '../core/shell/system_shell.dart';
 import 'analysis_widgets.dart';
 import 'format.dart';
+import 'quarantine_policy_dialog.dart';
 
 class QuarantinePage extends StatefulWidget {
-  const QuarantinePage({super.key, required this.service, required this.shell});
+  const QuarantinePage({
+    super.key,
+    required this.service,
+    required this.shell,
+    this.retention,
+  });
 
   final QuarantineService service;
   final SystemShell shell;
+  final QuarantineRetentionService? retention;
 
   @override
   State<QuarantinePage> createState() => _QuarantinePageState();
@@ -20,6 +29,9 @@ class QuarantinePage extends StatefulWidget {
 class _QuarantinePageState extends State<QuarantinePage> {
   List<QuarantineSessionInfo> _sessions = const [];
   DiskSpaceSnapshot? _disk;
+  QuarantineRetentionPolicy? _policy;
+  QuarantineRetentionReport? _lastRetentionReport;
+  String? _policyError;
   bool _loading = true;
   bool _busy = false;
   String? _error;
@@ -41,6 +53,17 @@ class _QuarantinePageState extends State<QuarantinePage> {
       setState(() => _loading = true);
     }
     try {
+      QuarantineRetentionPolicy? policy;
+      QuarantineRetentionReport? retentionReport;
+      String? policyError;
+      final retention = widget.retention;
+      if (retention != null) {
+        await retention.ensureInitialized();
+        policy = retention.policy;
+        retentionReport = retention.lastReport;
+        policyError = retention.loadError;
+      }
+
       final sessions = await widget.service.listSessions();
       DiskSpaceSnapshot? disk;
       try {
@@ -55,6 +78,9 @@ class _QuarantinePageState extends State<QuarantinePage> {
       setState(() {
         _sessions = sessions;
         _disk = disk;
+        _policy = policy;
+        _lastRetentionReport = retentionReport;
+        _policyError = policyError;
         _error = null;
         _loading = false;
       });
@@ -69,12 +95,32 @@ class _QuarantinePageState extends State<QuarantinePage> {
 
   Future<void> _restoreAll(QuarantineSessionInfo session) async {
     if (_busy) return;
+
+    UndoConflictPolicy policy;
+    try {
+      final entries = await widget.service.listEntries(session.id);
+      final conflicts = entries
+          .where((entry) => entry.restorable && entry.originalExists)
+          .length;
+      if (!mounted) return;
+      final choice = await _askConflictPolicy(context, conflicts);
+      if (choice == null || !mounted) return;
+      policy = choice;
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = '恢复失败：$error');
+      return;
+    }
+
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      final report = await widget.service.undo(session.id);
+      final report = await widget.service.undo(
+        session.id,
+        conflictPolicy: policy,
+      );
       await _load(showLoading: false);
       if (!mounted) return;
       _showMessage(_restoreMessage(report));
@@ -144,6 +190,42 @@ class _QuarantinePageState extends State<QuarantinePage> {
     }
   }
 
+  Future<void> _editPolicy() async {
+    final retention = widget.retention;
+    if (retention == null || _busy) return;
+
+    await retention.ensureInitialized();
+    if (!mounted) return;
+    final updated = await showQuarantinePolicyDialog(
+      context,
+      policy: retention.policy ?? QuarantineRetentionPolicy.defaults,
+    );
+    if (updated == null || !mounted) return;
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final report = await retention.save(updated);
+      await _load(showLoading: false);
+      if (!mounted) return;
+      if (report == null || !report.didPurge) {
+        _showMessage(updated.enabled ? '保留策略已保存。' : '自动永久释放已关闭。');
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = '无法保存保留策略：$error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _dismissRetentionReport() {
+    widget.retention?.clearLastReport();
+    setState(() => _lastRetentionReport = null);
+  }
+
   Future<void> _openSession(QuarantineSessionInfo session) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -211,12 +293,29 @@ class _QuarantinePageState extends State<QuarantinePage> {
                 ),
                 const SizedBox(height: 12),
               ],
+              if (_policyError case final message?) ...[
+                AnalysisBanner(
+                  message: '保留策略读取失败，自动永久释放已停用：$message',
+                  isError: true,
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (_lastRetentionReport case final report?
+                  when report.didPurge) ...[
+                AnalysisBanner(
+                  message: _retentionReportMessage(report),
+                  onClose: _dismissRetentionReport,
+                ),
+                const SizedBox(height: 12),
+              ],
               _SummaryCard(
                 pendingBytes: _pendingBytes,
                 pendingFiles: _pendingFiles,
                 sessionCount: _sessions.length,
                 disk: _disk,
+                policy: _policy,
                 busy: _busy,
+                onEditPolicy: widget.retention == null ? null : _editPolicy,
                 onPurgeAll: _sessions.isEmpty ? null : _purgeAll,
               ),
               if (_loading) ...[
@@ -290,16 +389,14 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
       .where((entry) => entry.restorable)
       .fold<int>(0, (total, entry) => total + entry.size);
 
-  int get _selectableCount => _entries
-      .where((entry) => entry.restorable && !entry.originalExists)
-      .length;
+  int get _selectableCount =>
+      _entries.where((entry) => entry.restorable).length;
 
   int get _selectedBytes => _entries
       .where((entry) => _selected.contains(entry.storedName))
       .fold<int>(0, (total, entry) => total + entry.size);
 
-  bool _canSelect(QuarantineEntry entry) =>
-      entry.restorable && !entry.originalExists;
+  bool _canSelect(QuarantineEntry entry) => entry.restorable;
 
   @override
   void initState() {
@@ -380,6 +477,17 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
   }
 
   Future<void> _restore({Set<String>? storedNames}) async {
+    final conflicts = _entries
+        .where(
+          (entry) =>
+              entry.restorable &&
+              entry.originalExists &&
+              (storedNames == null || storedNames.contains(entry.storedName)),
+        )
+        .length;
+    final policy = await _askConflictPolicy(context, conflicts);
+    if (policy == null || !mounted) return;
+
     setState(() {
       _busy = true;
       _error = null;
@@ -388,6 +496,7 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
       final report = await widget.service.undo(
         widget.session.id,
         storedNames: storedNames,
+        conflictPolicy: policy,
       );
       if (!mounted) return;
       await _showRestoreResult(report);
@@ -466,9 +575,20 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('共 ${formatBytes(report.restoredBytes)} 已放回原位置。'),
+            if (report.keptBothCount > 0) ...[
+              const SizedBox(height: 8),
+              Text('${report.keptBothCount} 个文件以新名称恢复，原位置的文件保持不变。'),
+            ],
+            if (report.overwrittenCount > 0) ...[
+              const SizedBox(height: 8),
+              Text('${report.overwrittenCount} 个文件已覆盖原位置内容。'),
+            ],
             if (report.conflictCount > 0) ...[
               const SizedBox(height: 8),
-              Text('${report.conflictCount} 个文件的原位置已有新内容，已跳过，不会覆盖。'),
+              Text(
+                '${report.conflictCount} 个文件的原位置已有新内容，本次已跳过。'
+                '可再次恢复并选择“保留两者”或“覆盖”。',
+              ),
             ],
             if (report.failureCount > 0) ...[
               const SizedBox(height: 8),
@@ -606,7 +726,9 @@ class _SummaryCard extends StatelessWidget {
     required this.pendingFiles,
     required this.sessionCount,
     required this.disk,
+    required this.policy,
     required this.busy,
+    required this.onEditPolicy,
     required this.onPurgeAll,
   });
 
@@ -614,7 +736,9 @@ class _SummaryCard extends StatelessWidget {
   final int pendingFiles;
   final int sessionCount;
   final DiskSpaceSnapshot? disk;
+  final QuarantineRetentionPolicy? policy;
   final bool busy;
+  final VoidCallback? onEditPolicy;
   final VoidCallback? onPurgeAll;
 
   @override
@@ -713,6 +837,46 @@ class _SummaryCard extends StatelessWidget {
                 ),
             ],
           ),
+          if (policy case final policy?) ...[
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+              decoration: BoxDecoration(
+                color: scheme.surface.withValues(alpha: 0.52),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: scheme.outlineVariant.withValues(alpha: 0.5),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.auto_delete_outlined,
+                    size: 16,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      policy.enabled
+                          ? '自动永久释放：保留 ${policy.retentionDays} 天 · '
+                                '上限 ${formatBytes(policy.maxBytes)}'
+                          : '自动永久释放未开启',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  if (onEditPolicy != null)
+                    TextButton(
+                      key: const ValueKey('retention-policy-button'),
+                      onPressed: busy ? null : onEditPolicy,
+                      child: Text(policy.enabled ? '调整策略' : '设置策略'),
+                    ),
+                ],
+              ),
+            ),
+          ],
           if (onPurgeAll != null) ...[
             const SizedBox(height: 18),
             Align(
@@ -968,7 +1132,7 @@ class _SessionDetailHeader extends StatelessWidget {
           Expanded(
             child: Text(
               '$pendingCount 个文件 · ${formatBytes(pendingBytes)} 仍在隔离区。'
-              '恢复不会覆盖原位置已有文件；永久释放后无法找回。',
+              '冲突文件可选择跳过、保留两者或覆盖；永久释放后无法找回。',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onSurfaceVariant,
                 height: 1.5,
@@ -1263,8 +1427,8 @@ class _PolicyNote extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: Text(
-            '隔离区文件只保存在本机。恢复时不会覆盖原位置后来新建的文件；'
-            '永久释放是不可撤销的操作，页面会再次要求确认。',
+            '隔离区文件只保存在本机。恢复遇到同名文件时可选择跳过、保留两者或覆盖；'
+            '覆盖需要二次确认。永久释放是不可撤销的操作，页面会再次要求确认。',
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
               height: 1.5,
@@ -1353,10 +1517,155 @@ class _PurgeConfirmDialogState extends State<_PurgeConfirmDialog> {
   }
 }
 
+Future<UndoConflictPolicy?> _askConflictPolicy(
+  BuildContext context,
+  int conflictCount,
+) async {
+  if (conflictCount == 0) return UndoConflictPolicy.skip;
+  return showDialog<UndoConflictPolicy>(
+    context: context,
+    builder: (_) => _ConflictResolutionDialog(conflictCount: conflictCount),
+  );
+}
+
+class _ConflictResolutionDialog extends StatefulWidget {
+  const _ConflictResolutionDialog({required this.conflictCount});
+
+  final int conflictCount;
+
+  @override
+  State<_ConflictResolutionDialog> createState() =>
+      _ConflictResolutionDialogState();
+}
+
+class _ConflictResolutionDialogState extends State<_ConflictResolutionDialog> {
+  UndoConflictPolicy _policy = UndoConflictPolicy.skip;
+  bool _acknowledged = false;
+
+  bool get _canConfirm =>
+      _policy != UndoConflictPolicy.overwrite || _acknowledged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return AlertDialog(
+      icon: Icon(
+        Icons.compare_arrows_rounded,
+        size: 30,
+        color: scheme.tertiary,
+      ),
+      title: Text('${widget.conflictCount} 个文件的原位置已有内容'),
+      content: SizedBox(
+        width: 460,
+        child: SingleChildScrollView(
+          child: RadioGroup<UndoConflictPolicy>(
+            groupValue: _policy,
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() {
+                _policy = value;
+                if (value != UndoConflictPolicy.overwrite) {
+                  _acknowledged = false;
+                }
+              });
+            },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '这些文件的原路径在清理后出现了新内容。请选择本次恢复的处理方式：',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                RadioListTile<UndoConflictPolicy>(
+                  value: UndoConflictPolicy.skip,
+                  contentPadding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                  title: const Text('跳过冲突文件'),
+                  subtitle: const Text('暂存文件继续留在隔离区，原位置内容不变。'),
+                ),
+                RadioListTile<UndoConflictPolicy>(
+                  value: UndoConflictPolicy.keepBoth,
+                  contentPadding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                  title: const Text('保留两者'),
+                  subtitle: const Text('暂存文件恢复为重命名副本，例如“文件名 (已恢复).扩展名”。'),
+                ),
+                RadioListTile<UndoConflictPolicy>(
+                  value: UndoConflictPolicy.overwrite,
+                  contentPadding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                  title: const Text('覆盖原位置文件'),
+                  subtitle: const Text('用暂存文件替换原位置内容，原位置的新内容将被删除。'),
+                ),
+                if (_policy == UndoConflictPolicy.overwrite)
+                  CheckboxListTile(
+                    key: const ValueKey('overwrite-confirm-checkbox'),
+                    value: _acknowledged,
+                    onChanged: (value) =>
+                        setState(() => _acknowledged = value ?? false),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: Text(
+                      '我明白原位置的文件将被覆盖且无法恢复',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          key: const ValueKey('conflict-confirm-button'),
+          onPressed: _canConfirm
+              ? () => Navigator.of(context).pop(_policy)
+              : null,
+          child: const Text('继续恢复'),
+        ),
+      ],
+    );
+  }
+}
+
+String _retentionReportMessage(QuarantineRetentionReport report) {
+  if (report.removedSessionCount == 0 && report.failureCount > 0) {
+    return '自动保留策略未能释放旧会话：${report.failureCount} 个错误，'
+        '相关文件仍保留在隔离区。';
+  }
+  final parts = <String>[
+    '自动保留策略已永久释放 ${report.removedSessionCount} 个旧会话，'
+        '共 ${report.removedFileCount} 个文件'
+        '（${formatBytes(report.removedBytes)}）',
+  ];
+  if (report.failureCount > 0) {
+    parts.add('${report.failureCount} 个文件释放失败，仍保留在隔离区');
+  }
+  return '${parts.join('；')}。';
+}
+
 String _restoreMessage(UndoReport report) {
   final parts = <String>['已恢复 ${report.restoredCount} 个文件'];
+  if (report.keptBothCount > 0) {
+    parts.add('${report.keptBothCount} 个以新名称保留两者');
+  }
+  if (report.overwrittenCount > 0) {
+    parts.add('${report.overwrittenCount} 个覆盖了原位置');
+  }
   if (report.conflictCount > 0) {
-    parts.add('${report.conflictCount} 个原位置已有文件，已跳过');
+    parts.add('${report.conflictCount} 个已跳过冲突');
   }
   if (report.failureCount > 0) {
     parts.add('${report.failureCount} 个恢复失败');

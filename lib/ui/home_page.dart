@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/analysis/analysis_service.dart';
+import '../core/clean/quarantine_retention_service.dart';
 import '../core/models/clean_models.dart';
 import '../core/models/cleaner_rule.dart';
 import '../core/shell/system_shell.dart';
@@ -23,6 +24,7 @@ class HomePage extends StatefulWidget {
     required this.shell,
     required this.analysisRunnerFactory,
     this.systemCacheController,
+    this.quarantineRetention,
     this.analysisInitialDirectory,
     this.analysisExcludedPaths = const [],
     this.startInSystemCache = false,
@@ -31,6 +33,7 @@ class HomePage extends StatefulWidget {
   final CleanController controller;
   final SystemShell shell;
   final SystemCacheController? systemCacheController;
+  final QuarantineRetentionService? quarantineRetention;
   final AnalysisRunner Function() analysisRunnerFactory;
   final String? analysisInitialDirectory;
   final List<String> analysisExcludedPaths;
@@ -202,8 +205,11 @@ class _HomePageState extends State<HomePage> {
   Future<void> _openQuarantine() async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) =>
-            QuarantinePage(service: controller.quarantine, shell: widget.shell),
+        builder: (_) => QuarantinePage(
+          service: controller.quarantine,
+          shell: widget.shell,
+          retention: widget.quarantineRetention,
+        ),
       ),
     );
     if (!mounted) return;
@@ -2142,7 +2148,10 @@ class _UndoResultDialog extends StatelessWidget {
           ),
           if (report.conflictCount > 0) ...[
             const SizedBox(height: 8),
-            Text('${report.conflictCount} 个文件的原位置已有新文件，已跳过，不会覆盖。'),
+            Text(
+              '${report.conflictCount} 个文件的原位置已有新文件，已跳过。'
+              '可在隔离区重新恢复并选择保留两者或覆盖。',
+            ),
           ],
           if (report.failureCount > 0) ...[
             const SizedBox(height: 8),

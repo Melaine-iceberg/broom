@@ -39,11 +39,15 @@ class CleanReport {
   final bool cancelled;
 }
 
+enum UndoConflictPolicy { skip, keepBoth, overwrite }
+
 class UndoReport {
   const UndoReport({
     required this.restoredCount,
     required this.restoredBytes,
     required this.conflictCount,
+    required this.keptBothCount,
+    required this.overwrittenCount,
     required this.missingCount,
     required this.failureCount,
     required this.failures,
@@ -53,6 +57,8 @@ class UndoReport {
   final int restoredCount;
   final int restoredBytes;
   final int conflictCount;
+  final int keptBothCount;
+  final int overwrittenCount;
   final int missingCount;
   final int failureCount;
   final List<CleanFailure> failures;

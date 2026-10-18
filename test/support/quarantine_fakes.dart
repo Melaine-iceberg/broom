@@ -7,13 +7,14 @@ QuarantineEntry fakeQuarantineEntry(
   String name, {
   int sequence = 1,
   int size = 5,
+  bool originalExists = false,
 }) => QuarantineEntry(
   storedName: '00000${sequence}_$name',
   originalPath: 'C:\\Users\\Alice\\Downloads\\$name',
   size: size,
   restored: false,
   present: true,
-  originalExists: false,
+  originalExists: originalExists,
 );
 
 class FakeQuarantineService implements QuarantineService {
@@ -30,7 +31,8 @@ class FakeQuarantineService implements QuarantineService {
   final PathGuard guard = PathGuard(protectedRoots: const []);
 
   final Map<String, List<QuarantineEntry>> _entriesBySession;
-  final List<Set<String>?> restoreRequests = [];
+  final List<({Set<String>? storedNames, UndoConflictPolicy policy})>
+  restoreRequests = [];
 
   bool get isEmpty => _entriesBySession.isEmpty;
 
@@ -47,19 +49,37 @@ class FakeQuarantineService implements QuarantineService {
       List.of(_entriesBySession[sessionId] ?? const []);
 
   @override
-  Future<UndoReport> undo(String sessionId, {Set<String>? storedNames}) async {
-    restoreRequests.add(storedNames);
+  Future<UndoReport> undo(
+    String sessionId, {
+    Set<String>? storedNames,
+    UndoConflictPolicy conflictPolicy = UndoConflictPolicy.skip,
+  }) async {
+    restoreRequests.add((storedNames: storedNames, policy: conflictPolicy));
     final entries = _entriesBySession[sessionId];
     if (entries == null) throw StateError('找不到隔离区记录');
 
     var restoredCount = 0;
     var restoredBytes = 0;
+    var conflictCount = 0;
+    var keptBothCount = 0;
+    var overwrittenCount = 0;
     for (var index = 0; index < entries.length; index++) {
       final entry = entries[index];
       if (storedNames != null && !storedNames.contains(entry.storedName)) {
         continue;
       }
-      if (!entry.restorable || entry.originalExists) continue;
+      if (!entry.restorable) continue;
+      if (entry.originalExists) {
+        switch (conflictPolicy) {
+          case UndoConflictPolicy.skip:
+            conflictCount++;
+            continue;
+          case UndoConflictPolicy.keepBoth:
+            keptBothCount++;
+          case UndoConflictPolicy.overwrite:
+            overwrittenCount++;
+        }
+      }
       entries[index] = QuarantineEntry(
         storedName: entry.storedName,
         originalPath: entry.originalPath,
@@ -78,7 +98,9 @@ class FakeQuarantineService implements QuarantineService {
     return UndoReport(
       restoredCount: restoredCount,
       restoredBytes: restoredBytes,
-      conflictCount: 0,
+      conflictCount: conflictCount,
+      keptBothCount: keptBothCount,
+      overwrittenCount: overwrittenCount,
       missingCount: 0,
       failureCount: 0,
       failures: const [],

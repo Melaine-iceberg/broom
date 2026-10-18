@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:broom/core/clean/quarantine_service.dart';
+import 'package:broom/core/models/clean_models.dart';
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/safety/path_exclusions.dart';
 import 'package:broom/core/safety/path_guard.dart';
@@ -171,6 +172,73 @@ void main() {
     final after = await quarantine.listEntries(report.sessionId!);
     expect(after.single.restored, isFalse);
     expect(after.single.originalExists, isTrue);
+  });
+
+  test('keeps both copies with a unique restored name', () async {
+    final file = await createFile('conflict.txt', 'alpha');
+    final occupied = File(p.windows.join(source.path, 'conflict (已恢复).txt'));
+    await occupied.writeAsString('occupied');
+    final report = await quarantine.clean([await itemFor(file)]);
+    await file.writeAsString('user-content');
+
+    final undo = await quarantine.undo(
+      report.sessionId!,
+      conflictPolicy: UndoConflictPolicy.keepBoth,
+    );
+
+    expect(undo.restoredCount, 1);
+    expect(undo.keptBothCount, 1);
+    expect(undo.conflictCount, 0);
+    expect(undo.failureCount, 0);
+    expect(undo.sessionRemoved, isTrue);
+    expect(await file.readAsString(), 'user-content');
+    expect(await occupied.readAsString(), 'occupied');
+    final restored = File(p.windows.join(source.path, 'conflict (已恢复 2).txt'));
+    expect(await restored.readAsString(), 'alpha');
+    expect(await quarantine.listSessions(), isEmpty);
+  });
+
+  test('overwrites the occupied target after backing it up', () async {
+    final file = await createFile('conflict.txt', 'alpha');
+    final report = await quarantine.clean([await itemFor(file)]);
+    await file.writeAsString('user-content');
+
+    final undo = await quarantine.undo(
+      report.sessionId!,
+      conflictPolicy: UndoConflictPolicy.overwrite,
+    );
+
+    expect(undo.restoredCount, 1);
+    expect(undo.overwrittenCount, 1);
+    expect(undo.keptBothCount, 0);
+    expect(undo.conflictCount, 0);
+    expect(undo.failureCount, 0);
+    expect(undo.sessionRemoved, isTrue);
+    expect(await file.readAsString(), 'alpha');
+    final leftovers = await source
+        .list()
+        .where((entity) => p.basename(entity.path).startsWith('.broom-backup-'))
+        .toList();
+    expect(leftovers, isEmpty);
+  });
+
+  test('refuses to overwrite a directory at the original path', () async {
+    final file = await createFile('conflict.txt', 'alpha');
+    final report = await quarantine.clean([await itemFor(file)]);
+    await Directory(file.path).create();
+
+    final undo = await quarantine.undo(
+      report.sessionId!,
+      conflictPolicy: UndoConflictPolicy.overwrite,
+    );
+
+    expect(undo.restoredCount, 0);
+    expect(undo.overwrittenCount, 0);
+    expect(undo.failureCount, 1);
+    expect(undo.failures.single.reason, contains('不是普通文件'));
+    expect(undo.sessionRemoved, isFalse);
+    expect(await Directory(file.path).exists(), isTrue);
+    expect((await quarantine.listSessions()).single.pendingCount, 1);
   });
 
   test('permanently purges a quarantine session', () async {

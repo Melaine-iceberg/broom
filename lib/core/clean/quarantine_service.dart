@@ -273,7 +273,11 @@ class QuarantineService {
     }
   }
 
-  Future<UndoReport> undo(String sessionId, {Set<String>? storedNames}) async {
+  Future<UndoReport> undo(
+    String sessionId, {
+    Set<String>? storedNames,
+    UndoConflictPolicy conflictPolicy = UndoConflictPolicy.skip,
+  }) async {
     final sessionDir = await _requireSessionDirectory(sessionId);
     final entries = await _readEntries(sessionDir);
     final restoredNames = await _readRestoredNames(sessionDir);
@@ -289,12 +293,34 @@ class QuarantineService {
     var restoredCount = 0;
     var restoredBytes = 0;
     var conflictCount = 0;
+    var keptBothCount = 0;
+    var overwrittenCount = 0;
     var missingCount = 0;
 
     void recordFailure(String path, Object error) {
       failureCount++;
       if (failures.length < _maxFailureDetails) {
         failures.add(CleanFailure(path: path, reason: _failureReason(error)));
+      }
+    }
+
+    void recordRestored(_StoredEntry entry) {
+      restoredCount++;
+      restoredBytes += entry.size;
+      restoredAfter.add(entry.storedName);
+    }
+
+    Future<void> markRestored(_StoredEntry entry) async {
+      try {
+        await File(p.windows.join(sessionDir.path, 'restored.jsonl'))
+            .writeAsString(
+              '${entry.storedName}\n',
+              mode: FileMode.append,
+              flush: true,
+            );
+      } on FileSystemException {
+        // If the marker cannot be written, a retry will see the restored
+        // original path and skip it as a conflict instead of overwriting.
       }
     }
 
@@ -342,8 +368,56 @@ class QuarantineService {
         continue;
       }
       if (targetType != FileSystemEntityType.notFound) {
-        conflictCount++;
-        continue;
+        switch (conflictPolicy) {
+          case UndoConflictPolicy.skip:
+            conflictCount++;
+            continue;
+          case UndoConflictPolicy.keepBoth:
+            final destinationPath = await _availableRestorePath(
+              entry.originalPath,
+            );
+            if (destinationPath == null) {
+              recordFailure(entry.originalPath, '无法为冲突文件生成可用的新名称');
+              continue;
+            }
+            if (_exclusions.excludes(destinationPath) ||
+                !guard.allows(path: destinationPath, root: entry.rootPath)) {
+              recordFailure(destinationPath, '恢复路径未通过安全检查');
+              continue;
+            }
+            try {
+              await _moveFile(storedPath, destinationPath);
+            } on FileSystemException catch (error) {
+              recordFailure(entry.originalPath, error);
+              continue;
+            }
+            recordRestored(entry);
+            keptBothCount++;
+            await markRestored(entry);
+            continue;
+          case UndoConflictPolicy.overwrite:
+            if (targetType != FileSystemEntityType.file) {
+              recordFailure(entry.originalPath, '原位置不是普通文件，无法覆盖');
+              continue;
+            }
+            // Re-check immediately before replacing: the target may have
+            // changed since the initial validation above.
+            if (_exclusions.excludes(entry.originalPath) ||
+                !guard.allows(path: entry.originalPath, root: entry.rootPath)) {
+              recordFailure(entry.originalPath, '原路径未通过安全检查');
+              continue;
+            }
+            try {
+              await _replaceFile(storedPath, entry.originalPath);
+            } on FileSystemException catch (error) {
+              recordFailure(entry.originalPath, error);
+              continue;
+            }
+            recordRestored(entry);
+            overwrittenCount++;
+            await markRestored(entry);
+            continue;
+        }
       }
 
       try {
@@ -355,20 +429,8 @@ class QuarantineService {
         continue;
       }
 
-      restoredCount++;
-      restoredBytes += entry.size;
-      restoredAfter.add(entry.storedName);
-      try {
-        await File(p.windows.join(sessionDir.path, 'restored.jsonl'))
-            .writeAsString(
-              '${entry.storedName}\n',
-              mode: FileMode.append,
-              flush: true,
-            );
-      } on FileSystemException {
-        // If the marker cannot be written, a retry will see the restored
-        // original path and skip it as a conflict instead of overwriting.
-      }
+      recordRestored(entry);
+      await markRestored(entry);
     }
 
     final pending = await _pendingEntries(sessionDir, entries, restoredAfter);
@@ -401,6 +463,8 @@ class QuarantineService {
       restoredCount: restoredCount,
       restoredBytes: restoredBytes,
       conflictCount: conflictCount,
+      keptBothCount: keptBothCount,
+      overwrittenCount: overwrittenCount,
       missingCount: missingCount,
       failureCount: failureCount,
       failures: List.unmodifiable(failures),
@@ -714,6 +778,63 @@ class QuarantineService {
       return error.message;
     }
     return error.toString();
+  }
+
+  static Future<String?> _availableRestorePath(String originalPath) async {
+    final directory = p.windows.dirname(originalPath);
+    final extension = p.windows.extension(originalPath);
+    final base = p.windows.basenameWithoutExtension(originalPath);
+    for (var index = 1; index <= 999; index++) {
+      final suffix = index == 1 ? ' (已恢复)' : ' (已恢复 $index)';
+      final candidate = p.windows.join(directory, '$base$suffix$extension');
+      try {
+        final type = await FileSystemEntity.type(candidate, followLinks: false);
+        if (type == FileSystemEntityType.notFound) return candidate;
+      } on FileSystemException {
+        // Try the next suffix.
+      }
+    }
+    return null;
+  }
+
+  /// Moves the occupied target aside first so a failed restore never
+  /// destroys the file that currently occupies the original path.
+  static Future<void> _replaceFile(String sourcePath, String targetPath) async {
+    final backupPath = await _backupPath(targetPath);
+    await File(targetPath).rename(backupPath);
+    try {
+      await _moveFile(sourcePath, targetPath);
+    } catch (_) {
+      try {
+        await File(backupPath).rename(targetPath);
+      } on FileSystemException {
+        // The previous content stays at the backup path rather than being lost.
+      }
+      rethrow;
+    }
+    try {
+      await File(backupPath).delete();
+    } on FileSystemException {
+      // The restored file is in place; a leftover backup is not fatal.
+    }
+  }
+
+  static Future<String> _backupPath(String targetPath) async {
+    final directory = p.windows.dirname(targetPath);
+    for (var attempt = 0; attempt < 8; attempt++) {
+      final suffix = List.generate(
+        4,
+        (_) => _random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+      ).join();
+      final candidate = p.windows.join(directory, '.broom-backup-$suffix.tmp');
+      try {
+        final type = await FileSystemEntity.type(candidate, followLinks: false);
+        if (type == FileSystemEntityType.notFound) return candidate;
+      } on FileSystemException {
+        // Try another candidate.
+      }
+    }
+    throw FileSystemException('无法创建覆盖前的临时备份路径', targetPath);
   }
 
   static Future<void> _moveFile(

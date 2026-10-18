@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'core/analysis/analysis_service.dart';
+import 'core/clean/quarantine_retention_service.dart';
 import 'core/shell/system_shell.dart';
 import 'ui/clean_controller.dart';
 import 'ui/home_page.dart';
@@ -13,6 +14,7 @@ class BroomApp extends StatelessWidget {
     required this.controller,
     this.systemShell,
     this.systemCacheController,
+    this.quarantineRetention,
     this.analysisRunnerFactory,
     this.analysisInitialDirectory,
     this.analysisExcludedPaths = const [],
@@ -22,6 +24,7 @@ class BroomApp extends StatelessWidget {
   final CleanController controller;
   final SystemShell? systemShell;
   final SystemCacheController? systemCacheController;
+  final QuarantineRetentionService? quarantineRetention;
   final AnalysisRunner Function()? analysisRunnerFactory;
   final String? analysisInitialDirectory;
   final List<String> analysisExcludedPaths;
@@ -41,6 +44,7 @@ class BroomApp extends StatelessWidget {
         controller: controller,
         shell: systemShell ?? createSystemShell(),
         systemCacheController: systemCacheController,
+        quarantineRetention: quarantineRetention,
         analysisRunnerFactory: analysisRunnerFactory ?? AnalysisService.new,
         analysisInitialDirectory: analysisInitialDirectory,
         analysisExcludedPaths: analysisExcludedPaths,
