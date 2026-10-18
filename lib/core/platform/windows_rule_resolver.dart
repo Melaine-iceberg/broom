@@ -1,14 +1,13 @@
 import 'dart:io';
 
-import 'package:path/path.dart' as p;
-
 import '../models/cleaner_rule.dart';
-import 'windows_path.dart';
+import 'path_semantics.dart';
 
 class WindowsRuleResolver {
   WindowsRuleResolver({
     Map<String, String>? environment,
     this.maxWildcardMatches = 512,
+    this.semantics = const WindowsPathSemantics(),
   }) : _environment = {
          for (final entry in (environment ?? Platform.environment).entries)
            entry.key.toLowerCase(): entry.value,
@@ -16,6 +15,7 @@ class WindowsRuleResolver {
 
   final Map<String, String> _environment;
   final int maxWildcardMatches;
+  final PathSemantics semantics;
 
   Future<List<String>> resolve(CleanerRule rule) async {
     final roots = <String>{};
@@ -24,13 +24,13 @@ class WindowsRuleResolver {
       if (expanded == null) continue;
       for (final root in await _expandWildcards(expanded)) {
         if (await FileSystemEntity.type(
-              WindowsPath.forIo(root),
+              semantics.forIo(root),
               followLinks: false,
             ) !=
             FileSystemEntityType.directory) {
           continue;
         }
-        roots.add(p.windows.normalize(p.windows.absolute(root)));
+        roots.add(semantics.normalize(semantics.absolute(root)));
       }
     }
     final result = roots.toList()..sort();
@@ -51,13 +51,13 @@ class WindowsRuleResolver {
   }
 
   Future<List<String>> _expandWildcards(String pattern) async {
-    final normalized = p.windows.normalize(WindowsPath.canonical(pattern));
-    final rootPrefix = p.windows.rootPrefix(normalized);
+    final normalized = semantics.normalize(semantics.canonical(pattern));
+    final rootPrefix = semantics.rootPrefix(normalized);
     if (rootPrefix.isEmpty) return const [];
 
     final segments = normalized
         .substring(rootPrefix.length)
-        .split(p.windows.separator)
+        .split(semantics.separator)
         .where((segment) => segment.isNotEmpty);
 
     var current = <String>[rootPrefix];
@@ -68,15 +68,15 @@ class WindowsRuleResolver {
         for (final base in current) {
           try {
             await for (final entity in Directory(
-              WindowsPath.forIo(base),
+              semantics.forIo(base),
             ).list(followLinks: false)) {
               if (entity is! Directory) continue;
               if (!matcher.hasMatch(
-                p.windows.basename(WindowsPath.canonical(entity.path)),
+                semantics.basename(semantics.canonical(entity.path)),
               )) {
                 continue;
               }
-              next.add(WindowsPath.canonical(entity.path));
+              next.add(semantics.canonical(entity.path));
               if (next.length >= maxWildcardMatches) break;
             }
           } on FileSystemException {
@@ -86,9 +86,9 @@ class WindowsRuleResolver {
         }
       } else {
         for (final base in current) {
-          final candidate = p.windows.join(base, segment);
+          final candidate = semantics.join(base, segment);
           if (await FileSystemEntity.type(
-                WindowsPath.forIo(candidate),
+                semantics.forIo(candidate),
                 followLinks: false,
               ) ==
               FileSystemEntityType.directory) {
@@ -116,6 +116,6 @@ class WindowsRuleResolver {
       }
     }
     buffer.write(r'$');
-    return RegExp(buffer.toString(), caseSensitive: false);
+    return RegExp(buffer.toString(), caseSensitive: semantics.caseSensitive);
   }
 }

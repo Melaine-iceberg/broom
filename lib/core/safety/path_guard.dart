@@ -2,14 +2,17 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../platform/path_semantics.dart';
 import '../platform/windows_path.dart';
 
 class PathGuard {
-  PathGuard({required List<String> protectedRoots})
-    : _protectedRoots = protectedRoots
-          .where((root) => root.trim().isNotEmpty)
-          .map((root) => normalize(root).toLowerCase())
-          .toList();
+  PathGuard({
+    required List<String> protectedRoots,
+    this.semantics = const WindowsPathSemantics(),
+  }) : _protectedRoots = protectedRoots
+           .where((root) => root.trim().isNotEmpty)
+           .map((root) => semantics.key(root))
+           .toList();
 
   factory PathGuard.forWindows({
     Map<String, String>? environment,
@@ -38,39 +41,33 @@ class PathGuard {
     );
   }
 
+  final PathSemantics semantics;
   final List<String> _protectedRoots;
 
   List<String> get protectedRoots => List.unmodifiable(_protectedRoots);
 
+  String _key(String path) => semantics.key(path);
+
+  /// Retained for persisted records created before path semantics were
+  /// injectable. Prefer [PathSemantics.key] in new code.
   static String normalize(String path) =>
       p.windows.normalize(p.windows.absolute(WindowsPath.canonical(path)));
 
-  bool isWithin(String root, String candidate) {
-    final rootKey = normalize(root).toLowerCase();
-    final candidateKey = normalize(candidate).toLowerCase();
-    return _isWithinKey(rootKey, candidateKey);
-  }
+  bool isWithin(String root, String candidate) =>
+      semantics.isWithin(root, candidate);
 
   bool isProtected(String path) {
-    final key = normalize(path).toLowerCase();
-    return _protectedRoots.any((root) => _isWithinKey(root, key));
+    final key = _key(path);
+    return _protectedRoots.any((root) => semantics.isWithin(root, key));
   }
 
   bool allows({required String path, required String root}) {
-    final pathKey = normalize(path).toLowerCase();
-    final rootKey = normalize(root).toLowerCase();
-    if (!_isWithinKey(rootKey, pathKey)) return false;
+    final pathKey = _key(path);
+    final rootKey = _key(root);
+    if (!semantics.isWithin(rootKey, pathKey)) return false;
     if (pathKey == rootKey) return false;
     return !_protectedRoots.any(
-      (protected) => _isWithinKey(protected, pathKey),
+      (protected) => semantics.isWithin(protected, pathKey),
     );
-  }
-
-  static bool _isWithinKey(String rootKey, String candidateKey) {
-    if (candidateKey == rootKey) return true;
-    final prefix = rootKey.endsWith(p.windows.separator)
-        ? rootKey
-        : '$rootKey${p.windows.separator}';
-    return candidateKey.startsWith(prefix);
   }
 }
