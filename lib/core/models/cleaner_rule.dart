@@ -50,6 +50,22 @@ class RuleAuditSample {
   final String? reason;
 }
 
+/// Stable, language-independent category key used for scan filters and
+/// persisted settings. Localized labels remain on [CleanerRule.category].
+String ruleCategoryKey(CleanerRule rule) {
+  if (rule.id == 'windows.thumbnail_icon_cache') return 'thumbnails';
+  if (rule.id == 'browser.extension_scripts') return 'browser_extension';
+  return switch (rule.id.split('.').first) {
+    'windows' => 'system',
+    'browser' => 'browser',
+    'dev' => 'dev',
+    'app' => 'app',
+    'gpu' => 'gpu',
+    'logs' => 'logs',
+    _ => 'other',
+  };
+}
+
 class CleanerRule {
   const CleanerRule({
     required this.id,

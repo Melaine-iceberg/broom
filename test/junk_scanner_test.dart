@@ -2,8 +2,36 @@ import 'dart:io';
 
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/scan/junk_scanner.dart';
+import 'package:broom/core/scan/ntfs_index.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+
+class _FakeNtfsIndex implements NtfsIndex {
+  _FakeNtfsIndex({this.paths = const [], this.error});
+
+  final List<String> paths;
+  final Object? error;
+  int probes = 0;
+  int enumerations = 0;
+
+  @override
+  Future<NtfsIndexAvailability> probe(String root) async {
+    probes++;
+    return const NtfsIndexAvailability.available();
+  }
+
+  @override
+  Stream<NtfsIndexEntry> enumerate(
+    String root, {
+    Set<String>? extensions,
+    int? maxItems,
+    bool Function()? isCancelled,
+  }) {
+    enumerations++;
+    if (error != null) return Stream<NtfsIndexEntry>.error(error!);
+    return Stream<NtfsIndexEntry>.fromIterable(paths.map(NtfsIndexEntry.new));
+  }
+}
 
 void main() {
   late Directory temp;
@@ -192,5 +220,139 @@ void main() {
 
     expect(result.cancelled, isTrue);
     expect(result.items, isEmpty);
+  });
+
+  test('has no fixed item cap unless the caller configures one', () async {
+    for (var index = 0; index < 5; index++) {
+      await createFile(
+        root,
+        'file-$index.tmp',
+        'x',
+        age: const Duration(days: 1),
+      );
+    }
+
+    final scanner = JunkScanner(
+      jobs: [
+        ScanJob(ruleId: 'test.one', roots: [root.path]),
+      ],
+      clock: () => now,
+    );
+    expect(scanner.maxItems, isNull);
+    final result = await scanner.scan();
+    expect(result.truncated, isFalse);
+    expect(result.items, hasLength(5));
+  });
+
+  test('streams batches without retaining every item', () async {
+    for (var index = 0; index < 5; index++) {
+      await createFile(
+        root,
+        'stream-$index.tmp',
+        'x',
+        age: const Duration(days: 1),
+      );
+    }
+
+    final batches = <List<JunkItem>>[];
+    final scanner = JunkScanner(
+      jobs: [
+        ScanJob(ruleId: 'test.one', roots: [root.path]),
+      ],
+      batchSize: 2,
+      clock: () => now,
+    );
+    final result = await scanner.scan(retainItems: false, onItems: batches.add);
+
+    expect(result.items, isEmpty);
+    expect(result.scannedFiles, 5);
+    expect(result.directoryErrors, 0);
+    expect(batches.expand((batch) => batch), hasLength(5));
+    expect(batches.first, hasLength(2));
+    expect(batches.last, hasLength(1));
+  });
+
+  test('uses the NTFS index stream instead of walking the directory', () async {
+    final indexed = await createFile(
+      root,
+      'indexed.tmp',
+      'x',
+      age: const Duration(days: 1),
+    );
+    await createFile(root, 'walked.tmp', 'x', age: const Duration(days: 1));
+    final index = _FakeNtfsIndex(paths: [indexed.path]);
+
+    final scanner = JunkScanner(
+      jobs: [
+        ScanJob(ruleId: 'test.index', roots: [root.path]),
+      ],
+      ntfsIndex: index,
+      useNtfsIndex: true,
+      clock: () => now,
+    );
+    final result = await scanner.scan();
+
+    expect(index.probes, 1);
+    expect(index.enumerations, 1);
+    expect(result.items, hasLength(1));
+    expect(result.items.single.path, indexed.path);
+  });
+
+  test('falls back to directory traversal when the index fails', () async {
+    final first = await createFile(
+      root,
+      'first.tmp',
+      'x',
+      age: const Duration(days: 1),
+    );
+    final second = await createFile(
+      root,
+      'second.tmp',
+      'x',
+      age: const Duration(days: 1),
+    );
+    final index = _FakeNtfsIndex(error: StateError('usn failed'));
+
+    final scanner = JunkScanner(
+      jobs: [
+        ScanJob(ruleId: 'test.index', roots: [root.path]),
+      ],
+      ntfsIndex: index,
+      useNtfsIndex: true,
+      clock: () => now,
+    );
+    final result = await scanner.scan();
+
+    expect(
+      result.items.map((item) => item.path),
+      unorderedEquals([first.path, second.path]),
+    );
+    expect(result.issues, isNotEmpty);
+    expect(result.issues.first.message, contains('回退'));
+  });
+
+  test('skips index entries outside the job root', () async {
+    final file = await createFile(
+      root,
+      'inside.tmp',
+      'x',
+      age: const Duration(days: 1),
+    );
+    final outside = File(p.windows.join(temp.path, 'outside.tmp'));
+    await outside.writeAsString('x');
+    final index = _FakeNtfsIndex(paths: [file.path, outside.path]);
+
+    final scanner = JunkScanner(
+      jobs: [
+        ScanJob(ruleId: 'test.index', roots: [root.path]),
+      ],
+      ntfsIndex: index,
+      useNtfsIndex: true,
+      clock: () => now,
+    );
+    final result = await scanner.scan();
+
+    expect(result.items, hasLength(1));
+    expect(result.items.single.path, file.path);
   });
 }
