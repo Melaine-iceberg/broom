@@ -72,6 +72,58 @@ void main() {
     expect(calls, 1);
   });
 
+  test('queryDiskSpace decodes the native snapshot', () async {
+    MethodCall? received;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      received = call;
+      return <String, Object>{'freeBytes': 123456, 'totalBytes': 789012};
+    });
+
+    final snapshot = await shell.queryDiskSpace(r'C:\');
+
+    expect(received?.method, 'queryDiskSpace');
+    expect(received?.arguments, <String, Object>{'path': r'C:\'});
+    expect(snapshot.freeBytes, 123456);
+    expect(snapshot.totalBytes, 789012);
+  });
+
+  test('queryDiskSpace rejects malformed payloads', () async {
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      return <String, Object>{'freeBytes': 'many', 'totalBytes': 1};
+    });
+
+    await expectLater(
+      shell.queryDiskSpace(r'C:\'),
+      throwsA(isA<SystemShellException>()),
+    );
+
+    messenger.setMockMethodCallHandler(channel, (call) async => 'nope');
+
+    await expectLater(
+      shell.queryDiskSpace(r'C:\'),
+      throwsA(isA<SystemShellException>()),
+    );
+  });
+
+  test('queryDiskSpace surfaces Windows error codes', () async {
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      throw PlatformException(
+        code: 'disk_space_failed',
+        message: 'Windows shell error',
+        details: 5,
+      );
+    });
+
+    await expectLater(
+      shell.queryDiskSpace(r'C:\'),
+      throwsA(
+        isA<SystemShellException>()
+            .having((error) => error.message, 'message', contains('0x00000005'))
+            .having((error) => error.code, 'code', 'disk_space_failed'),
+      ),
+    );
+  });
+
   test(
     'pickFolder forwards the initial directory and maps cancellation',
     () async {
@@ -122,6 +174,10 @@ void main() {
     );
     await expectLater(
       unsupported.emptyRecycleBin(),
+      throwsA(isA<SystemShellException>()),
+    );
+    await expectLater(
+      unsupported.queryDiskSpace(r'C:\'),
       throwsA(isA<SystemShellException>()),
     );
     await expectLater(

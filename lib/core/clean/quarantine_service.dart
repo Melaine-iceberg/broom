@@ -254,17 +254,16 @@ class QuarantineService {
     }
   }
 
-  Future<UndoReport> undo(String sessionId) async {
-    if (!_isValidSessionId(sessionId)) {
-      throw ArgumentError.value(sessionId, 'sessionId', '无效的清理会话编号');
-    }
-    final sessionDir = Directory(p.windows.join(quarantineRoot, sessionId));
-    if (!await sessionDir.exists()) {
-      throw StateError('找不到可撤销的清理记录');
-    }
-
+  Future<UndoReport> undo(String sessionId, {Set<String>? storedNames}) async {
+    final sessionDir = await _requireSessionDirectory(sessionId);
     final entries = await _readEntries(sessionDir);
     final restoredNames = await _readRestoredNames(sessionDir);
+    final restoredAfter = <String>{...restoredNames};
+    final targets = storedNames == null
+        ? entries
+        : entries
+              .where((entry) => storedNames.contains(entry.storedName))
+              .toList();
     final filesDir = p.windows.join(sessionDir.path, 'files');
     final failures = <CleanFailure>[];
     var failureCount = 0;
@@ -272,8 +271,6 @@ class QuarantineService {
     var restoredBytes = 0;
     var conflictCount = 0;
     var missingCount = 0;
-    var pendingCount = 0;
-    var pendingBytes = 0;
 
     void recordFailure(String path, Object error) {
       failureCount++;
@@ -282,12 +279,10 @@ class QuarantineService {
       }
     }
 
-    for (final entry in entries) {
+    for (final entry in targets) {
       if (restoredNames.contains(entry.storedName)) continue;
       if (!_isSafeStoredName(entry.storedName)) {
         recordFailure(entry.originalPath, '隔离区记录包含非法文件名');
-        pendingCount++;
-        pendingBytes += entry.size;
         continue;
       }
 
@@ -300,8 +295,6 @@ class QuarantineService {
         );
       } on FileSystemException catch (error) {
         recordFailure(entry.originalPath, error);
-        pendingCount++;
-        pendingBytes += entry.size;
         continue;
       }
       if (storedType != FileSystemEntityType.file) {
@@ -311,8 +304,6 @@ class QuarantineService {
 
       if (!guard.allows(path: entry.originalPath, root: entry.rootPath)) {
         recordFailure(entry.originalPath, '原路径未通过安全检查');
-        pendingCount++;
-        pendingBytes += entry.size;
         continue;
       }
 
@@ -324,14 +315,10 @@ class QuarantineService {
         );
       } on FileSystemException catch (error) {
         recordFailure(entry.originalPath, error);
-        pendingCount++;
-        pendingBytes += entry.size;
         continue;
       }
       if (targetType != FileSystemEntityType.notFound) {
         conflictCount++;
-        pendingCount++;
-        pendingBytes += entry.size;
         continue;
       }
 
@@ -341,13 +328,12 @@ class QuarantineService {
         await _moveFile(storedPath, entry.originalPath);
       } on FileSystemException catch (error) {
         recordFailure(entry.originalPath, error);
-        pendingCount++;
-        pendingBytes += entry.size;
         continue;
       }
 
       restoredCount++;
       restoredBytes += entry.size;
+      restoredAfter.add(entry.storedName);
       try {
         await File(p.windows.join(sessionDir.path, 'restored.jsonl'))
             .writeAsString(
@@ -360,6 +346,13 @@ class QuarantineService {
         // original path and skip it as a conflict instead of overwriting.
       }
     }
+
+    final pending = await _pendingEntries(sessionDir, entries, restoredAfter);
+    final pendingCount = pending.length;
+    final pendingBytes = pending.fold<int>(
+      0,
+      (total, entry) => total + entry.size,
+    );
 
     if (pendingCount == 0) {
       await _deleteSessionDirectory(sessionDir);
@@ -388,6 +381,155 @@ class QuarantineService {
       failureCount: failureCount,
       failures: List.unmodifiable(failures),
       sessionRemoved: pendingCount == 0,
+    );
+  }
+
+  Future<List<QuarantineEntry>> listEntries(String sessionId) async {
+    final sessionDir = await _requireSessionDirectory(sessionId);
+    final entries = await _readEntries(sessionDir);
+    final restoredNames = await _readRestoredNames(sessionDir);
+    final filesDir = p.windows.join(sessionDir.path, 'files');
+    final result = <QuarantineEntry>[];
+
+    for (final entry in entries) {
+      var present = false;
+      if (_isSafeStoredName(entry.storedName)) {
+        try {
+          present =
+              await FileSystemEntity.type(
+                p.windows.join(filesDir, entry.storedName),
+                followLinks: false,
+              ) ==
+              FileSystemEntityType.file;
+        } on FileSystemException {
+          present = true;
+        }
+      }
+
+      var originalExists = false;
+      try {
+        originalExists =
+            await FileSystemEntity.type(
+              entry.originalPath,
+              followLinks: false,
+            ) !=
+            FileSystemEntityType.notFound;
+      } on FileSystemException {
+        originalExists = true;
+      }
+
+      result.add(
+        QuarantineEntry(
+          storedName: entry.storedName,
+          originalPath: entry.originalPath,
+          size: entry.size,
+          restored: restoredNames.contains(entry.storedName),
+          present: present,
+          originalExists: originalExists,
+        ),
+      );
+    }
+
+    return result;
+  }
+
+  Future<QuarantinePurgeReport> purgeSession(String sessionId) async {
+    final sessionDir = await _requireSessionDirectory(sessionId);
+    final failures = <CleanFailure>[];
+    var failureCount = 0;
+    var removedCount = 0;
+    var removedBytes = 0;
+
+    void recordFailure(String path, Object error) {
+      failureCount++;
+      if (failures.length < _maxFailureDetails) {
+        failures.add(CleanFailure(path: path, reason: _failureReason(error)));
+      }
+    }
+
+    final filesDir = Directory(p.windows.join(sessionDir.path, 'files'));
+    try {
+      if (await filesDir.exists()) {
+        await for (final entity in filesDir.list(followLinks: false)) {
+          if (entity is! File) continue;
+          var length = 0;
+          try {
+            length = await entity.length();
+          } on FileSystemException {
+            length = 0;
+          }
+          try {
+            await entity.delete();
+            removedCount++;
+            removedBytes += length;
+          } on FileSystemException catch (error) {
+            recordFailure(entity.path, error);
+          }
+        }
+      }
+    } on FileSystemException catch (error) {
+      recordFailure(filesDir.path, error);
+    }
+
+    var sessionRemoved = false;
+    if (failureCount == 0) {
+      try {
+        await sessionDir.delete(recursive: true);
+        sessionRemoved = true;
+      } on FileSystemException catch (error) {
+        recordFailure(sessionDir.path, error);
+      }
+    }
+
+    return QuarantinePurgeReport(
+      removedCount: removedCount,
+      removedBytes: removedBytes,
+      failureCount: failureCount,
+      failures: List.unmodifiable(failures),
+      sessionRemoved: sessionRemoved,
+    );
+  }
+
+  Future<QuarantinePurgeReport> purgeAllSessions() async {
+    final sessions = await listSessions();
+    final failures = <CleanFailure>[];
+    var failureCount = 0;
+    var removedCount = 0;
+    var removedBytes = 0;
+    var allRemoved = true;
+
+    for (final session in sessions) {
+      try {
+        final report = await purgeSession(session.id);
+        removedCount += report.removedCount;
+        removedBytes += report.removedBytes;
+        failureCount += report.failureCount;
+        allRemoved = allRemoved && report.sessionRemoved;
+        if (failures.length < _maxFailureDetails) {
+          failures.addAll(
+            report.failures.take(_maxFailureDetails - failures.length),
+          );
+        }
+      } catch (error) {
+        failureCount++;
+        allRemoved = false;
+        if (failures.length < _maxFailureDetails) {
+          failures.add(
+            CleanFailure(
+              path: p.windows.join(quarantineRoot, session.id),
+              reason: _failureReason(error),
+            ),
+          );
+        }
+      }
+    }
+
+    return QuarantinePurgeReport(
+      removedCount: removedCount,
+      removedBytes: removedBytes,
+      failureCount: failureCount,
+      failures: List.unmodifiable(failures),
+      sessionRemoved: allRemoved,
     );
   }
 
@@ -450,6 +592,52 @@ class QuarantineService {
 
     sessions.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return sessions;
+  }
+
+  Future<Directory> _requireSessionDirectory(String sessionId) async {
+    if (!_isValidSessionId(sessionId)) {
+      throw ArgumentError.value(sessionId, 'sessionId', '无效的清理会话编号');
+    }
+    final sessionDir = Directory(p.windows.join(quarantineRoot, sessionId));
+    final type = await FileSystemEntity.type(
+      sessionDir.path,
+      followLinks: false,
+    );
+    if (type == FileSystemEntityType.notFound) {
+      throw StateError('找不到隔离区记录');
+    }
+    if (type != FileSystemEntityType.directory) {
+      throw StateError('隔离区记录格式无效');
+    }
+    return sessionDir;
+  }
+
+  Future<List<_StoredEntry>> _pendingEntries(
+    Directory sessionDir,
+    List<_StoredEntry> entries,
+    Set<String> restoredNames,
+  ) async {
+    final filesDir = p.windows.join(sessionDir.path, 'files');
+    final pending = <_StoredEntry>[];
+    for (final entry in entries) {
+      if (restoredNames.contains(entry.storedName)) continue;
+      if (!_isSafeStoredName(entry.storedName)) {
+        pending.add(entry);
+        continue;
+      }
+      try {
+        final type = await FileSystemEntity.type(
+          p.windows.join(filesDir, entry.storedName),
+          followLinks: false,
+        );
+        if (type == FileSystemEntityType.file) {
+          pending.add(entry);
+        }
+      } on FileSystemException {
+        pending.add(entry);
+      }
+    }
+    return pending;
   }
 
   Future<String> _createSessionId(Directory baseDir) async {

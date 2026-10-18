@@ -23,6 +23,10 @@ class _FakeSystemShell implements SystemShell {
   Future<String?> pickFolder({String? initialDirectory}) async => null;
 
   @override
+  Future<DiskSpaceSnapshot> queryDiskSpace(String path) async =>
+      const DiskSpaceSnapshot(freeBytes: 1000000, totalBytes: 2000000);
+
+  @override
   Future<RecycleBinSnapshot> queryRecycleBin() async {
     if (queryError case final error?) throw error;
     return snapshot;

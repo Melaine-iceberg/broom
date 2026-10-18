@@ -11,6 +11,13 @@ class RecycleBinSnapshot {
   bool get isEmpty => itemCount <= 0;
 }
 
+class DiskSpaceSnapshot {
+  const DiskSpaceSnapshot({required this.freeBytes, required this.totalBytes});
+
+  final int freeBytes;
+  final int totalBytes;
+}
+
 class SystemShellException implements Exception {
   const SystemShellException(this.message, {this.code});
 
@@ -26,6 +33,8 @@ abstract interface class SystemShell {
   Future<RecycleBinSnapshot> queryRecycleBin();
 
   Future<void> emptyRecycleBin();
+
+  Future<DiskSpaceSnapshot> queryDiskSpace(String path);
 
   Future<String?> pickFolder({String? initialDirectory});
 
@@ -65,6 +74,28 @@ class MethodChannelSystemShell implements SystemShell {
       throw _mapError(error, '无法清空回收站。');
     } on MissingPluginException {
       throw const SystemShellException('当前系统不支持清空回收站。');
+    }
+  }
+
+  @override
+  Future<DiskSpaceSnapshot> queryDiskSpace(String path) async {
+    try {
+      final result = await channel.invokeMethod<Object?>('queryDiskSpace', {
+        'path': path,
+      });
+      if (result is! Map) {
+        throw const SystemShellException('无法读取磁盘空间信息。');
+      }
+      final freeBytes = result['freeBytes'];
+      final totalBytes = result['totalBytes'];
+      if (freeBytes is! int || totalBytes is! int) {
+        throw const SystemShellException('磁盘空间返回了无法识别的数据。');
+      }
+      return DiskSpaceSnapshot(freeBytes: freeBytes, totalBytes: totalBytes);
+    } on PlatformException catch (error) {
+      throw _mapError(error, '无法读取磁盘空间信息。');
+    } on MissingPluginException {
+      throw const SystemShellException('当前系统不支持读取磁盘空间。');
     }
   }
 
@@ -123,6 +154,9 @@ class UnsupportedSystemShell implements SystemShell {
 
   @override
   Future<void> emptyRecycleBin() async => _unsupported();
+
+  @override
+  Future<DiskSpaceSnapshot> queryDiskSpace(String path) async => _unsupported();
 
   @override
   Future<String?> pickFolder({String? initialDirectory}) async =>

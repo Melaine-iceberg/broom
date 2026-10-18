@@ -16,6 +16,10 @@ class _FakeSystemShell implements SystemShell {
       r'C:\Users\Alice\Downloads';
 
   @override
+  Future<DiskSpaceSnapshot> queryDiskSpace(String path) async =>
+      const DiskSpaceSnapshot(freeBytes: 1000000, totalBytes: 2000000);
+
+  @override
   Future<RecycleBinSnapshot> queryRecycleBin() async =>
       const RecycleBinSnapshot(itemCount: 0, totalBytes: 0);
 

@@ -82,3 +82,41 @@ class QuarantineSessionInfo {
   final int pendingCount;
   final int pendingBytes;
 }
+
+class QuarantineEntry {
+  const QuarantineEntry({
+    required this.storedName,
+    required this.originalPath,
+    required this.size,
+    required this.restored,
+    required this.present,
+    required this.originalExists,
+  });
+
+  final String storedName;
+  final String originalPath;
+  final int size;
+  final bool restored;
+  final bool present;
+  final bool originalExists;
+
+  bool get restorable => !restored && present;
+}
+
+class QuarantinePurgeReport {
+  const QuarantinePurgeReport({
+    required this.removedCount,
+    required this.removedBytes,
+    required this.failureCount,
+    required this.failures,
+    required this.sessionRemoved,
+  });
+
+  final int removedCount;
+  final int removedBytes;
+  final int failureCount;
+  final List<CleanFailure> failures;
+  final bool sessionRemoved;
+
+  bool get complete => failureCount == 0 && sessionRemoved;
+}

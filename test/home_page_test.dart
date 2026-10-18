@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import 'support/quarantine_fakes.dart';
 import 'support/system_cache_fakes.dart';
 
 class _FakeSystemShell implements SystemShell {
@@ -21,6 +22,10 @@ class _FakeSystemShell implements SystemShell {
 
   @override
   Future<String?> pickFolder({String? initialDirectory}) async => null;
+
+  @override
+  Future<DiskSpaceSnapshot> queryDiskSpace(String path) async =>
+      const DiskSpaceSnapshot(freeBytes: 1000000, totalBytes: 2000000);
 
   @override
   Future<RecycleBinSnapshot> queryRecycleBin() async =>
@@ -172,5 +177,44 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('需要管理员权限'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('opens the quarantine manager from the home card', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final guard = PathGuard(protectedRoots: const []);
+    final controller = CleanController(
+      platform: _FakePlatform(),
+      guard: guard,
+      quarantine: FakeQuarantineService([fakeQuarantineEntry('first.txt')]),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    await tester.pumpWidget(
+      BroomApp(controller: controller, systemShell: _FakeSystemShell()),
+    );
+    await tester.pumpAndSettle();
+
+    final card = find.byKey(const ValueKey('quarantine-card'));
+    expect(card, findsOneWidget);
+    expect(find.textContaining('隔离区暂存了'), findsOneWidget);
+
+    await tester.ensureVisible(card);
+    await tester.tap(find.descendant(of: card, matching: find.text('管理')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('隔离区'), findsOneWidget);
+    expect(find.text('查看文件'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('返回'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Broom'), findsOneWidget);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 }

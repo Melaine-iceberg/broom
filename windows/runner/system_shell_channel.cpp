@@ -132,6 +132,37 @@ void SystemShellChannel::HandleMethodCall(
     return;
   }
 
+  if (method == "queryDiskSpace") {
+    const auto path = StringArgument(call.arguments(), "path");
+    if (!path.has_value() || path->empty()) {
+      result->Error("invalid_path", "A disk path is required.");
+      return;
+    }
+    const std::wstring wide_path = WideFromUtf8(*path);
+    if (wide_path.empty()) {
+      result->Error("invalid_path", "The disk path is not valid UTF-8.");
+      return;
+    }
+
+    ULARGE_INTEGER free_bytes = {};
+    ULARGE_INTEGER total_bytes = {};
+    ULARGE_INTEGER total_free_bytes = {};
+    if (!::GetDiskFreeSpaceExW(wide_path.c_str(), &free_bytes, &total_bytes,
+                               &total_free_bytes)) {
+      SendShellError(std::move(result), "disk_space_failed",
+                     HRESULT_FROM_WIN32(::GetLastError()));
+      return;
+    }
+
+    flutter::EncodableMap map;
+    map[flutter::EncodableValue("freeBytes")] =
+        flutter::EncodableValue(static_cast<int64_t>(free_bytes.QuadPart));
+    map[flutter::EncodableValue("totalBytes")] =
+        flutter::EncodableValue(static_cast<int64_t>(total_bytes.QuadPart));
+    result->Success(flutter::EncodableValue(map));
+    return;
+  }
+
   if (method == "pickFolder") {
     Microsoft::WRL::ComPtr<IFileOpenDialog> dialog;
     HRESULT hr = ::CoCreateInstance(CLSID_FileOpenDialog, nullptr,

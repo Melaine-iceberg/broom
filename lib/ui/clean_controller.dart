@@ -56,6 +56,14 @@ class CleanController extends ChangeNotifier {
   List<QuarantineSessionInfo> get pendingSessions => _pendingSessions;
   QuarantineSessionInfo? get latestPendingSession =>
       _pendingSessions.isEmpty ? null : _pendingSessions.first;
+  int get pendingBytes => _pendingSessions.fold<int>(
+    0,
+    (total, session) => total + session.pendingBytes,
+  );
+  int get pendingFileCount => _pendingSessions.fold<int>(
+    0,
+    (total, session) => total + session.pendingCount,
+  );
   int get scanDirectoryErrors => _scanDirectoryErrors;
   bool get scanTruncated => _scanTruncated;
   String? get notice => _notice;
@@ -236,6 +244,10 @@ class CleanController extends ChangeNotifier {
     if (_phase != CleanPhase.cleaning) return;
     _cleanCancelRequested = true;
     _notify();
+  }
+
+  Future<void> refreshQuarantine() async {
+    await _refreshPendingSessions(notify: true);
   }
 
   Future<UndoReport> undo(String sessionId) async {

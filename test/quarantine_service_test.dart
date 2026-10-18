@@ -106,6 +106,127 @@ void main() {
     expect(await quarantine.listSessions(), isEmpty);
   });
 
+  test('lists entries and restores only selected files', () async {
+    final first = await createFile('first.txt', 'alpha');
+    final second = await createFile('second.txt', 'bravo');
+    final report = await quarantine.clean([
+      await itemFor(first),
+      await itemFor(second),
+    ]);
+
+    final entries = await quarantine.listEntries(report.sessionId!);
+    expect(entries, hasLength(2));
+    expect(entries.every((entry) => entry.present), isTrue);
+    expect(entries.every((entry) => !entry.restored), isTrue);
+    expect(entries.every((entry) => !entry.originalExists), isTrue);
+
+    final selected = entries.firstWhere(
+      (entry) => entry.originalPath == first.path,
+    );
+    final partial = await quarantine.undo(
+      report.sessionId!,
+      storedNames: {selected.storedName},
+    );
+
+    expect(partial.restoredCount, 1);
+    expect(partial.sessionRemoved, isFalse);
+    expect(await first.readAsString(), 'alpha');
+    expect(await second.exists(), isFalse);
+    expect((await quarantine.listSessions()).single.pendingCount, 1);
+
+    final remaining = await quarantine.listEntries(report.sessionId!);
+    final restored = remaining.firstWhere(
+      (entry) => entry.originalPath == first.path,
+    );
+    expect(restored.restored, isTrue);
+    expect(restored.present, isFalse);
+    expect(
+      remaining
+          .firstWhere((entry) => entry.originalPath == second.path)
+          .restorable,
+      isTrue,
+    );
+
+    final complete = await quarantine.undo(report.sessionId!);
+    expect(complete.restoredCount, 1);
+    expect(complete.sessionRemoved, isTrue);
+    expect(await second.readAsString(), 'bravo');
+  });
+
+  test('reports existing original paths before restoring', () async {
+    final file = await createFile('conflict.txt', 'alpha');
+    final report = await quarantine.clean([await itemFor(file)]);
+    await file.writeAsString('user-content');
+
+    final entries = await quarantine.listEntries(report.sessionId!);
+    expect(entries.single.originalExists, isTrue);
+    expect(entries.single.restorable, isTrue);
+
+    final undo = await quarantine.undo(report.sessionId!);
+    expect(undo.conflictCount, 1);
+    expect(undo.sessionRemoved, isFalse);
+    expect(await file.readAsString(), 'user-content');
+
+    final after = await quarantine.listEntries(report.sessionId!);
+    expect(after.single.restored, isFalse);
+    expect(after.single.originalExists, isTrue);
+  });
+
+  test('permanently purges a quarantine session', () async {
+    final first = await createFile('first.txt', 'alpha');
+    final second = await createFile('second.txt', 'bravo');
+    final report = await quarantine.clean([
+      await itemFor(first),
+      await itemFor(second),
+    ]);
+    final entries = await quarantine.listEntries(report.sessionId!);
+    final totalBytes = entries.fold<int>(
+      0,
+      (total, entry) => total + entry.size,
+    );
+
+    final purge = await quarantine.purgeSession(report.sessionId!);
+
+    expect(purge.removedCount, 2);
+    expect(purge.removedBytes, totalBytes);
+    expect(purge.failureCount, 0);
+    expect(purge.sessionRemoved, isTrue);
+    expect(await first.exists(), isFalse);
+    expect(await second.exists(), isFalse);
+    expect(await quarantine.listSessions(), isEmpty);
+    expect(
+      await Directory(
+        p.windows.join(temp.path, 'quarantine', report.sessionId!),
+      ).exists(),
+      isFalse,
+    );
+  });
+
+  test('permanently purges every pending session', () async {
+    final first = await createFile('first.txt', 'alpha');
+    await quarantine.clean([await itemFor(first)]);
+    final second = await createFile('second.txt', 'bravo');
+    await quarantine.clean([await itemFor(second)]);
+
+    expect(await quarantine.listSessions(), hasLength(2));
+
+    final purge = await quarantine.purgeAllSessions();
+
+    expect(purge.removedCount, 2);
+    expect(purge.failureCount, 0);
+    expect(purge.sessionRemoved, isTrue);
+    expect(await quarantine.listSessions(), isEmpty);
+    expect(await first.exists(), isFalse);
+    expect(await second.exists(), isFalse);
+  });
+
+  test('rejects unsafe session ids', () async {
+    for (final id in ['../escape', r'..\escape', 'a/b', '']) {
+      await expectLater(quarantine.listEntries(id), throwsArgumentError);
+      await expectLater(quarantine.purgeSession(id), throwsArgumentError);
+    }
+  });
+
   test('refuses items outside their declared root', () async {
     final outside = File(p.windows.join(temp.path, 'outside.txt'));
     await outside.writeAsString('keep-me');

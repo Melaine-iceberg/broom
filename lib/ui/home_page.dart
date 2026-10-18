@@ -9,6 +9,7 @@ import 'clean_controller.dart';
 import 'duplicate_finder_page.dart';
 import 'format.dart';
 import 'large_files_page.dart';
+import 'quarantine_page.dart';
 import 'recycle_bin_page.dart';
 import 'rule_detail_page.dart';
 import 'system_cache_controller.dart';
@@ -93,7 +94,7 @@ class _HomePageState extends State<HomePage> {
       case CleanPhase.idle:
         return _IdleView(
           controller: controller,
-          onUndo: (sessionId) => _undo(context, sessionId),
+          onOpenQuarantine: _openQuarantine,
           onOpenSystemCache: widget.systemCacheController == null
               ? null
               : _openSystemCache,
@@ -114,6 +115,7 @@ class _HomePageState extends State<HomePage> {
         return _DoneView(
           controller: controller,
           onUndo: (sessionId) => _undo(context, sessionId),
+          onOpenQuarantine: _openQuarantine,
         );
     }
   }
@@ -129,8 +131,9 @@ class _HomePageState extends State<HomePage> {
           icon: const Icon(Icons.cleaning_services_rounded, size: 30),
           title: const Text('移入隔离区？'),
           content: Text(
-            '将清理 $count 个文件，共 ${formatBytes(bytes)}。\n\n'
-            '文件会先移动到 Broom 的隔离区，清理完成后可以撤销。',
+            '将暂存 $count 个文件，共 ${formatBytes(bytes)}。\n\n'
+            '文件会先移动到 Broom 的隔离区，磁盘空间不会立即释放。'
+            '你可以随时恢复，或在隔离区中永久释放。',
           ),
           actions: [
             TextButton(
@@ -139,7 +142,7 @@ class _HomePageState extends State<HomePage> {
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: Text('清理 $count 项'),
+              child: Text('暂存 $count 项'),
             ),
           ],
         );
@@ -194,6 +197,17 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Future<void> _openQuarantine() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            QuarantinePage(service: controller.quarantine, shell: widget.shell),
+      ),
+    );
+    if (!mounted) return;
+    await controller.refreshQuarantine();
+  }
+
   Future<void> _openSystemCache() {
     final systemController = widget.systemCacheController;
     if (systemController == null) return Future<void>.value();
@@ -242,7 +256,7 @@ class _HomePageState extends State<HomePage> {
 class _IdleView extends StatelessWidget {
   const _IdleView({
     required this.controller,
-    required this.onUndo,
+    required this.onOpenQuarantine,
     required this.onOpenRecycleBin,
     required this.onOpenDuplicateFinder,
     required this.onOpenLargeFiles,
@@ -250,7 +264,7 @@ class _IdleView extends StatelessWidget {
   });
 
   final CleanController controller;
-  final Future<void> Function(String sessionId) onUndo;
+  final VoidCallback onOpenQuarantine;
   final VoidCallback onOpenRecycleBin;
   final VoidCallback onOpenDuplicateFinder;
   final VoidCallback onOpenLargeFiles;
@@ -258,7 +272,6 @@ class _IdleView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pending = controller.latestPendingSession;
     return ListView(
       padding: const EdgeInsets.only(bottom: 24),
       children: [
@@ -271,12 +284,9 @@ class _IdleView extends StatelessWidget {
         if (controller.notice case final notice?)
           _InlineBanner(message: notice, onClose: controller.clearNotice),
         _Hero(controller: controller),
-        if (pending != null) ...[
+        if (controller.pendingSessions.isNotEmpty) ...[
           const SizedBox(height: 14),
-          _PendingUndoCard(
-            controller: controller,
-            onUndo: () => onUndo(pending.id),
-          ),
+          _QuarantineCard(controller: controller, onOpen: onOpenQuarantine),
         ],
         const SizedBox(height: 20),
         _ToolsSection(
@@ -521,71 +531,73 @@ class _FloatingTag extends StatelessWidget {
   }
 }
 
-class _PendingUndoCard extends StatelessWidget {
-  const _PendingUndoCard({required this.controller, required this.onUndo});
+class _QuarantineCard extends StatelessWidget {
+  const _QuarantineCard({required this.controller, required this.onOpen});
 
   final CleanController controller;
-  final VoidCallback onUndo;
+  final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final session = controller.latestPendingSession!;
-    final extra = controller.pendingSessions.length - 1;
+    final sessions = controller.pendingSessions.length;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: BoxDecoration(
-        color: scheme.tertiaryContainer.withValues(alpha: 0.42),
+    return Material(
+      key: const ValueKey('quarantine-card'),
+      color: scheme.tertiaryContainer.withValues(alpha: 0.42),
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: scheme.tertiary.withValues(alpha: 0.16)),
+        side: BorderSide(color: scheme.tertiary.withValues(alpha: 0.16)),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: scheme.surface.withValues(alpha: 0.65),
-              borderRadius: BorderRadius.circular(11),
-            ),
-            child: Icon(
-              Icons.restore_rounded,
-              size: 20,
-              color: scheme.onTertiaryContainer,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '上次清理可以撤销',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onOpen,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: scheme.surface.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(11),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '${formatCount(session.pendingCount)} 个文件 · '
-                  '${formatBytes(session.pendingBytes)} 仍在隔离区'
-                  '${extra > 0 ? '，另有 $extra 次清理待处理' : ''}。',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
+                child: Icon(
+                  Icons.inventory_2_outlined,
+                  size: 20,
+                  color: scheme.onTertiaryContainer,
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '隔离区暂存了 ${formatBytes(controller.pendingBytes)}',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${formatCount(controller.pendingFileCount)} 个文件 · '
+                      '$sessions 次清理。磁盘空间尚未释放，'
+                      '恢复或永久释放后才会改变。',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton(onPressed: onOpen, child: const Text('管理')),
+            ],
           ),
-          const SizedBox(width: 12),
-          OutlinedButton.icon(
-            onPressed: controller.undoBusy ? null : onUndo,
-            icon: const Icon(Icons.undo_rounded, size: 17),
-            label: const Text('撤销'),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1538,7 +1550,8 @@ class _CleanActionBar extends StatelessWidget {
                 ),
                 const SizedBox(height: 1),
                 Text(
-                  '预计释放 ${formatBytes(controller.selectedBytes)}',
+                  '预计暂存 ${formatBytes(controller.selectedBytes)}，'
+                  '释放隔离区后才会回收磁盘空间',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -1707,10 +1720,15 @@ class _CleaningView extends StatelessWidget {
 }
 
 class _DoneView extends StatelessWidget {
-  const _DoneView({required this.controller, required this.onUndo});
+  const _DoneView({
+    required this.controller,
+    required this.onUndo,
+    required this.onOpenQuarantine,
+  });
 
   final CleanController controller;
   final Future<void> Function(String sessionId) onUndo;
+  final VoidCallback onOpenQuarantine;
 
   @override
   Widget build(BuildContext context) {
@@ -1777,7 +1795,8 @@ class _DoneView extends StatelessWidget {
                       ? '已停止清理，已经移动的文件仍保存在隔离区中。'
                       : noMoves
                       ? '没有文件成功移入隔离区，可以稍后重试。'
-                      : '文件已安全移动到隔离区，可随时恢复。',
+                      : '文件已安全移动到隔离区，可随时恢复。'
+                            '释放隔离区后才会回收磁盘空间。',
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
@@ -1796,7 +1815,7 @@ class _DoneView extends StatelessWidget {
                     children: [
                       Expanded(
                         child: _DoneStat(
-                          label: '已释放',
+                          label: '已暂存',
                           value: formatBytes(report.movedBytes),
                         ),
                       ),
@@ -1882,6 +1901,12 @@ class _DoneView extends StatelessWidget {
                   spacing: 10,
                   runSpacing: 10,
                   children: [
+                    if (!noMoves)
+                      OutlinedButton.icon(
+                        onPressed: onOpenQuarantine,
+                        icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                        label: const Text('管理隔离区'),
+                      ),
                     if (controller.canUndoLastReport)
                       OutlinedButton.icon(
                         onPressed: controller.undoBusy
