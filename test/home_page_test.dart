@@ -7,6 +7,7 @@ import 'package:broom/core/platform/cleaner_platform.dart';
 import 'package:broom/core/rules/windows_rules.dart';
 import 'package:broom/core/safety/path_guard.dart';
 import 'package:broom/ui/clean_controller.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -31,7 +32,9 @@ class _FakePlatform implements CleanerPlatform {
 }
 
 void main() {
-  testWidgets('renders the idle screen and handles an empty scan', (tester) async {
+  testWidgets('renders the idle screen and handles an empty scan', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1200, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -51,6 +54,10 @@ void main() {
     await tester.pumpWidget(BroomApp(controller: controller));
 
     expect(find.text('Broom'), findsOneWidget);
+    expect(find.text('Windows 安全清理'), findsOneWidget);
+    expect(find.byKey(const ValueKey('window-minimize')), findsOneWidget);
+    expect(find.byKey(const ValueKey('window-maximize')), findsOneWidget);
+    expect(find.byKey(const ValueKey('window-close')), findsOneWidget);
     expect(find.text('开始扫描'), findsOneWidget);
     expect(find.text('本次扫描范围'), findsOneWidget);
 
@@ -59,5 +66,5 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.text('没有找到可扫描的缓存目录。'), findsOneWidget);
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 }

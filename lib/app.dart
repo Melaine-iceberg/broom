@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'ui/clean_controller.dart';
 import 'ui/home_page.dart';
+import 'ui/window_title_bar.dart';
 
 class BroomApp extends StatelessWidget {
   const BroomApp({super.key, required this.controller});
@@ -16,6 +17,8 @@ class BroomApp extends StatelessWidget {
       themeMode: ThemeMode.system,
       theme: buildBroomTheme(Brightness.light),
       darkTheme: buildBroomTheme(Brightness.dark),
+      builder: (context, child) =>
+          BroomWindowFrame(child: child ?? const SizedBox.shrink()),
       home: HomePage(controller: controller),
     );
   }
@@ -39,6 +42,8 @@ class UnsupportedApp extends StatelessWidget {
       themeMode: ThemeMode.system,
       theme: buildBroomTheme(Brightness.light),
       darkTheme: buildBroomTheme(Brightness.dark),
+      builder: (context, child) =>
+          BroomWindowFrame(child: child ?? const SizedBox.shrink()),
       home: Scaffold(
         body: Center(
           child: Padding(
@@ -57,8 +62,8 @@ class UnsupportedApp extends StatelessWidget {
                 Text(
                   reason,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -106,9 +111,7 @@ ThemeData buildBroomTheme(Brightness brightness) {
       style: FilledButton.styleFrom(
         minimumSize: const Size(0, 46),
         padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(13),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
         textStyle: const TextStyle(
           fontFamily: _fontFamily,
           fontFamilyFallback: _fontFallback,
@@ -121,9 +124,7 @@ ThemeData buildBroomTheme(Brightness brightness) {
       style: OutlinedButton.styleFrom(
         minimumSize: const Size(0, 42),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         side: BorderSide(color: scheme.outlineVariant),
         textStyle: const TextStyle(
           fontFamily: _fontFamily,
@@ -136,9 +137,7 @@ ThemeData buildBroomTheme(Brightness brightness) {
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         textStyle: const TextStyle(
           fontFamily: _fontFamily,
           fontFamilyFallback: _fontFallback,

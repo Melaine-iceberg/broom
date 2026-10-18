@@ -31,10 +31,7 @@ class _HomePageState extends State<HomePage> {
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [
-                  scheme.surface,
-                  scheme.surfaceContainerLowest,
-                ],
+                colors: [scheme.surface, scheme.surfaceContainerLowest],
               ),
             ),
             child: SafeArea(
@@ -45,14 +42,7 @@ class _HomePageState extends State<HomePage> {
                     padding: const EdgeInsets.fromLTRB(28, 20, 28, 22),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _Header(
-                          onLogoTap:
-                              controller.isBusy ? null : controller.returnHome,
-                        ),
-                        const SizedBox(height: 18),
-                        Expanded(child: _buildBody(context)),
-                      ],
+                      children: [Expanded(child: _buildBody(context))],
                     ),
                   ),
                 ),
@@ -165,100 +155,6 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-class _Header extends StatelessWidget {
-  const _Header({this.onLogoTap});
-
-  final VoidCallback? onLogoTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
-    return Row(
-      children: [
-        InkWell(
-          onTap: onLogoTap,
-          borderRadius: BorderRadius.circular(14),
-          child: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [scheme.primary, scheme.tertiary],
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: scheme.primary.withValues(alpha: 0.22),
-                  blurRadius: 18,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: Icon(
-              Icons.cleaning_services_rounded,
-              color: scheme.onPrimary,
-              size: 23,
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Broom',
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.5,
-              ),
-            ),
-            Text(
-              '安全、可撤销的 Windows 清理工具',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-        const Spacer(),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          decoration: BoxDecoration(
-            color: scheme.primaryContainer.withValues(alpha: 0.32),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(
-              color: scheme.primary.withValues(alpha: 0.16),
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.shield_outlined,
-                size: 14,
-                color: scheme.primary,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                'Safe 级 · 可撤销',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: scheme.primary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _IdleView extends StatelessWidget {
   const _IdleView({required this.controller, required this.onUndo});
 
@@ -278,10 +174,7 @@ class _IdleView extends StatelessWidget {
             onClose: controller.clearError,
           ),
         if (controller.notice case final notice?)
-          _InlineBanner(
-            message: notice,
-            onClose: controller.clearNotice,
-          ),
+          _InlineBanner(message: notice, onClose: controller.clearNotice),
         _Hero(controller: controller),
         if (pending != null) ...[
           const SizedBox(height: 14),
@@ -322,9 +215,7 @@ class _Hero extends StatelessWidget {
             scheme.surfaceContainerLow,
           ],
         ),
-        border: Border.all(
-          color: scheme.primary.withValues(alpha: 0.12),
-        ),
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.12)),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -454,9 +345,7 @@ class _HeroArtwork extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: scheme.surface.withValues(alpha: 0.55),
-            border: Border.all(
-              color: scheme.primary.withValues(alpha: 0.12),
-            ),
+            border: Border.all(color: scheme.primary.withValues(alpha: 0.12)),
           ),
         ),
         Container(
@@ -467,34 +356,21 @@ class _HeroArtwork extends StatelessWidget {
             color: scheme.primary.withValues(alpha: 0.11),
           ),
         ),
-        Icon(
-          Icons.cleaning_services_rounded,
-          size: 54,
-          color: scheme.primary,
-        ),
+        Icon(Icons.cleaning_services_rounded, size: 54, color: scheme.primary),
         Positioned(
           top: 8,
           right: 8,
-          child: _FloatingTag(
-            icon: Icons.folder_open_outlined,
-            label: '临时文件',
-          ),
+          child: _FloatingTag(icon: Icons.folder_open_outlined, label: '临时文件'),
         ),
         Positioned(
           bottom: 22,
           left: 0,
-          child: _FloatingTag(
-            icon: Icons.public_rounded,
-            label: '浏览器缓存',
-          ),
+          child: _FloatingTag(icon: Icons.public_rounded, label: '浏览器缓存'),
         ),
         Positioned(
           bottom: 4,
           right: 28,
-          child: _FloatingTag(
-            icon: Icons.restore_rounded,
-            label: '可撤销',
-          ),
+          child: _FloatingTag(icon: Icons.restore_rounded, label: '可撤销'),
         ),
       ],
     );
@@ -517,9 +393,7 @@ class _FloatingTag extends StatelessWidget {
       decoration: BoxDecoration(
         color: scheme.surface.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.7),
-        ),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.7)),
         boxShadow: [
           BoxShadow(
             color: scheme.shadow.withValues(alpha: 0.06),
@@ -546,10 +420,7 @@ class _FloatingTag extends StatelessWidget {
 }
 
 class _PendingUndoCard extends StatelessWidget {
-  const _PendingUndoCard({
-    required this.controller,
-    required this.onUndo,
-  });
+  const _PendingUndoCard({required this.controller, required this.onUndo});
 
   final CleanController controller;
   final VoidCallback onUndo;
@@ -566,9 +437,7 @@ class _PendingUndoCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: scheme.tertiaryContainer.withValues(alpha: 0.42),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: scheme.tertiary.withValues(alpha: 0.16),
-        ),
+        border: Border.all(color: scheme.tertiary.withValues(alpha: 0.16)),
       ),
       child: Row(
         children: [
@@ -737,11 +606,7 @@ class _RuleChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            _ruleIcon(rule.id),
-            size: 13,
-            color: scheme.onSurfaceVariant,
-          ),
+          Icon(_ruleIcon(rule.id), size: 13, color: scheme.onSurfaceVariant),
           const SizedBox(width: 6),
           Text(
             rule.title,
@@ -805,8 +670,9 @@ class _InlineBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final foreground =
-        isError ? scheme.onErrorContainer : scheme.onSurfaceVariant;
+    final foreground = isError
+        ? scheme.onErrorContainer
+        : scheme.onSurfaceVariant;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -825,9 +691,7 @@ class _InlineBanner extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            isError
-                ? Icons.error_outline_rounded
-                : Icons.info_outline_rounded,
+            isError ? Icons.error_outline_rounded : Icons.info_outline_rounded,
             size: 18,
             color: foreground,
           ),
@@ -835,9 +699,7 @@ class _InlineBanner extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: foreground,
-              ),
+              style: theme.textTheme.bodySmall?.copyWith(color: foreground),
             ),
           ),
           if (onClose != null)
@@ -885,8 +747,7 @@ class _ScanningView extends StatelessWidget {
                         SizedBox.expand(
                           child: CircularProgressIndicator(
                             strokeWidth: 4,
-                            backgroundColor:
-                                scheme.surfaceContainerHighest,
+                            backgroundColor: scheme.surfaceContainerHighest,
                           ),
                         ),
                         Icon(
@@ -1028,7 +889,8 @@ class _PreviewView extends StatelessWidget {
       0,
       (total, result) => total + result.totalBytes,
     );
-    final allSelected = controller.results.isNotEmpty &&
+    final allSelected =
+        controller.results.isNotEmpty &&
         controller.results.every(
           (result) => controller.isRuleSelected(result.rule.id),
         );
@@ -1047,9 +909,7 @@ class _PreviewView extends StatelessWidget {
             message: '有 ${controller.scanDirectoryErrors} 个目录无法读取，已自动跳过。',
           ),
         if (controller.scanTruncated)
-          _InlineBanner(
-            message: '文件数量超过单次扫描上限，预览与清理仅包含已找到的部分。',
-          ),
+          _InlineBanner(message: '文件数量超过单次扫描上限，预览与清理仅包含已找到的部分。'),
         Row(
           children: [
             Expanded(
@@ -1062,7 +922,7 @@ class _PreviewView extends StatelessWidget {
                     controller.results.isEmpty
                         ? '没有发现可清理的文件'
                         : '发现 ${formatCount(totalItems)} 个文件 · '
-                            '${formatBytes(totalBytes)}，请选择要清理的内容。',
+                              '${formatBytes(totalBytes)}，请选择要清理的内容。',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
@@ -1095,10 +955,7 @@ class _PreviewView extends StatelessWidget {
                         color: scheme.primary,
                       ),
                       const SizedBox(height: 14),
-                      Text(
-                        '没有发现可清理的内容',
-                        style: theme.textTheme.titleMedium,
-                      ),
+                      Text('没有发现可清理的内容', style: theme.textTheme.titleMedium),
                       const SizedBox(height: 6),
                       Text(
                         '系统看起来很干净。关闭正在使用的浏览器或开发工具后，可以再扫描一次。',
@@ -1179,11 +1036,7 @@ class _ResultGroup extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(4, 10, 4, 8),
             child: Row(
               children: [
-                Icon(
-                  _categoryIcon(category),
-                  size: 16,
-                  color: scheme.primary,
-                ),
+                Icon(_categoryIcon(category), size: 16, color: scheme.primary),
                 const SizedBox(width: 7),
                 Text(category, style: theme.textTheme.titleSmall),
                 const SizedBox(width: 8),
@@ -1205,10 +1058,7 @@ class _ResultGroup extends StatelessWidget {
 }
 
 class _RuleResultCard extends StatelessWidget {
-  const _RuleResultCard({
-    required this.result,
-    required this.controller,
-  });
+  const _RuleResultCard({required this.result, required this.controller});
 
   final RuleResult result;
   final CleanController controller;
@@ -1404,8 +1254,7 @@ class _CleanActionBar extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           FilledButton.icon(
-            onPressed:
-                controller.selectedCount == 0 ? null : onCleanRequested,
+            onPressed: controller.selectedCount == 0 ? null : onCleanRequested,
             icon: const Icon(Icons.cleaning_services_rounded, size: 18),
             label: Text('清理 ${formatCount(controller.selectedCount)} 项'),
           ),
@@ -1575,8 +1424,8 @@ class _DoneView extends StatelessWidget {
     final title = report.cancelled
         ? '清理已停止'
         : noMoves
-            ? '没有文件被移动'
-            : '清理完成';
+        ? '没有文件被移动'
+        : '清理完成';
 
     return Center(
       child: SingleChildScrollView(
@@ -1627,8 +1476,8 @@ class _DoneView extends StatelessWidget {
                   report.cancelled
                       ? '已停止清理，已经移动的文件仍保存在隔离区中。'
                       : noMoves
-                          ? '没有文件成功移入隔离区，可以稍后重试。'
-                          : '文件已安全移动到隔离区，可随时恢复。',
+                      ? '没有文件成功移入隔离区，可以稍后重试。'
+                      : '文件已安全移动到隔离区，可随时恢复。',
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
@@ -1698,8 +1547,7 @@ class _DoneView extends StatelessWidget {
                             ),
                           ],
                         ),
-                        for (final failure
-                            in report.failures.take(3)) ...[
+                        for (final failure in report.failures.take(3)) ...[
                           const SizedBox(height: 6),
                           Text(
                             '• ${fileNameOf(failure.path)}：${failure.reason}',
@@ -1878,9 +1726,7 @@ class _UndoResultDialog extends StatelessWidget {
           ),
           if (report.conflictCount > 0) ...[
             const SizedBox(height: 8),
-            Text(
-              '${report.conflictCount} 个文件的原位置已有新文件，已跳过，不会覆盖。',
-            ),
+            Text('${report.conflictCount} 个文件的原位置已有新文件，已跳过，不会覆盖。'),
           ],
           if (report.failureCount > 0) ...[
             const SizedBox(height: 8),
@@ -1890,9 +1736,8 @@ class _UndoResultDialog extends StatelessWidget {
             const SizedBox(height: 10),
             Text(
               '未能恢复的文件仍保留在隔离区中。',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ],
         ],

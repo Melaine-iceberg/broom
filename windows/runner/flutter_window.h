@@ -8,6 +8,16 @@
 
 #include "win32_window.h"
 
+class WindowStateEmitter;
+
+namespace flutter {
+class EncodableValue;
+template <typename T>
+class EventChannel;
+template <typename T>
+class MethodChannel;
+}  // namespace flutter
+
 // A window that does nothing but host a Flutter view.
 class FlutterWindow : public Win32Window {
  public:
@@ -23,11 +33,29 @@ class FlutterWindow : public Win32Window {
                          LPARAM const lparam) noexcept override;
 
  private:
+  // Lets the parent window handle edge resize hit tests that fall outside the
+  // Flutter view's content.
+  static LRESULT CALLBACK FlutterViewProc(HWND window, UINT message,
+                                          WPARAM wparam, LPARAM lparam,
+                                          UINT_PTR subclass_id,
+                                          DWORD_PTR ref_data);
+
+  void SetUpWindowChannels();
+
   // The project to run.
   flutter::DartProject project_;
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+
+  HWND flutter_view_ = nullptr;
+
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      window_channel_;
+  std::unique_ptr<flutter::EventChannel<flutter::EncodableValue>>
+      window_state_channel_;
+  // Owned by |window_state_channel_| once its stream handler is installed.
+  WindowStateEmitter* window_state_emitter_ = nullptr;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

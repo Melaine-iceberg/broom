@@ -2,6 +2,7 @@
 
 #include <dwmapi.h>
 #include <flutter_windows.h>
+#include <windowsx.h>
 
 #include "resource.h"
 
@@ -15,6 +16,16 @@ namespace {
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
+
+/// Window attribute that controls whether DWM rounds the window corners.
+/// Ignored by Windows 10.
+#ifndef DWMWA_WINDOW_CORNER_PREFERENCE
+#define DWMWA_WINDOW_CORNER_PREFERENCE 33
+#endif
+
+constexpr DWORD kDwmWindowCornerRound = 2;
+constexpr int kMinimumWindowWidth = 760;
+constexpr int kMinimumWindowHeight = 540;
 
 constexpr const wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
 
@@ -35,6 +46,23 @@ using EnableNonClientDpiScaling = BOOL __stdcall(HWND hwnd);
 // scale factor
 int Scale(int source, double scale_factor) {
   return static_cast<int>(source * scale_factor);
+}
+
+UINT DpiOf(HWND window) {
+  const UINT dpi = GetDpiForWindow(window);
+  return dpi == 0 ? 96 : dpi;
+}
+
+int ResizeBorderWidth(HWND window) {
+  const UINT dpi = DpiOf(window);
+  return GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi) +
+         GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+}
+
+int ResizeBorderHeight(HWND window) {
+  const UINT dpi = DpiOf(window);
+  return GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) +
+         GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
 }
 
 // Dynamically loads the |EnableNonClientDpiScaling| from the User32 module.
@@ -146,6 +174,10 @@ bool Win32Window::Create(const std::wstring& title,
 
   UpdateTheme(window);
 
+  const DWORD corner_preference = kDwmWindowCornerRound;
+  DwmSetWindowAttribute(window, DWMWA_WINDOW_CORNER_PREFERENCE,
+                        &corner_preference, sizeof(corner_preference));
+
   return OnCreate();
 }
 
@@ -179,6 +211,73 @@ Win32Window::MessageHandler(HWND hwnd,
                             WPARAM const wparam,
                             LPARAM const lparam) noexcept {
   switch (message) {
+    case WM_NCCALCSIZE: {
+      RECT client = {};
+      bool has_client = false;
+      if (IsZoomed(hwnd)) {
+        MONITORINFO monitor_info = {sizeof(MONITORINFO)};
+        const HMONITOR monitor =
+            MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        if (GetMonitorInfo(monitor, &monitor_info)) {
+          client = monitor_info.rcWork;
+          has_client = true;
+        }
+      }
+
+      auto* params = reinterpret_cast<NCCALCSIZE_PARAMS*>(lparam);
+      if (!has_client) {
+        if (wparam) {
+          client = params->rgrc[0];
+        } else {
+          GetWindowRect(hwnd, &client);
+        }
+      }
+
+      if (wparam) {
+        params->rgrc[0] = client;
+      } else {
+        *reinterpret_cast<RECT*>(lparam) = client;
+      }
+      return 0;
+    }
+
+    case WM_NCHITTEST: {
+      if (IsZoomed(hwnd)) {
+        return HTCLIENT;
+      }
+
+      POINT point = {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+      RECT rect;
+      GetWindowRect(hwnd, &rect);
+
+      const int border_x = ResizeBorderWidth(hwnd);
+      const int border_y = ResizeBorderHeight(hwnd);
+      const bool on_left = point.x >= rect.left && point.x < rect.left + border_x;
+      const bool on_right =
+          point.x >= rect.right - border_x && point.x < rect.right;
+      const bool on_top = point.y >= rect.top && point.y < rect.top + border_y;
+      const bool on_bottom =
+          point.y >= rect.bottom - border_y && point.y < rect.bottom;
+
+      if (on_top && on_left) return HTTOPLEFT;
+      if (on_top && on_right) return HTTOPRIGHT;
+      if (on_bottom && on_left) return HTBOTTOMLEFT;
+      if (on_bottom && on_right) return HTBOTTOMRIGHT;
+      if (on_top) return HTTOP;
+      if (on_bottom) return HTBOTTOM;
+      if (on_left) return HTLEFT;
+      if (on_right) return HTRIGHT;
+      return HTCLIENT;
+    }
+
+    case WM_GETMINMAXINFO: {
+      auto* info = reinterpret_cast<MINMAXINFO*>(lparam);
+      const UINT dpi = DpiOf(hwnd);
+      info->ptMinTrackSize.x = MulDiv(kMinimumWindowWidth, dpi, 96);
+      info->ptMinTrackSize.y = MulDiv(kMinimumWindowHeight, dpi, 96);
+      return 0;
+    }
+
     case WM_DESTROY:
       window_handle_ = nullptr;
       Destroy();
@@ -253,6 +352,26 @@ RECT Win32Window::GetClientArea() {
   RECT frame;
   GetClientRect(window_handle_, &frame);
   return frame;
+}
+
+bool Win32Window::IsInResizeBorder(const POINT& screen_point) const {
+  if (window_handle_ == nullptr || IsZoomed(window_handle_)) {
+    return false;
+  }
+
+  RECT rect;
+  GetWindowRect(window_handle_, &rect);
+  const int border_x = ResizeBorderWidth(window_handle_);
+  const int border_y = ResizeBorderHeight(window_handle_);
+  const bool on_left = screen_point.x >= rect.left &&
+                       screen_point.x < rect.left + border_x;
+  const bool on_right = screen_point.x >= rect.right - border_x &&
+                        screen_point.x < rect.right;
+  const bool on_top = screen_point.y >= rect.top &&
+                      screen_point.y < rect.top + border_y;
+  const bool on_bottom = screen_point.y >= rect.bottom - border_y &&
+                         screen_point.y < rect.bottom;
+  return on_left || on_right || on_top || on_bottom;
 }
 
 HWND Win32Window::GetHandle() {

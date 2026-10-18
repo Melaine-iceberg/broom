@@ -55,6 +55,10 @@ class Win32Window {
   // Return a RECT representing the bounds of the current client area.
   RECT GetClientArea();
 
+  // Returns true when |screen_point| falls inside the invisible border used to
+  // resize the window.
+  bool IsInResizeBorder(const POINT& screen_point) const;
+
  protected:
   // Processes and route salient window messages for mouse handling,
   // size change and DPI. Delegates handling of these to member overloads that

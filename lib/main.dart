@@ -6,6 +6,7 @@ import 'app.dart';
 import 'core/clean/quarantine_service.dart';
 import 'core/platform/cleaner_platform.dart';
 import 'core/safety/path_guard.dart';
+import 'platform/window_chrome.dart';
 import 'ui/clean_controller.dart';
 
 void main() {
@@ -13,13 +14,13 @@ void main() {
 
   final platform = createCleanerPlatform();
   if (!platform.isSupported) {
-    runApp(UnsupportedApp(platformName: platform.displayName));
+    _runBroom(UnsupportedApp(platformName: platform.displayName));
     return;
   }
 
   final quarantineRoot = platform.quarantineRoot;
   if (quarantineRoot == null) {
-    runApp(
+    _runBroom(
       UnsupportedApp(
         platformName: platform.displayName,
         reason: '无法确定本地应用数据目录，清理功能不可用。',
@@ -43,5 +44,14 @@ void main() {
   );
   unawaited(controller.initialize());
 
-  runApp(BroomApp(controller: controller));
+  _runBroom(BroomApp(controller: controller));
+}
+
+// The native runner registers the window channels while creating the view, so
+// subscribe once the first frame is on screen.
+void _runBroom(Widget app) {
+  runApp(app);
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    WindowChrome.instance.initialize();
+  });
 }
