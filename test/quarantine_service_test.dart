@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:broom/core/clean/quarantine_service.dart';
+import 'package:crypto/crypto.dart';
 import 'package:broom/core/models/clean_models.dart';
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/safety/path_exclusions.dart';
@@ -77,6 +79,108 @@ void main() {
       await Directory(p.windows.join(temp.path, 'quarantine')).exists(),
       isTrue,
     );
+  });
+
+  test('records a SHA-256 digest for small quarantine entries', () async {
+    final file = await createFile('hashed.txt', 'alpha');
+    final report = await quarantine.clean([await itemFor(file)]);
+
+    final entriesFile = File(
+      p.windows.join(
+        temp.path,
+        'quarantine',
+        report.sessionId!,
+        'entries.jsonl',
+      ),
+    );
+    final entry = jsonDecode(
+      (await entriesFile.readAsLines()).single,
+    ) as Map<String, dynamic>;
+
+    expect(entry['size'], 5);
+    expect(entry['sha256'], sha256.convert(utf8.encode('alpha')).toString());
+  });
+
+  test('refuses to restore a quarantine file whose size changed', () async {
+    final file = await createFile('tampered.txt', 'alpha');
+    final report = await quarantine.clean([await itemFor(file)]);
+
+    final entry = (await quarantine.listEntries(report.sessionId!)).single;
+    final stored = File(
+      p.windows.join(
+        temp.path,
+        'quarantine',
+        report.sessionId!,
+        'files',
+        entry.storedName,
+      ),
+    );
+    await stored.writeAsString('x');
+
+    final listed = (await quarantine.listEntries(report.sessionId!)).single;
+    expect(listed.integrityFailure, isNotNull);
+    expect(listed.restorable, isFalse);
+
+    final undo = await quarantine.undo(report.sessionId!);
+
+    expect(undo.restoredCount, 0);
+    expect(undo.failureCount, 1);
+    expect(undo.integrityFailureCount, 1);
+    expect(undo.sessionRemoved, isFalse);
+    expect(await file.exists(), isFalse);
+    expect(undo.failures.single.reason, contains('大小'));
+  });
+
+  test('detects same-size tampering with the stored hash', () async {
+    final file = await createFile('tampered.txt', 'alpha');
+    final report = await quarantine.clean([await itemFor(file)]);
+
+    final entry = (await quarantine.listEntries(report.sessionId!)).single;
+    final stored = File(
+      p.windows.join(
+        temp.path,
+        'quarantine',
+        report.sessionId!,
+        'files',
+        entry.storedName,
+      ),
+    );
+    await stored.writeAsString('bravo');
+
+    final listed = (await quarantine.listEntries(report.sessionId!)).single;
+    expect(listed.integrityFailure, isNull);
+
+    final undo = await quarantine.undo(report.sessionId!);
+
+    expect(undo.restoredCount, 0);
+    expect(undo.integrityFailureCount, 1);
+    expect(undo.sessionRemoved, isFalse);
+    expect(undo.failures.single.reason, contains('SHA-256'));
+  });
+
+  test('restores sessions whose entries predate integrity hashes', () async {
+    final file = await createFile('legacy.txt', 'alpha');
+    final report = await quarantine.clean([await itemFor(file)]);
+
+    final entriesFile = File(
+      p.windows.join(
+        temp.path,
+        'quarantine',
+        report.sessionId!,
+        'entries.jsonl',
+      ),
+    );
+    final entry = jsonDecode(
+      (await entriesFile.readAsLines()).single,
+    ) as Map<String, dynamic>;
+    entry.remove('sha256');
+    await entriesFile.writeAsString('${jsonEncode(entry)}\n');
+
+    final undo = await quarantine.undo(report.sessionId!);
+
+    expect(undo.restoredCount, 1);
+    expect(undo.integrityFailureCount, 0);
+    expect(await file.readAsString(), 'alpha');
   });
 
   test('skips existing targets and can retry the remaining entry', () async {

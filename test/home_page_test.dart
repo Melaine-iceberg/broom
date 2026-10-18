@@ -253,15 +253,51 @@ void main() {
     expect(find.text('Broom'), findsOneWidget);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
+  testWidgets('prompts about unfinished sessions on startup', (tester) async {
+    tester.view.physicalSize = const Size(1200, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final guard = PathGuard(protectedRoots: const []);
+    final service = FakeQuarantineService([
+      fakeQuarantineEntry('pending.txt'),
+      fakeQuarantineEntry('restored.txt', sequence: 2, restored: true),
+    ]);
+    final controller = CleanController(
+      platform: _FakePlatform(),
+      guard: guard,
+      quarantine: service,
+      exclusions: _exclusionsStore(),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    await tester.pumpWidget(
+      BroomApp(controller: controller, systemShell: _FakeSystemShell()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('发现 1 个未完成的清理会话'), findsOneWidget);
+
+    await tester.tap(find.text('查看隔离区'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('隔离区'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('返回'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('其中 1 次未正常结束'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
   testWidgets('marks rules that are partially excluded', (tester) async {
     tester.view.physicalSize = const Size(1200, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    final temp = Directory.systemTemp.createTempSync(
-      'broom_home_exclusions_',
-    );
+    final temp = Directory.systemTemp.createTempSync('broom_home_exclusions_');
     addTearDown(() {
       if (temp.existsSync()) temp.deleteSync(recursive: true);
     });

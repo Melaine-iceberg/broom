@@ -48,6 +48,7 @@ class CleanController extends ChangeNotifier {
   int _scanDirectoryErrors = 0;
   bool _scanTruncated = false;
   bool _scanStarting = false;
+  bool _initialized = false;
   bool _exclusionsReady = false;
   String? _exclusionError;
   int _scopeRevision = 0;
@@ -64,6 +65,10 @@ class CleanController extends ChangeNotifier {
   CleanReport? get lastReport => _lastReport;
   CleanProgress? get cleanProgress => _cleanProgress;
   List<QuarantineSessionInfo> get pendingSessions => _pendingSessions;
+  List<QuarantineSessionInfo> get unfinishedSessions => [
+    for (final session in _pendingSessions)
+      if (session.status == QuarantineStatus.partial) session,
+  ];
   QuarantineSessionInfo? get latestPendingSession =>
       _pendingSessions.isEmpty ? null : _pendingSessions.first;
   int get pendingBytes => _pendingSessions.fold<int>(
@@ -77,6 +82,7 @@ class CleanController extends ChangeNotifier {
   Map<String, RuleExclusionScope> get ruleExclusionScopes =>
       _ruleExclusionScopes;
   int get exclusionCount => exclusions.paths.length;
+  bool get initialized => _initialized;
   bool get exclusionsLoaded => _exclusionsReady;
   String? get exclusionError => _exclusionError;
   int get scanDirectoryErrors => _scanDirectoryErrors;
@@ -117,6 +123,7 @@ class CleanController extends ChangeNotifier {
   Future<void> initialize() async {
     await _ensureExclusionsLoaded();
     await _refreshPendingSessions(notify: false);
+    _initialized = true;
     _notify();
   }
 

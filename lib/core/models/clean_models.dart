@@ -50,6 +50,7 @@ class UndoReport {
     required this.overwrittenCount,
     required this.missingCount,
     required this.failureCount,
+    required this.integrityFailureCount,
     required this.failures,
     required this.sessionRemoved,
   });
@@ -61,10 +62,12 @@ class UndoReport {
   final int overwrittenCount;
   final int missingCount;
   final int failureCount;
+  final int integrityFailureCount;
   final List<CleanFailure> failures;
   final bool sessionRemoved;
 
-  bool get hasPending => conflictCount > 0 || failureCount > 0;
+  bool get hasPending =>
+      conflictCount > 0 || failureCount > 0 || integrityFailureCount > 0;
 }
 
 enum QuarantineStatus { cleaning, ready, partial, restored }
@@ -97,6 +100,7 @@ class QuarantineEntry {
     required this.restored,
     required this.present,
     required this.originalExists,
+    this.integrityFailure,
   });
 
   final String storedName;
@@ -105,8 +109,9 @@ class QuarantineEntry {
   final bool restored;
   final bool present;
   final bool originalExists;
+  final String? integrityFailure;
 
-  bool get restorable => !restored && present;
+  bool get restorable => !restored && present && integrityFailure == null;
 }
 
 class QuarantinePurgeReport {

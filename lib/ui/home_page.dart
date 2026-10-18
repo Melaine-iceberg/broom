@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../core/analysis/analysis_service.dart';
@@ -46,14 +48,70 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   CleanController get controller => widget.controller;
 
+  bool _startupPromptScheduled = false;
+
   @override
   void initState() {
     super.initState();
+    controller.addListener(_maybeScheduleUnfinishedPrompt);
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _maybeScheduleUnfinishedPrompt(),
+    );
     if (widget.startInSystemCache && widget.systemCacheController != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _openSystemCache();
       });
+    }
+  }
+
+  @override
+  void dispose() {
+    controller.removeListener(_maybeScheduleUnfinishedPrompt);
+    super.dispose();
+  }
+
+  void _maybeScheduleUnfinishedPrompt() {
+    if (!mounted || _startupPromptScheduled) return;
+    if (!controller.initialized || widget.startInSystemCache) return;
+    if (controller.unfinishedSessions.isEmpty) return;
+    _startupPromptScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_showUnfinishedPrompt());
+    });
+  }
+
+  Future<void> _showUnfinishedPrompt() async {
+    final count = controller.unfinishedSessions.length;
+    if (count == 0 || !mounted) return;
+    final openQuarantine = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: Icon(
+          Icons.restore_rounded,
+          size: 30,
+          color: Theme.of(dialogContext).colorScheme.primary,
+        ),
+        title: Text('发现 $count 个未完成的清理会话'),
+        content: const Text(
+          'Broom 上次退出时还有清理没有正常结束，或恢复只完成了一部分。'
+          '已移动的文件仍保存在隔离区，可以继续恢复，也可以确认后永久释放。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('稍后处理'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('查看隔离区'),
+          ),
+        ],
+      ),
+    );
+    if (openQuarantine == true && mounted) {
+      await _openQuarantine();
     }
   }
 
@@ -566,6 +624,7 @@ class _QuarantineCard extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final sessions = controller.pendingSessions.length;
+    final unfinished = controller.unfinishedSessions.length;
 
     return Material(
       key: const ValueKey('quarantine-card'),
@@ -608,8 +667,9 @@ class _QuarantineCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       '${formatCount(controller.pendingFileCount)} 个文件 · '
-                      '$sessions 次清理。磁盘空间尚未释放，'
-                      '恢复或永久释放后才会改变。',
+                      '$sessions 次清理'
+                      '${unfinished > 0 ? '，其中 $unfinished 次未正常结束' : ''}。'
+                      '磁盘空间尚未释放，恢复或永久释放后才会改变。',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),
@@ -2153,9 +2213,18 @@ class _UndoResultDialog extends StatelessWidget {
               '可在隔离区重新恢复并选择保留两者或覆盖。',
             ),
           ],
-          if (report.failureCount > 0) ...[
+          if (report.integrityFailureCount > 0) ...[
             const SizedBox(height: 8),
-            Text('${report.failureCount} 个文件恢复失败。'),
+            Text(
+              '${report.integrityFailureCount} 个文件未通过完整性校验，'
+              '已跳过恢复，仍保留在隔离区。',
+            ),
+          ],
+          if (report.failureCount > report.integrityFailureCount) ...[
+            const SizedBox(height: 8),
+            Text(
+              '${report.failureCount - report.integrityFailureCount} 个文件恢复失败。',
+            ),
           ],
           if (!report.sessionRemoved) ...[
             const SizedBox(height: 10),

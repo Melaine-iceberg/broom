@@ -383,14 +383,21 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
   bool _busy = false;
   String? _error;
 
-  int get _remainingCount => _entries.where((entry) => entry.restorable).length;
+  int get _restorableCount =>
+      _entries.where((entry) => entry.restorable).length;
 
-  int get _remainingBytes => _entries
-      .where((entry) => entry.restorable)
+  int get _selectableCount => _restorableCount;
+
+  int get _pendingCount =>
+      _entries.where((entry) => !entry.restored && entry.present).length;
+
+  int get _pendingBytes => _entries
+      .where((entry) => !entry.restored && entry.present)
       .fold<int>(0, (total, entry) => total + entry.size);
 
-  int get _selectableCount =>
-      _entries.where((entry) => entry.restorable).length;
+  int get _integrityFailureCount => _entries
+      .where((entry) => !entry.restored && entry.integrityFailure != null)
+      .length;
 
   int get _selectedBytes => _entries
       .where((entry) => _selected.contains(entry.storedName))
@@ -412,8 +419,9 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
       final entries = await widget.service.listEntries(widget.session.id);
       entries.sort((a, b) {
         int rank(QuarantineEntry entry) {
-          if (entry.restored) return 3;
-          if (!entry.present) return 2;
+          if (entry.restored) return 4;
+          if (!entry.present) return 3;
+          if (entry.integrityFailure != null) return 2;
           if (entry.originalExists) return 1;
           return 0;
         }
@@ -520,8 +528,8 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
       context: context,
       builder: (_) => _PurgeConfirmDialog(
         title: '永久释放剩余文件？',
-        fileCount: _remainingCount,
-        bytes: _remainingBytes,
+        fileCount: _pendingCount,
+        bytes: _pendingBytes,
       ),
     );
     if (confirmed != true || !mounted) return;
@@ -590,9 +598,19 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
                 '可再次恢复并选择“保留两者”或“覆盖”。',
               ),
             ],
-            if (report.failureCount > 0) ...[
+            if (report.integrityFailureCount > 0) ...[
               const SizedBox(height: 8),
-              Text('${report.failureCount} 个文件恢复失败，仍保留在隔离区。'),
+              Text(
+                '${report.integrityFailureCount} 个文件未通过完整性校验，'
+                '已跳过恢复，仍保留在隔离区。',
+              ),
+            ],
+            if (report.failureCount > report.integrityFailureCount) ...[
+              const SizedBox(height: 8),
+              Text(
+                '${report.failureCount - report.integrityFailureCount} 个文件'
+                '恢复失败，仍保留在隔离区。',
+              ),
             ],
             if (!report.sessionRemoved) ...[
               const SizedBox(height: 8),
@@ -671,9 +689,18 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
                   ),
                   const SizedBox(height: 12),
                 ],
+                if (_integrityFailureCount > 0) ...[
+                  AnalysisBanner(
+                    message:
+                        '$_integrityFailureCount 个隔离文件未通过完整性校验，'
+                        '已禁止恢复。可以永久释放这些文件。',
+                    isError: true,
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 _SessionDetailHeader(
-                  pendingCount: _remainingCount,
-                  pendingBytes: _remainingBytes,
+                  pendingCount: _pendingCount,
+                  pendingBytes: _pendingBytes,
                   busy: _busy,
                   onPurge: _purge,
                 ),
@@ -707,7 +734,7 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
                   onRestoreSelected: _selected.isEmpty || _busy
                       ? null
                       : _restoreSelected,
-                  onRestoreAll: _remainingCount == 0 || _busy
+                  onRestoreAll: _restorableCount == 0 || _busy
                       ? null
                       : _restoreAll,
                 ),
@@ -826,7 +853,7 @@ class _SummaryCard extends StatelessWidget {
               ),
               _MetricChip(
                 icon: Icons.restore_rounded,
-                label: '待恢复',
+                label: '待处理',
                 value: '${formatCount(pendingFiles)} 个文件',
               ),
               if (disk != null)
@@ -1175,6 +1202,10 @@ class _EntryTile extends StatelessWidget {
         color: scheme.onSurfaceVariant,
       ),
       QuarantineEntry(present: false) => (label: '隔离文件缺失', color: scheme.error),
+      QuarantineEntry(integrityFailure: _?) => (
+        label: '完整性异常',
+        color: scheme.error,
+      ),
       QuarantineEntry(originalExists: true) => (
         label: '原位置已有文件',
         color: scheme.tertiary,
@@ -1255,9 +1286,12 @@ class _EntryTile extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    label,
-                    style: theme.textTheme.labelSmall?.copyWith(color: color),
+                  Tooltip(
+                    message: entry.integrityFailure ?? label,
+                    child: Text(
+                      label,
+                      style: theme.textTheme.labelSmall?.copyWith(color: color),
+                    ),
                   ),
                 ],
               ),
@@ -1667,8 +1701,12 @@ String _restoreMessage(UndoReport report) {
   if (report.conflictCount > 0) {
     parts.add('${report.conflictCount} 个已跳过冲突');
   }
-  if (report.failureCount > 0) {
-    parts.add('${report.failureCount} 个恢复失败');
+  if (report.integrityFailureCount > 0) {
+    parts.add('${report.integrityFailureCount} 个完整性校验失败');
+  }
+  final otherFailures = report.failureCount - report.integrityFailureCount;
+  if (otherFailures > 0) {
+    parts.add('$otherFailures 个恢复失败');
   }
   return parts.join('；');
 }

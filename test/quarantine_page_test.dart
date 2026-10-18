@@ -238,6 +238,35 @@ void main() {
     expect(find.textContaining('已跳过冲突'), findsOneWidget);
   });
 
+  testWidgets('blocks restoring integrity failures and allows purging them', (
+    tester,
+  ) async {
+    final service = FakeQuarantineService([
+      fakeQuarantineEntry('corrupt.txt', integrityFailure: '隔离文件大小与清理记录不一致'),
+    ]);
+
+    await pumpPage(tester, service);
+    await tester.tap(find.text('查看文件'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('完整性异常'), findsOneWidget);
+    expect(find.textContaining('未通过完整性校验'), findsOneWidget);
+
+    final checkbox = tester.widget<Checkbox>(find.byType(Checkbox).first);
+    expect(checkbox.onChanged, isNull);
+
+    final restoreAll = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, '恢复全部'),
+    );
+    expect(restoreAll.onPressed, isNull);
+
+    await tester.tap(find.text('永久删除剩余'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('永久释放剩余文件？'), findsOneWidget);
+    expect(find.textContaining('将永久删除 1 个文件'), findsOneWidget);
+  });
+
   testWidgets('shows an empty state and free space', (tester) async {
     final service = FakeQuarantineService();
 

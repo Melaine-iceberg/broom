@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/clean_models.dart';
@@ -11,6 +12,7 @@ import '../safety/path_guard.dart';
 
 const _schemaVersion = 1;
 const _maxFailureDetails = 100;
+const _integrityHashLimitBytes = 32 * 1024 * 1024;
 
 class QuarantineService {
   factory QuarantineService({
@@ -54,6 +56,7 @@ class QuarantineService {
   final PathExclusionSource _exclusions;
   final DateTime Function() _clock;
   static final Random _random = Random.secure();
+  static final RegExp _sha256Pattern = RegExp(r'^[0-9a-fA-F]{64}$');
 
   Future<CleanReport> clean(
     List<JunkItem> items, {
@@ -179,11 +182,13 @@ class QuarantineService {
 
         sequence++;
         final storedName = _storedName(sequence, item.path);
+        final digest = await _tryHashFile(item.path, size);
         final entry = {
           'originalPath': item.path,
           'rootPath': item.rootPath,
           'storedName': storedName,
           'size': size,
+          'sha256': ?digest,
           'modified': item.modified.toUtc().toIso8601String(),
           'ruleId': item.ruleId,
         };
@@ -296,6 +301,7 @@ class QuarantineService {
     var keptBothCount = 0;
     var overwrittenCount = 0;
     var missingCount = 0;
+    var integrityFailureCount = 0;
 
     void recordFailure(String path, Object error) {
       failureCount++;
@@ -332,18 +338,14 @@ class QuarantineService {
       }
 
       final storedPath = p.windows.join(filesDir, entry.storedName);
-      FileSystemEntityType storedType;
-      try {
-        storedType = await FileSystemEntity.type(
-          storedPath,
-          followLinks: false,
-        );
-      } on FileSystemException catch (error) {
-        recordFailure(entry.originalPath, error);
+      final storedCheck = await _verifyStoredFile(storedPath, entry);
+      if (storedCheck.missing) {
+        missingCount++;
         continue;
       }
-      if (storedType != FileSystemEntityType.file) {
-        missingCount++;
+      if (storedCheck.reason case final reason?) {
+        integrityFailureCount++;
+        recordFailure(entry.originalPath, reason);
         continue;
       }
 
@@ -467,6 +469,7 @@ class QuarantineService {
       overwrittenCount: overwrittenCount,
       missingCount: missingCount,
       failureCount: failureCount,
+      integrityFailureCount: integrityFailureCount,
       failures: List.unmodifiable(failures),
       sessionRemoved: pendingCount == 0,
     );
@@ -481,16 +484,24 @@ class QuarantineService {
 
     for (final entry in entries) {
       var present = false;
+      String? integrityFailure;
       if (_isSafeStoredName(entry.storedName)) {
+        final storedPath = p.windows.join(filesDir, entry.storedName);
         try {
           present =
-              await FileSystemEntity.type(
-                p.windows.join(filesDir, entry.storedName),
-                followLinks: false,
-              ) ==
+              await FileSystemEntity.type(storedPath, followLinks: false) ==
               FileSystemEntityType.file;
+          if (present) {
+            final length = await File(storedPath).length();
+            if (length != entry.size) {
+              integrityFailure =
+                  '隔离文件大小与清理记录不一致'
+                  '（记录 ${entry.size} 字节，实际 $length 字节）';
+            }
+          }
         } on FileSystemException {
           present = true;
+          integrityFailure = '无法读取隔离文件，完整性未知';
         }
       }
 
@@ -514,6 +525,7 @@ class QuarantineService {
           restored: restoredNames.contains(entry.storedName),
           present: present,
           originalExists: originalExists,
+          integrityFailure: integrityFailure,
         ),
       );
     }
@@ -780,6 +792,62 @@ class QuarantineService {
     return error.toString();
   }
 
+  static Future<String?> _tryHashFile(String path, int size) async {
+    if (size > _integrityHashLimitBytes) return null;
+    try {
+      final bytes = await File(path).readAsBytes();
+      return sha256.convert(bytes).toString();
+    } on FileSystemException {
+      return null;
+    }
+  }
+
+  static Future<({bool missing, String? reason})> _verifyStoredFile(
+    String storedPath,
+    _StoredEntry entry,
+  ) async {
+    FileSystemEntityType type;
+    try {
+      type = await FileSystemEntity.type(storedPath, followLinks: false);
+    } on FileSystemException catch (error) {
+      return (missing: false, reason: '无法读取隔离文件：${_failureReason(error)}');
+    }
+    if (type != FileSystemEntityType.file) {
+      return (missing: true, reason: null);
+    }
+
+    int length;
+    try {
+      length = await File(storedPath).length();
+    } on FileSystemException catch (error) {
+      return (missing: false, reason: '无法读取隔离文件：${_failureReason(error)}');
+    }
+    if (length != entry.size) {
+      return (
+        missing: false,
+        reason:
+            '隔离文件大小与清理记录不一致'
+            '（记录 ${entry.size} 字节，实际 $length 字节）',
+      );
+    }
+
+    final expectedDigest = entry.sha256;
+    if (expectedDigest != null) {
+      String actualDigest;
+      try {
+        final bytes = await File(storedPath).readAsBytes();
+        actualDigest = sha256.convert(bytes).toString();
+      } on FileSystemException catch (error) {
+        return (missing: false, reason: '无法校验隔离文件：${_failureReason(error)}');
+      }
+      if (actualDigest != expectedDigest) {
+        return (missing: false, reason: '隔离文件内容校验失败（SHA-256 与清理记录不一致）');
+      }
+    }
+
+    return (missing: false, reason: null);
+  }
+
   static Future<String?> _availableRestorePath(String originalPath) async {
     final directory = p.windows.dirname(originalPath);
     final extension = p.windows.extension(originalPath);
@@ -913,12 +981,18 @@ class QuarantineService {
               size is! num) {
             continue;
           }
+          final rawDigest = map['sha256'];
+          final digest =
+              rawDigest is String && _sha256Pattern.hasMatch(rawDigest)
+              ? rawDigest.toLowerCase()
+              : null;
           entries.add(
             _StoredEntry(
               originalPath: originalPath,
               rootPath: rootPath,
               storedName: storedName,
               size: size.toInt(),
+              sha256: digest,
             ),
           );
         } on FormatException {
@@ -967,10 +1041,12 @@ class _StoredEntry {
     required this.rootPath,
     required this.storedName,
     required this.size,
+    this.sha256,
   });
 
   final String originalPath;
   final String rootPath;
   final String storedName;
   final int size;
+  final String? sha256;
 }

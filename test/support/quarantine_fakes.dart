@@ -8,13 +8,16 @@ QuarantineEntry fakeQuarantineEntry(
   int sequence = 1,
   int size = 5,
   bool originalExists = false,
+  bool restored = false,
+  String? integrityFailure,
 }) => QuarantineEntry(
   storedName: '00000${sequence}_$name',
   originalPath: 'C:\\Users\\Alice\\Downloads\\$name',
   size: size,
-  restored: false,
-  present: true,
+  restored: restored,
+  present: !restored,
   originalExists: originalExists,
+  integrityFailure: integrityFailure,
 );
 
 class FakeQuarantineService implements QuarantineService {
@@ -92,7 +95,7 @@ class FakeQuarantineService implements QuarantineService {
       restoredBytes += entry.size;
     }
 
-    final pending = entries.where((entry) => entry.restorable).length;
+    final pending = entries.where((entry) => !entry.restored).length;
     final sessionRemoved = pending == 0;
     if (sessionRemoved) _entriesBySession.remove(sessionId);
     return UndoReport(
@@ -103,6 +106,7 @@ class FakeQuarantineService implements QuarantineService {
       overwrittenCount: overwrittenCount,
       missingCount: 0,
       failureCount: 0,
+      integrityFailureCount: 0,
       failures: const [],
       sessionRemoved: sessionRemoved,
     );
@@ -112,7 +116,7 @@ class FakeQuarantineService implements QuarantineService {
   Future<QuarantinePurgeReport> purgeSession(String sessionId) async {
     final entries = _entriesBySession.remove(sessionId);
     if (entries == null) throw StateError('找不到隔离区记录');
-    final pending = entries.where((entry) => entry.restorable).toList();
+    final pending = entries.where((entry) => !entry.restored).toList();
     return QuarantinePurgeReport(
       removedCount: pending.length,
       removedBytes: pending.fold(0, (total, entry) => total + entry.size),
@@ -126,7 +130,7 @@ class FakeQuarantineService implements QuarantineService {
   Future<QuarantinePurgeReport> purgeAllSessions() async {
     final pending = _entriesBySession.values
         .expand((entries) => entries)
-        .where((entry) => entry.restorable)
+        .where((entry) => !entry.restored)
         .toList();
     _entriesBySession.clear();
     return QuarantinePurgeReport(
@@ -148,13 +152,16 @@ class FakeQuarantineService implements QuarantineService {
   }
 
   QuarantineSessionInfo _sessionInfo(String id, List<QuarantineEntry> entries) {
-    final pending = entries.where((entry) => entry.restorable).toList();
+    final pending = entries.where((entry) => !entry.restored).toList();
+    final status =
+        pending.length == entries.length &&
+            pending.every((entry) => entry.restorable)
+        ? QuarantineStatus.ready
+        : QuarantineStatus.partial;
     return QuarantineSessionInfo(
       id: id,
       createdAt: DateTime(2026, 10, 18, 12),
-      status: pending.length == entries.length
-          ? QuarantineStatus.ready
-          : QuarantineStatus.partial,
+      status: status,
       entryCount: entries.length,
       totalBytes: entries.fold(0, (total, entry) => total + entry.size),
       pendingCount: pending.length,
