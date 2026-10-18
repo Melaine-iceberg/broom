@@ -29,6 +29,7 @@ class FakeQuarantineService implements QuarantineService {
   static const sessionId = '20261018_120000_abcd';
 
   int remainingCount;
+  int undoMetadataFailures = 0;
   final List<String> resumeRequests = [];
 
   @override
@@ -146,6 +147,7 @@ class FakeQuarantineService implements QuarantineService {
       integrityFailureCount: 0,
       failures: const [],
       sessionRemoved: sessionRemoved,
+      metadataFailureCount: undoMetadataFailures,
     );
   }
 

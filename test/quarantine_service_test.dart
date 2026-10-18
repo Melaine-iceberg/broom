@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:broom/core/clean/file_metadata.dart';
 import 'package:broom/core/clean/quarantine_service.dart';
 import 'package:crypto/crypto.dart';
 import 'package:broom/core/models/clean_models.dart';
@@ -10,18 +11,23 @@ import 'package:broom/core/safety/path_guard.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import 'support/file_metadata_fakes.dart';
+
 void main() {
   late Directory temp;
   late Directory source;
+  late FakeFileMetadataAccess metadata;
   late QuarantineService quarantine;
 
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('broom_quarantine_');
     source = Directory(p.windows.join(temp.path, 'source'));
     await source.create(recursive: true);
+    metadata = FakeFileMetadataAccess();
     quarantine = QuarantineService(
       quarantineRoot: p.windows.join(temp.path, 'quarantine'),
       guard: PathGuard(protectedRoots: const []),
+      metadataAccess: metadata,
     );
   });
 
@@ -208,6 +214,132 @@ void main() {
     expect(
       (await quarantine.listSessions()).single.status,
       QuarantineStatus.ready,
+    );
+  });
+
+  test(
+    'captures and restores timestamps, read-only and ACL metadata',
+    () async {
+      final file = await createFile('meta.txt', 'alpha');
+      final created = DateTime.utc(2020, 1, 2, 3, 4, 5);
+      final modified = DateTime.utc(2021, 2, 3, 4, 5, 6);
+      final accessed = DateTime.utc(2022, 3, 4, 5, 6, 7);
+      const acl = 'D:AI(A;ID;FA;;;SY)(A;ID;FA;;;BA)(A;ID;FA;;;S-1-5-21-1)';
+      metadata.metadata = FileMetadata(
+        created: created,
+        modified: modified,
+        accessed: accessed,
+        readOnly: true,
+        acl: acl,
+      );
+
+      final report = await quarantine.clean([await itemFor(file)]);
+      final entriesFile = File(
+        p.windows.join(
+          temp.path,
+          'quarantine',
+          report.sessionId!,
+          'entries.jsonl',
+        ),
+      );
+      final entry = jsonDecode(
+        (await entriesFile.readAsLines()).single,
+      ) as Map<String, dynamic>;
+
+      expect(entry['created'], created.toIso8601String());
+      expect(entry['modified'], modified.toIso8601String());
+      expect(entry['accessed'], accessed.toIso8601String());
+      expect(entry['readOnly'], isTrue);
+      expect(entry['acl'], acl);
+      expect(metadata.reads.single.captureAcl, isFalse);
+
+      final undo = await quarantine.undo(report.sessionId!);
+
+      expect(undo.restoredCount, 1);
+      expect(undo.metadataFailureCount, 0);
+      expect(undo.sessionRemoved, isTrue);
+      final applied = metadata.applies.single;
+      expect(applied.path, file.path);
+      expect(applied.metadata.created, created);
+      expect(applied.metadata.modified, modified);
+      expect(applied.metadata.accessed, accessed);
+      expect(applied.metadata.readOnly, isTrue);
+      expect(applied.metadata.acl, acl);
+      expect(await file.readAsString(), 'alpha');
+    },
+  );
+
+  test('reports metadata failures without failing the restore', () async {
+    final file = await createFile('meta.txt', 'alpha');
+    metadata.metadata = FileMetadata(
+      modified: DateTime.utc(2021, 1, 1),
+      readOnly: false,
+    );
+    final report = await quarantine.clean([await itemFor(file)]);
+    metadata.applyError = const FileMetadataException('无法设置 ACL');
+
+    final undo = await quarantine.undo(report.sessionId!);
+
+    expect(undo.restoredCount, 1);
+    expect(undo.failureCount, 0);
+    expect(undo.metadataFailureCount, 1);
+    expect(undo.metadataWarnings.single.reason, contains('ACL'));
+    expect(undo.sessionRemoved, isTrue);
+    expect(await file.readAsString(), 'alpha');
+  });
+
+  test('warns when ACL capture was unavailable', () async {
+    final file = await createFile('meta.txt', 'alpha');
+    metadata.metadata = FileMetadata(
+      modified: DateTime.utc(2021, 1, 1),
+      aclUnavailable: true,
+    );
+    final report = await quarantine.clean([await itemFor(file)]);
+
+    final undo = await quarantine.undo(report.sessionId!);
+
+    expect(undo.metadataFailureCount, 1);
+    expect(undo.metadataWarnings.single.reason, contains('ACL'));
+    expect(undo.sessionRemoved, isTrue);
+  });
+
+  test('falls back to scan metadata when reading metadata fails', () async {
+    final file = await createFile('meta.txt', 'alpha');
+    final item = await itemFor(file);
+    metadata.readError = const FileMetadataException('元数据不可用');
+
+    final report = await quarantine.clean([item]);
+
+    expect(report.movedCount, 1);
+    expect(report.failureCount, 0);
+
+    final undo = await quarantine.undo(report.sessionId!);
+
+    expect(undo.restoredCount, 1);
+    expect(undo.metadataFailureCount, 0);
+    expect(
+      metadata.applies.single.metadata.modified!.isAtSameMomentAs(
+        item.modified,
+      ),
+      isTrue,
+    );
+  });
+
+  test('captures ACLs only for cross-volume moves', () {
+    expect(
+      shouldCaptureAcl(r'C:\cache\a.txt', r'C:\Users\Alice\Broom\quarantine'),
+      isFalse,
+    );
+    expect(
+      shouldCaptureAcl(r'D:\cache\a.txt', r'C:\Users\Alice\Broom\quarantine'),
+      isTrue,
+    );
+    expect(
+      shouldCaptureAcl(
+        r'\\server\share\a.txt',
+        r'C:\Users\Alice\Broom\quarantine',
+      ),
+      isTrue,
     );
   });
 
@@ -557,6 +689,7 @@ void main() {
       () => QuarantineService(
         quarantineRoot: 'relative/quarantine',
         guard: PathGuard(protectedRoots: const []),
+        metadataAccess: FakeFileMetadataAccess(),
       ),
       throwsArgumentError,
     );
@@ -569,6 +702,7 @@ void main() {
     final service = QuarantineService(
       quarantineRoot: p.windows.join(temp.path, 'quarantine'),
       guard: PathGuard(protectedRoots: const []),
+      metadataAccess: FakeFileMetadataAccess(),
       exclusions: PathExclusions([excludedDir.path]),
     );
 
@@ -589,6 +723,7 @@ void main() {
     final restricted = QuarantineService(
       quarantineRoot: p.windows.join(temp.path, 'quarantine'),
       guard: PathGuard(protectedRoots: const []),
+      metadataAccess: FakeFileMetadataAccess(),
       exclusions: PathExclusions([source.path]),
     );
     final blocked = await restricted.undo(report.sessionId!);

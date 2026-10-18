@@ -57,6 +57,8 @@ class UndoReport {
     required this.integrityFailureCount,
     required this.failures,
     required this.sessionRemoved,
+    this.metadataFailureCount = 0,
+    this.metadataWarnings = const [],
   });
 
   final int restoredCount;
@@ -69,6 +71,8 @@ class UndoReport {
   final int integrityFailureCount;
   final List<CleanFailure> failures;
   final bool sessionRemoved;
+  final int metadataFailureCount;
+  final List<CleanFailure> metadataWarnings;
 
   bool get hasPending =>
       conflictCount > 0 || failureCount > 0 || integrityFailureCount > 0;

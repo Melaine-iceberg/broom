@@ -191,6 +191,20 @@ void main() {
     );
   });
 
+  testWidgets('reports metadata restoration warnings', (tester) async {
+    final service = FakeQuarantineService([fakeQuarantineEntry('meta.txt')]);
+    service.undoMetadataFailures = 1;
+
+    await pumpPage(tester, service);
+    await tester.tap(find.text('查看文件'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('恢复全部'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('时间戳、只读属性或 ACL 未能完全还原'), findsOneWidget);
+  });
+
   testWidgets('requires acknowledgment before permanent release', (
     tester,
   ) async {

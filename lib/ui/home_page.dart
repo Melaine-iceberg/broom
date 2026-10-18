@@ -2435,6 +2435,14 @@ class _UndoResultDialog extends StatelessWidget {
               }),
             ),
           ],
+          if (report.metadataFailureCount > 0) ...[
+            const SizedBox(height: 8),
+            Text(
+              strings.tf('{count} 个文件的内容已恢复，但时间戳、只读属性或 ACL 未能完全还原。', {
+                'count': report.metadataFailureCount,
+              }),
+            ),
+          ],
           if (!report.sessionRemoved) ...[
             const SizedBox(height: 10),
             Text(

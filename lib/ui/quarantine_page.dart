@@ -745,6 +745,14 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
                 }),
               ),
             ],
+            if (report.metadataFailureCount > 0) ...[
+              const SizedBox(height: 8),
+              Text(
+                context.tf('{count} 个文件的内容已恢复，但时间戳、只读属性或 ACL 未能完全还原。', {
+                  'count': report.metadataFailureCount,
+                }),
+              ),
+            ],
             if (!report.sessionRemoved) ...[
               const SizedBox(height: 8),
               Text(
@@ -1943,6 +1951,9 @@ String _restoreMessage(UndoReport report) {
   final otherFailures = report.failureCount - report.integrityFailureCount;
   if (otherFailures > 0) {
     parts.add(trf('{count} 个恢复失败', {'count': otherFailures}));
+  }
+  if (report.metadataFailureCount > 0) {
+    parts.add(trf('{count} 个元数据未还原', {'count': report.metadataFailureCount}));
   }
   return parts.join('；');
 }

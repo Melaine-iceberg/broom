@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import 'app.dart';
+import 'core/clean/file_metadata.dart';
 import 'core/clean/quarantine_retention_service.dart';
 import 'core/clean/quarantine_service.dart';
 import 'core/clean/system_cache_cleaner.dart';
@@ -50,6 +51,7 @@ void main(List<String> args) {
   final quarantine = QuarantineService(
     quarantineRoot: quarantineRoot,
     guard: guard,
+    metadataAccess: createFileMetadataAccess(),
     exclusions: exclusions,
   );
   final retention = QuarantineRetentionService(

@@ -9,15 +9,18 @@ import '../models/clean_models.dart';
 import '../models/scan_models.dart';
 import '../safety/path_exclusions.dart';
 import '../safety/path_guard.dart';
+import 'file_metadata.dart';
 
 const _schemaVersion = 1;
 const _maxFailureDetails = 100;
+const _maxAclLength = 64 * 1024;
 const _integrityHashLimitBytes = 32 * 1024 * 1024;
 
 class QuarantineService {
   factory QuarantineService({
     required String quarantineRoot,
     required PathGuard guard,
+    required FileMetadataAccess metadataAccess,
     PathExclusionSource? exclusions,
     DateTime Function()? clock,
   }) {
@@ -39,6 +42,7 @@ class QuarantineService {
     return QuarantineService._(
       normalized,
       guard,
+      metadataAccess,
       exclusions ?? const EmptyPathExclusionSource(),
       clock ?? DateTime.now,
     );
@@ -47,12 +51,14 @@ class QuarantineService {
   QuarantineService._(
     this.quarantineRoot,
     this.guard,
+    this._metadata,
     this._exclusions,
     this._clock,
   );
 
   final String quarantineRoot;
   final PathGuard guard;
+  final FileMetadataAccess _metadata;
   final PathExclusionSource _exclusions;
   final DateTime Function() _clock;
   static final Random _random = Random.secure();
@@ -294,8 +300,16 @@ class QuarantineService {
         }
 
         int size;
+        FileMetadata? metadata;
         try {
-          size = await File(item.path).length();
+          final stat = await File(item.path).stat();
+          if (stat.type != FileSystemEntityType.file) {
+            recordFailure(item.path, '文件已不存在或不是普通文件');
+            report(currentPath: item.path);
+            continue;
+          }
+          size = stat.size;
+          metadata = await _captureMetadata(item.path);
         } on FileSystemException catch (error) {
           recordFailure(item.path, error);
           report(currentPath: item.path);
@@ -305,15 +319,34 @@ class QuarantineService {
         sequence++;
         final storedName = _storedName(sequence, item.path);
         final digest = await _tryHashFile(item.path, size);
-        final entry = {
+        final entry = <String, Object?>{
           'originalPath': item.path,
           'rootPath': item.rootPath,
           'storedName': storedName,
           'size': size,
           'sha256': ?digest,
-          'modified': item.modified.toUtc().toIso8601String(),
+          'modified': (metadata?.modified ?? item.modified)
+              .toUtc()
+              .toIso8601String(),
           'ruleId': item.ruleId,
         };
+        if (metadata?.created case final created?) {
+          entry['created'] = created.toUtc().toIso8601String();
+        }
+        if (metadata?.accessed case final accessed?) {
+          entry['accessed'] = accessed.toUtc().toIso8601String();
+        }
+        if (metadata?.readOnly case final readOnly?) {
+          entry['readOnly'] = readOnly;
+        }
+        final acl = metadata?.acl;
+        final aclTooLarge = acl != null && acl.length > _maxAclLength;
+        if (acl != null && !aclTooLarge) {
+          entry['acl'] = acl;
+        }
+        if ((metadata?.aclUnavailable ?? false) || aclTooLarge) {
+          entry['aclUnavailable'] = true;
+        }
 
         // Write the undo record before moving: a crash can leave an unused
         // record, but never an unrecorded file inside the quarantine.
@@ -447,11 +480,38 @@ class QuarantineService {
     var overwrittenCount = 0;
     var missingCount = 0;
     var integrityFailureCount = 0;
+    var metadataFailureCount = 0;
+    final metadataWarnings = <CleanFailure>[];
 
     void recordFailure(String path, Object error) {
       failureCount++;
       if (failures.length < _maxFailureDetails) {
         failures.add(CleanFailure(path: path, reason: _failureReason(error)));
+      }
+    }
+
+    void recordMetadataWarning(String path, Object error) {
+      metadataFailureCount++;
+      if (metadataWarnings.length < _maxFailureDetails) {
+        metadataWarnings.add(
+          CleanFailure(path: path, reason: _failureReason(error)),
+        );
+      }
+    }
+
+    Future<void> restoreMetadata(String path, _StoredEntry entry) async {
+      final metadata = entry.metadata;
+      if (metadata == null) return;
+      if (metadata.hasRestorableValues) {
+        try {
+          await _metadata.apply(path, metadata);
+        } catch (error) {
+          recordMetadataWarning(path, error);
+          return;
+        }
+      }
+      if (metadata.aclUnavailable) {
+        recordMetadataWarning(path, 'ACL 未能在清理时保存');
       }
     }
 
@@ -538,6 +598,7 @@ class QuarantineService {
               recordFailure(entry.originalPath, error);
               continue;
             }
+            await restoreMetadata(destinationPath, entry);
             recordRestored(entry);
             keptBothCount++;
             await markRestored(entry);
@@ -560,6 +621,7 @@ class QuarantineService {
               recordFailure(entry.originalPath, error);
               continue;
             }
+            await restoreMetadata(entry.originalPath, entry);
             recordRestored(entry);
             overwrittenCount++;
             await markRestored(entry);
@@ -576,6 +638,7 @@ class QuarantineService {
         continue;
       }
 
+      await restoreMetadata(entry.originalPath, entry);
       recordRestored(entry);
       await markRestored(entry);
     }
@@ -617,6 +680,8 @@ class QuarantineService {
       integrityFailureCount: integrityFailureCount,
       failures: List.unmodifiable(failures),
       sessionRemoved: pendingCount == 0,
+      metadataFailureCount: metadataFailureCount,
+      metadataWarnings: List.unmodifiable(metadataWarnings),
     );
   }
 
@@ -704,7 +769,7 @@ class QuarantineService {
             length = 0;
           }
           try {
-            await entity.delete();
+            await _deleteFile(entity.path);
             removedCount++;
             removedBytes += length;
           } on FileSystemException catch (error) {
@@ -982,6 +1047,17 @@ class QuarantineService {
     return error.toString();
   }
 
+  Future<FileMetadata?> _captureMetadata(String path) async {
+    try {
+      return await _metadata.read(
+        path,
+        captureAcl: shouldCaptureAcl(path, quarantineRoot),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<String?> _tryHashFile(String path, int size) async {
     if (size > _integrityHashLimitBytes) return null;
     try {
@@ -1057,7 +1133,7 @@ class QuarantineService {
 
   /// Moves the occupied target aside first so a failed restore never
   /// destroys the file that currently occupies the original path.
-  static Future<void> _replaceFile(String sourcePath, String targetPath) async {
+  Future<void> _replaceFile(String sourcePath, String targetPath) async {
     final backupPath = await _backupPath(targetPath);
     await File(targetPath).rename(backupPath);
     try {
@@ -1071,7 +1147,7 @@ class QuarantineService {
       rethrow;
     }
     try {
-      await File(backupPath).delete();
+      await _deleteFile(backupPath);
     } on FileSystemException {
       // The restored file is in place; a leftover backup is not fatal.
     }
@@ -1095,10 +1171,7 @@ class QuarantineService {
     throw FileSystemException('无法创建覆盖前的临时备份路径', targetPath);
   }
 
-  static Future<void> _moveFile(
-    String sourcePath,
-    String destinationPath,
-  ) async {
+  Future<void> _moveFile(String sourcePath, String destinationPath) async {
     final source = File(sourcePath);
     try {
       await source.rename(destinationPath);
@@ -1110,12 +1183,43 @@ class QuarantineService {
 
     await source.copy(destinationPath);
     try {
-      await source.delete();
+      await _deleteFile(sourcePath);
     } catch (_) {
       try {
-        await File(destinationPath).delete();
+        await _deleteFile(destinationPath);
       } on FileSystemException {
         // The orphaned copy is harmless and remains in the quarantine.
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _deleteFile(String path) async {
+    var readOnly = false;
+    try {
+      final stat = await File(path).stat();
+      readOnly =
+          stat.type == FileSystemEntityType.file && isReadOnlyMode(stat.mode);
+    } on FileSystemException {
+      // Let the delete attempt report the real error.
+    }
+
+    if (readOnly) {
+      try {
+        await _metadata.apply(path, const FileMetadata(readOnly: false));
+      } catch (error) {
+        throw FileSystemException('无法清除只读属性：$error', path);
+      }
+    }
+    try {
+      await File(path).delete();
+    } catch (_) {
+      if (readOnly) {
+        try {
+          await _metadata.apply(path, const FileMetadata(readOnly: true));
+        } catch (_) {
+          // The original error is more useful than a failed attribute restore.
+        }
       }
       rethrow;
     }
@@ -1185,6 +1289,7 @@ class QuarantineService {
               storedName: storedName,
               size: size.toInt(),
               sha256: digest,
+              metadata: _parseMetadata(map),
             ),
           );
         } on FormatException {
@@ -1195,6 +1300,44 @@ class QuarantineService {
       return entries;
     }
     return entries;
+  }
+
+  static FileMetadata? _parseMetadata(Map<String, dynamic> map) {
+    final rawModified = map['modified'];
+    final modified = rawModified is String
+        ? DateTime.tryParse(rawModified)
+        : null;
+    final rawCreated = map['created'];
+    final created = rawCreated is String ? DateTime.tryParse(rawCreated) : null;
+    final rawAccessed = map['accessed'];
+    final accessed = rawAccessed is String
+        ? DateTime.tryParse(rawAccessed)
+        : null;
+    final rawReadOnly = map['readOnly'];
+    final readOnly = rawReadOnly is bool ? rawReadOnly : null;
+    final rawAcl = map['acl'];
+    final aclValid =
+        rawAcl is String && rawAcl.isNotEmpty && rawAcl.length <= _maxAclLength;
+    final acl = aclValid ? rawAcl : null;
+    final aclUnavailable =
+        map['aclUnavailable'] == true ||
+        (rawAcl is String && rawAcl.isNotEmpty && !aclValid);
+    if (modified == null &&
+        created == null &&
+        accessed == null &&
+        readOnly == null &&
+        acl == null &&
+        !aclUnavailable) {
+      return null;
+    }
+    return FileMetadata(
+      created: created,
+      modified: modified,
+      accessed: accessed,
+      readOnly: readOnly,
+      acl: acl,
+      aclUnavailable: aclUnavailable,
+    );
   }
 
   static Future<Set<String>> _readRestoredNames(Directory sessionDir) async {
@@ -1351,6 +1494,7 @@ class _StoredEntry {
     required this.storedName,
     required this.size,
     this.sha256,
+    this.metadata,
   });
 
   final String originalPath;
@@ -1358,4 +1502,5 @@ class _StoredEntry {
   final String storedName;
   final int size;
   final String? sha256;
+  final FileMetadata? metadata;
 }

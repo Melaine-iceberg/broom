@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import 'support/file_metadata_fakes.dart';
 import 'support/quarantine_fakes.dart';
 import 'support/system_cache_fakes.dart';
 
@@ -102,6 +103,7 @@ void main() {
       quarantine: QuarantineService(
         quarantineRoot: p.windows.join(r'C:\broom_widget_test', 'quarantine'),
         guard: guard,
+        metadataAccess: FakeFileMetadataAccess(),
       ),
       exclusions: _exclusionsStore(),
     );
@@ -143,6 +145,7 @@ void main() {
       quarantine: QuarantineService(
         quarantineRoot: p.windows.join(r'C:\broom_widget_test', 'quarantine'),
         guard: guard,
+        metadataAccess: FakeFileMetadataAccess(),
       ),
       exclusions: _exclusionsStore(),
     );
@@ -176,6 +179,7 @@ void main() {
       quarantine: QuarantineService(
         quarantineRoot: p.windows.join(r'C:\broom_widget_test', 'quarantine'),
         guard: guard,
+        metadataAccess: FakeFileMetadataAccess(),
       ),
       exclusions: _exclusionsStore(),
     );

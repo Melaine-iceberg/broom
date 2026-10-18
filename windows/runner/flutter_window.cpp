@@ -10,6 +10,7 @@
 #include <string>
 #include <utility>
 
+#include "file_metadata_channel.h"
 #include "flutter/generated_plugin_registrant.h"
 #include "system_access_channel.h"
 #include "system_shell_channel.h"
@@ -170,6 +171,7 @@ void FlutterWindow::SetUpWindowChannels() {
   system_shell_channel_ = std::make_unique<SystemShellChannel>(
       messenger, GetHandle());
   system_access_channel_ = std::make_unique<SystemAccessChannel>(messenger);
+  file_metadata_channel_ = std::make_unique<FileMetadataChannel>(messenger);
 }
 
 void FlutterWindow::OnDestroy() {
@@ -192,6 +194,7 @@ void FlutterWindow::OnDestroy() {
 
   system_access_channel_.reset();
   system_shell_channel_.reset();
+  file_metadata_channel_.reset();
 
   if (flutter_controller_) {
     flutter_controller_ = nullptr;

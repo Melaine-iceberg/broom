@@ -409,6 +409,8 @@ const translationsEn = <String, String>{
   '{count} 个文件已覆盖原位置内容。': '{count, plural, one{# file overwrote existing content.} other{# files overwrote existing content.}}',
   '{count} 个文件的原位置已有新内容，本次已跳过。可再次恢复并选择“保留两者”或“覆盖”。': '{count, plural, one{# file was skipped because new content exists at its original path. Restore again and choose "Keep both" or "Overwrite".} other{# files were skipped because new content exists at their original paths. Restore again and choose "Keep both" or "Overwrite".}}',
   '{count} 个文件恢复失败，仍保留在隔离区。': '{count, plural, one{# file could not be restored and remains in quarantine.} other{# files could not be restored and remain in quarantine.}}',
+  '{count} 个文件的内容已恢复，但时间戳、只读属性或 ACL 未能完全还原。': '{count, plural, one{File content was restored, but its timestamps, read-only attribute, or ACL could not be fully restored.} other{File contents were restored, but their timestamps, read-only attributes, or ACLs could not be fully restored.}}',
+  '{count} 个元数据未还原': '{count, plural, one{# metadata item not restored} other{# metadata items not restored}}',
   '仍有文件保留在隔离区，可稍后重试。':
       'Some files remain in quarantine. You can try again later.',
   '自动保留策略未能释放旧会话：{count} 个错误，相关文件仍保留在隔离区。': 'The retention policy could not release old sessions: {count} errors. The files remain in quarantine.',

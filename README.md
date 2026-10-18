@@ -73,6 +73,15 @@ v1 内置的 Safe 级规则：
 - **完成与放弃**：全部条目处理完后会删除 `plan.jsonl`，会话转为正常的待恢复状态。恢复全部隔离文件或永久释放会话会一并放弃剩余计划。
 - **边界**：断点续跑覆盖“已经开始清理”的阶段。扫描结果尚未持久化，扫描阶段中断后仍需重新扫描，见路线图第 3 节。
 
+## 元数据恢复
+
+- **清理时记录**：每个条目保存创建 / 修改 / 访问时间与只读属性；跨卷移动还会抓取文件的 DACL。ACL 只保存 DACL，不保存所有者、组与 SACL。
+- **恢复时应用**：文件内容回到原位置（或冲突时的新名称）后，通过原生 `broom/file_metadata` 通道一次性应用时间戳、DACL 与只读属性。只读属性最后设置，避免影响时间戳与 ACL 的写入。
+- **同卷与跨卷**：同卷重命名本身保留 ACL 与属性；只有跨卷复制会创建带目标目录继承 ACL 的新文件，因此也只在这种情况下额外抓取并恢复 DACL。恢复时会带上原来的继承 / 保护状态。
+- **失败处理**：元数据恢复失败不会撤销已经恢复的文件内容，也不会让会话停留在待处理状态；失败数量作为独立警告显示在恢复结果中。旧会话没有这些字段时，只恢复修改时间。
+- **只读文件**：跨卷移动与永久释放前会临时清除只读位，否则 Windows 无法删除源文件；删除失败时会尝试恢复只读位。
+- **边界**：FAT/exFAT、权限不足或 ACL 抓取失败时保留目标 ACL；隐藏 / 系统属性与备用数据流不做独立恢复，仍依赖文件系统的移动 / 复制语义。
+
 ## V4：隔离区管理与空间释放
 
 清理和释放磁盘空间是两个阶段，v4 把这套语义完整呈现给用户：
@@ -140,7 +149,7 @@ v1 内置的 Safe 级规则：
 
 ## Windows 原生桥接
 
-回收站、文件夹选择器、“在资源管理器中显示”与磁盘可用空间查询通过 `MethodChannel('broom/shell')` 调用原生 Shell API；管理员权限、UAC 自重启与系统缓存目录通过 `MethodChannel('broom/system')` 提供。通道实现位于 `windows/runner/system_shell_channel.*` 与 `windows/runner/system_access_channel.*`，不需要额外插件依赖。C++ 侧返回 `HRESULT` / Win32 错误码，Dart 侧会转换为可读的“Windows 错误 0x……”提示；UAC 被用户取消时会映射为“未提权”，不作为错误。
+回收站、文件夹选择器、“在资源管理器中显示”与磁盘可用空间查询通过 `MethodChannel('broom/shell')` 调用原生 Shell API；管理员权限、UAC 自重启与系统缓存目录通过 `MethodChannel('broom/system')` 提供；文件时间戳、只读属性与 DACL 的恢复通过 `MethodChannel('broom/file_metadata')` 提供。通道实现位于 `windows/runner/system_shell_channel.*`、`windows/runner/system_access_channel.*` 与 `windows/runner/file_metadata_channel.*`，不需要额外插件依赖。C++ 侧返回 `HRESULT` / Win32 错误码，Dart 侧会转换为可读的“Windows 错误 0x……”提示；UAC 被用户取消时会映射为“未提权”，不作为错误。
 
 ## 隔离区
 
@@ -150,7 +159,7 @@ v1 内置的 Safe 级规则：
 <sessionId>/
   session.json     # 会话元数据：状态、条目数、总大小、待恢复数、计划数与未处理数
   plan.jsonl       # 本次清理的完整选中清单；全部处理完后删除
-  entries.jsonl    # 每个文件的原始路径、规则根、大小、可选 SHA-256、隔离文件名
+  entries.jsonl    # 原始路径、规则根、大小、SHA-256、时间戳、只读属性、可选 DACL 与隔离文件名
   restored.jsonl   # 已恢复文件的标记，重试时跳过
   files/           # 实际保存的文件（使用扁平化存储名）
 ```
@@ -174,6 +183,7 @@ lib/
     safety/path_guard.dart         # 路径包含与保护规则
     scan/                          # 扫描器与 isolate 扫描服务
     clean/quarantine_service.dart  # 隔离、撤销、会话管理
+    clean/file_metadata.dart       # 时间戳 / 只读 / ACL 的读取与恢复适配
     clean/system_services.dart     # Windows 服务停止 / 恢复
     clean/system_cache_cleaner.dart # 系统缓存永久删除
     analysis/                      # 只读遍历器、重复文件、大文件与 isolate 分析服务
@@ -185,6 +195,7 @@ lib/
   ui/                              # 控制器、首页、设置页、清理页、隔离区管理页、排除列表页、回收站、系统缓存与两类分析页
 windows/runner/system_shell_channel.*  # 原生 Shell API 通道
 windows/runner/system_access_channel.* # 原生提权与系统缓存路径通道
+windows/runner/file_metadata_channel.* # 原生元数据 / DACL 恢复通道
 test/                              # 路径守卫、扫描、隔离区、分析、系统缓存、Shell 通道与页面测试
 docs/roadmap.md                    # 未实现目标与非目标
 ```
@@ -220,7 +231,7 @@ flutter build windows --release
 - 分析范围一次只能选择一个文件夹，不能配置排除目录；默认目录为 `Downloads`。
 - 自动保留策略只在 Broom 启动时和保存策略后执行，没有后台定时清理；策略默认关闭，且自动释放等同永久删除。策略配置损坏时会自动停用，文件继续保留。
 - 完整性校验以文件大小为基础，仅对不超过 32 MiB 的文件记录 SHA-256；更大的隔离文件只能检测大小变化，无法发现等长的内容修改。计算哈希会让清理额外读取一次这些小文件。
-- 撤销恢复只还原文件内容，不恢复时间戳、只读属性、ACL 等元数据。
+- 元数据恢复覆盖创建 / 修改 / 访问时间与只读属性。ACL 仅对跨卷移动尽力恢复 DACL（含继承 / 保护状态），不恢复所有者、组与 SACL；FAT/exFAT、权限不足或抓取失败时会保留目标 ACL 并给出元数据警告。隐藏 / 系统属性与备用数据流仍依赖文件系统移动 / 复制语义。
 - 排除列表只能选择现有文件夹，不能按文件或通配符配置；配置损坏时会阻止扫描，需要在排除列表页重置。
 - 设置页不包含定时任务、隔离区位置迁移与清理历史；配置版本不匹配时会回退默认设置，不执行自动迁移。
 - 中英文界面覆盖应用文案与规则元数据，但核心层和 Windows 原生调用返回的错误详情可能仍为中文。

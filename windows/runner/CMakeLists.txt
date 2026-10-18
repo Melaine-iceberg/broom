@@ -7,6 +7,7 @@ project(runner LANGUAGES CXX)
 #
 # Any new source files that you add to the application should be added here.
 add_executable(${BINARY_NAME} WIN32
+  "file_metadata_channel.cpp"
   "flutter_window.cpp"
   "main.cpp"
   "system_access_channel.cpp"
