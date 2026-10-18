@@ -1,15 +1,32 @@
 import 'package:flutter/material.dart';
 
+import '../core/analysis/analysis_service.dart';
 import '../core/models/clean_models.dart';
 import '../core/models/cleaner_rule.dart';
+import '../core/shell/system_shell.dart';
+import 'analysis_widgets.dart';
 import 'clean_controller.dart';
+import 'duplicate_finder_page.dart';
 import 'format.dart';
+import 'large_files_page.dart';
+import 'recycle_bin_page.dart';
 import 'rule_detail_page.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, required this.controller});
+  const HomePage({
+    super.key,
+    required this.controller,
+    required this.shell,
+    required this.analysisRunnerFactory,
+    this.analysisInitialDirectory,
+    this.analysisExcludedPaths = const [],
+  });
 
   final CleanController controller;
+  final SystemShell shell;
+  final AnalysisRunner Function() analysisRunnerFactory;
+  final String? analysisInitialDirectory;
+  final List<String> analysisExcludedPaths;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -60,6 +77,9 @@ class _HomePageState extends State<HomePage> {
         return _IdleView(
           controller: controller,
           onUndo: (sessionId) => _undo(context, sessionId),
+          onOpenRecycleBin: _openRecycleBin,
+          onOpenDuplicateFinder: _openDuplicateFinder,
+          onOpenLargeFiles: _openLargeFiles,
         );
       case CleanPhase.scanning:
         return _ScanningView(controller: controller);
@@ -153,13 +173,56 @@ class _HomePageState extends State<HomePage> {
       builder: (_) => _UndoResultDialog(report: report),
     );
   }
+
+  Future<void> _openRecycleBin() {
+    return Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => RecycleBinPage(shell: widget.shell),
+      ),
+    );
+  }
+
+  Future<void> _openDuplicateFinder() {
+    return Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => DuplicateFinderPage(
+          shell: widget.shell,
+          runnerFactory: widget.analysisRunnerFactory,
+          initialDirectory: widget.analysisInitialDirectory,
+          excludedPaths: widget.analysisExcludedPaths,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openLargeFiles() {
+    return Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => LargeFilesPage(
+          shell: widget.shell,
+          runnerFactory: widget.analysisRunnerFactory,
+          initialDirectory: widget.analysisInitialDirectory,
+          excludedPaths: widget.analysisExcludedPaths,
+        ),
+      ),
+    );
+  }
 }
 
 class _IdleView extends StatelessWidget {
-  const _IdleView({required this.controller, required this.onUndo});
+  const _IdleView({
+    required this.controller,
+    required this.onUndo,
+    required this.onOpenRecycleBin,
+    required this.onOpenDuplicateFinder,
+    required this.onOpenLargeFiles,
+  });
 
   final CleanController controller;
   final Future<void> Function(String sessionId) onUndo;
+  final VoidCallback onOpenRecycleBin;
+  final VoidCallback onOpenDuplicateFinder;
+  final VoidCallback onOpenLargeFiles;
 
   @override
   Widget build(BuildContext context) {
@@ -183,6 +246,12 @@ class _IdleView extends StatelessWidget {
             onUndo: () => onUndo(pending.id),
           ),
         ],
+        const SizedBox(height: 20),
+        _ToolsSection(
+          onOpenRecycleBin: onOpenRecycleBin,
+          onOpenDuplicateFinder: onOpenDuplicateFinder,
+          onOpenLargeFiles: onOpenLargeFiles,
+        ),
         const SizedBox(height: 22),
         _ScopeSection(rules: controller.platform.rules),
         const SizedBox(height: 14),
@@ -484,6 +553,188 @@ class _PendingUndoCard extends StatelessWidget {
             label: const Text('撤销'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ToolsSection extends StatelessWidget {
+  const _ToolsSection({
+    required this.onOpenRecycleBin,
+    required this.onOpenDuplicateFinder,
+    required this.onOpenLargeFiles,
+  });
+
+  final VoidCallback onOpenRecycleBin;
+  final VoidCallback onOpenDuplicateFinder;
+  final VoidCallback onOpenLargeFiles;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.dashboard_customize_outlined,
+              size: 18,
+              color: scheme.primary,
+            ),
+            const SizedBox(width: 8),
+            Text('分析与审阅', style: theme.textTheme.titleSmall),
+            const Spacer(),
+            Text(
+              '按风险等级区分',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            const gap = 10.0;
+            final wide = constraints.maxWidth >= 860;
+            final width = wide
+                ? (constraints.maxWidth - gap * 2) / 3
+                : constraints.maxWidth;
+            return Wrap(
+              spacing: gap,
+              runSpacing: gap,
+              children: [
+                SizedBox(
+                  width: width,
+                  child: _ToolCard(
+                    key: const ValueKey('tool-recycle-bin'),
+                    icon: Icons.delete_forever_rounded,
+                    risk: CleanRisk.review,
+                    title: '回收站',
+                    description: '查看所有磁盘的回收站占用，确认后可永久清空。',
+                    onTap: onOpenRecycleBin,
+                  ),
+                ),
+                SizedBox(
+                  width: width,
+                  child: _ToolCard(
+                    key: const ValueKey('tool-duplicate-files'),
+                    icon: Icons.content_copy_rounded,
+                    risk: CleanRisk.info,
+                    title: '重复文件',
+                    description: '按内容比对找出相同的文件，结果只读、不自动选择。',
+                    onTap: onOpenDuplicateFinder,
+                  ),
+                ),
+                SizedBox(
+                  width: width,
+                  child: _ToolCard(
+                    key: const ValueKey('tool-large-files'),
+                    icon: Icons.sd_storage_rounded,
+                    risk: CleanRisk.info,
+                    title: '大文件分析',
+                    description: '按体积从大到小列出文件，帮你定位空间去向。',
+                    onTap: onOpenLargeFiles,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _ToolCard extends StatelessWidget {
+  const _ToolCard({
+    super.key,
+    required this.icon,
+    required this.risk,
+    required this.title,
+    required this.description,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final CleanRisk risk;
+  final String title;
+  final String description;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Material(
+      color: scheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.55)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 15, 12, 15),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: scheme.surface.withValues(alpha: 0.72),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, size: 20, color: scheme.primary),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        RiskBadge(risk: risk),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        height: 1.45,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 19,
+                color: scheme.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

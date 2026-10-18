@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "system_shell_channel.h"
 
 namespace {
 
@@ -164,6 +165,9 @@ void FlutterWindow::SetUpWindowChannels() {
           result->NotImplemented();
         }
       });
+
+  system_shell_channel_ = std::make_unique<SystemShellChannel>(
+      messenger, GetHandle());
 }
 
 void FlutterWindow::OnDestroy() {
@@ -183,6 +187,8 @@ void FlutterWindow::OnDestroy() {
     window_state_channel_.reset();
   }
   window_state_emitter_ = nullptr;
+
+  system_shell_channel_.reset();
 
   if (flutter_controller_) {
     flutter_controller_ = nullptr;

@@ -9,6 +9,7 @@
 #include "win32_window.h"
 
 class WindowStateEmitter;
+class SystemShellChannel;
 
 namespace flutter {
 class EncodableValue;
@@ -56,6 +57,8 @@ class FlutterWindow : public Win32Window {
       window_state_channel_;
   // Owned by |window_state_channel_| once its stream handler is installed.
   WindowStateEmitter* window_state_emitter_ = nullptr;
+
+  std::unique_ptr<SystemShellChannel> system_shell_channel_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

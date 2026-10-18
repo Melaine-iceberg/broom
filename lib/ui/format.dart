@@ -25,4 +25,9 @@ String formatDate(DateTime date) {
   return '${date.year}-${two(date.month)}-${two(date.day)}';
 }
 
+String formatDateTime(DateTime date) {
+  String two(int value) => value.toString().padLeft(2, '0');
+  return '${formatDate(date)} ${two(date.hour)}:${two(date.minute)}';
+}
+
 String fileNameOf(String path) => p.windows.basename(path);

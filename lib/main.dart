@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import 'app.dart';
 import 'core/clean/quarantine_service.dart';
@@ -44,7 +45,27 @@ void main() {
   );
   unawaited(controller.initialize());
 
-  _runBroom(BroomApp(controller: controller));
+  _runBroom(
+    BroomApp(
+      controller: controller,
+      analysisInitialDirectory: _downloadsDirectory(platform.environment),
+      analysisExcludedPaths: [quarantineRoot],
+    ),
+  );
+}
+
+String? _downloadsDirectory(Map<String, String> environment) {
+  String? lookup(String name) {
+    return environment[name] ??
+        environment.entries
+            .where((entry) => entry.key.toLowerCase() == name.toLowerCase())
+            .map((entry) => entry.value)
+            .firstOrNull;
+  }
+
+  final profile = lookup('USERPROFILE');
+  if (profile == null || profile.trim().isEmpty) return null;
+  return p.windows.join(profile, 'Downloads');
 }
 
 // The native runner registers the window channels while creating the view, so

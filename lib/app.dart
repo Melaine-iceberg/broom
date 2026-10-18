@@ -1,13 +1,26 @@
 import 'package:flutter/material.dart';
 
+import 'core/analysis/analysis_service.dart';
+import 'core/shell/system_shell.dart';
 import 'ui/clean_controller.dart';
 import 'ui/home_page.dart';
 import 'ui/window_title_bar.dart';
 
 class BroomApp extends StatelessWidget {
-  const BroomApp({super.key, required this.controller});
+  const BroomApp({
+    super.key,
+    required this.controller,
+    this.systemShell,
+    this.analysisRunnerFactory,
+    this.analysisInitialDirectory,
+    this.analysisExcludedPaths = const [],
+  });
 
   final CleanController controller;
+  final SystemShell? systemShell;
+  final AnalysisRunner Function()? analysisRunnerFactory;
+  final String? analysisInitialDirectory;
+  final List<String> analysisExcludedPaths;
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +32,13 @@ class BroomApp extends StatelessWidget {
       darkTheme: buildBroomTheme(Brightness.dark),
       builder: (context, child) =>
           BroomWindowFrame(child: child ?? const SizedBox.shrink()),
-      home: HomePage(controller: controller),
+      home: HomePage(
+        controller: controller,
+        shell: systemShell ?? createSystemShell(),
+        analysisRunnerFactory: analysisRunnerFactory ?? AnalysisService.new,
+        analysisInitialDirectory: analysisInitialDirectory,
+        analysisExcludedPaths: analysisExcludedPaths,
+      ),
     );
   }
 }
