@@ -102,7 +102,17 @@ class CleanController extends ChangeNotifier {
   bool get canUndoLastReport {
     final id = _lastReport?.sessionId;
     if (id == null) return false;
-    return _pendingSessions.any((session) => session.id == id);
+    return _pendingSessions.any(
+      (session) => session.id == id && session.pendingCount > 0,
+    );
+  }
+
+  bool get canResumeLastReport {
+    final id = _lastReport?.sessionId;
+    if (id == null) return false;
+    return _pendingSessions.any(
+      (session) => session.id == id && session.resumable,
+    );
   }
 
   int get selectedCount => _selectedPaths.length;

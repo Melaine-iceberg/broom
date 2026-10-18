@@ -36,6 +36,8 @@ class _QuarantinePageState extends State<QuarantinePage> {
   bool _loading = true;
   bool _busy = false;
   String? _error;
+  CleanProgress? _resumeProgress;
+  bool _resumeCancelRequested = false;
 
   int get _pendingBytes =>
       _sessions.fold<int>(0, (total, session) => total + session.pendingBytes);
@@ -130,6 +132,46 @@ class _QuarantinePageState extends State<QuarantinePage> {
       setState(() => _error = trf('恢复失败：{error}', {'error': error}));
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _resume(QuarantineSessionInfo session) async {
+    if (_busy || !session.resumable) return;
+    if (!await _confirmResume(context, session.remainingCount)) return;
+    if (!mounted) return;
+
+    setState(() {
+      _busy = true;
+      _error = null;
+      _resumeCancelRequested = false;
+      _resumeProgress = CleanProgress(
+        moved: 0,
+        processed: 0,
+        total: session.remainingCount,
+        movedBytes: 0,
+      );
+    });
+    try {
+      final report = await widget.service.resumeClean(
+        session.id,
+        onProgress: (progress) {
+          if (mounted) setState(() => _resumeProgress = progress);
+        },
+        isCancelled: () => _resumeCancelRequested,
+      );
+      await _load(showLoading: false);
+      if (!mounted) return;
+      _showMessage(_resumeMessage(report));
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = trf('继续清理失败：{error}', {'error': error}));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _resumeProgress = null;
+        });
+      }
     }
   }
 
@@ -313,10 +355,21 @@ class _QuarantinePageState extends State<QuarantinePage> {
                 ),
                 const SizedBox(height: 12),
               ],
+              if (_resumeProgress case final progress?) ...[
+                _ResumeProgressCard(
+                  progress: progress,
+                  stopping: _resumeCancelRequested,
+                  onStop: () => setState(() => _resumeCancelRequested = true),
+                ),
+                const SizedBox(height: 12),
+              ],
               _SummaryCard(
                 pendingBytes: _pendingBytes,
                 pendingFiles: _pendingFiles,
                 sessionCount: _sessions.length,
+                resumableSessions: _sessions
+                    .where((session) => session.resumable)
+                    .length,
                 disk: _disk,
                 policy: _policy,
                 busy: _busy,
@@ -354,6 +407,7 @@ class _QuarantinePageState extends State<QuarantinePage> {
                     session: session,
                     busy: _busy,
                     onOpen: () => _openSession(session),
+                    onResume: session.resumable ? () => _resume(session) : null,
                     onRestore: () => _restoreAll(session),
                     onPurge: () => _purge(session),
                   ),
@@ -386,9 +440,12 @@ class QuarantineSessionPage extends StatefulWidget {
 class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
   List<QuarantineEntry> _entries = const [];
   final Set<String> _selected = <String>{};
+  late QuarantineSessionInfo _session;
   bool _loading = true;
   bool _busy = false;
   String? _error;
+  CleanProgress? _resumeProgress;
+  bool _resumeCancelRequested = false;
 
   int get _restorableCount =>
       _entries.where((entry) => entry.restorable).length;
@@ -415,6 +472,7 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
   @override
   void initState() {
     super.initState();
+    _session = widget.session;
     _load();
   }
 
@@ -423,6 +481,7 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
       setState(() => _loading = true);
     }
     try {
+      final session = await widget.service.getSession(widget.session.id);
       final entries = await widget.service.listEntries(widget.session.id);
       entries.sort((a, b) {
         int rank(QuarantineEntry entry) {
@@ -439,6 +498,7 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
       });
       if (!mounted) return;
       setState(() {
+        _session = session;
         _entries = entries;
         _selected.removeWhere(
           (name) => !entries.any(
@@ -479,6 +539,51 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
           ..addAll(selectable);
       }
     });
+  }
+
+  Future<void> _resume() async {
+    if (_busy || !_session.resumable) return;
+    if (!await _confirmResume(context, _session.remainingCount)) return;
+    if (!mounted) return;
+
+    setState(() {
+      _busy = true;
+      _error = null;
+      _resumeCancelRequested = false;
+      _resumeProgress = CleanProgress(
+        moved: 0,
+        processed: 0,
+        total: _session.remainingCount,
+        movedBytes: 0,
+      );
+    });
+    try {
+      final report = await widget.service.resumeClean(
+        _session.id,
+        onProgress: (progress) {
+          if (mounted) setState(() => _resumeProgress = progress);
+        },
+        isCancelled: () => _resumeCancelRequested,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(_resumeMessage(report))));
+      if (report.sessionId == null) {
+        Navigator.of(context).pop();
+        return;
+      }
+      await _load(showLoading: false);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = trf('继续清理失败：{error}', {'error': error}));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _resumeProgress = null;
+        });
+      }
+    }
   }
 
   Future<void> _restoreSelected() async {
@@ -728,6 +833,21 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
                   ),
                   const SizedBox(height: 12),
                 ],
+                if (_resumeProgress case final progress?) ...[
+                  _ResumeProgressCard(
+                    progress: progress,
+                    stopping: _resumeCancelRequested,
+                    onStop: () => setState(() => _resumeCancelRequested = true),
+                  ),
+                  const SizedBox(height: 12),
+                ] else if (!_loading && _session.resumable) ...[
+                  _ResumeBanner(
+                    remainingCount: _session.remainingCount,
+                    busy: _busy,
+                    onResume: _resume,
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 _SessionDetailHeader(
                   pendingCount: _pendingCount,
                   pendingBytes: _pendingBytes,
@@ -782,6 +902,7 @@ class _SummaryCard extends StatelessWidget {
     required this.pendingBytes,
     required this.pendingFiles,
     required this.sessionCount,
+    required this.resumableSessions,
     required this.disk,
     required this.policy,
     required this.busy,
@@ -792,6 +913,7 @@ class _SummaryCard extends StatelessWidget {
   final int pendingBytes;
   final int pendingFiles;
   final int sessionCount;
+  final int resumableSessions;
   final DiskSpaceSnapshot? disk;
   final QuarantineRetentionPolicy? policy;
   final bool busy;
@@ -893,6 +1015,14 @@ class _SummaryCard extends StatelessWidget {
                   'count': formatCount(pendingFiles),
                 }),
               ),
+              if (resumableSessions > 0)
+                _MetricChip(
+                  icon: Icons.play_circle_outline_rounded,
+                  label: context.t('可继续清理'),
+                  value: context.tf('{count} 次', {
+                    'count': formatCount(resumableSessions),
+                  }),
+                ),
               if (disk != null)
                 _MetricChip(
                   icon: Icons.sd_storage_outlined,
@@ -1024,6 +1154,7 @@ class _SessionCard extends StatelessWidget {
     required this.session,
     required this.busy,
     required this.onOpen,
+    required this.onResume,
     required this.onRestore,
     required this.onPurge,
   });
@@ -1031,6 +1162,7 @@ class _SessionCard extends StatelessWidget {
   final QuarantineSessionInfo session;
   final bool busy;
   final VoidCallback onOpen;
+  final VoidCallback? onResume;
   final VoidCallback onRestore;
   final VoidCallback onPurge;
 
@@ -1080,15 +1212,28 @@ class _SessionCard extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          _StatusChip(partial: partial),
+                          _StatusChip(
+                            partial: partial,
+                            resumable: session.resumable,
+                          ),
                         ],
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        context.tf('{files} 个文件 · {bytes} 待处理', {
-                          'files': formatCount(session.pendingCount),
-                          'bytes': formatBytes(session.pendingBytes),
-                        }),
+                        session.resumable
+                            ? context.tf(
+                                '{files} 个文件已暂存 · 还有 {remaining} 个未处理',
+                                {
+                                  'files': formatCount(session.pendingCount),
+                                  'remaining': formatCount(
+                                    session.remainingCount,
+                                  ),
+                                },
+                              )
+                            : context.tf('{files} 个文件 · {bytes} 待处理', {
+                                'files': formatCount(session.pendingCount),
+                                'bytes': formatBytes(session.pendingBytes),
+                              }),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),
@@ -1111,15 +1256,28 @@ class _SessionCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 6),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 4,
+              runSpacing: 2,
               children: [
+                if (onResume != null)
+                  TextButton.icon(
+                    key: const ValueKey('resume-clean-button'),
+                    onPressed: busy ? null : onResume,
+                    icon: const Icon(
+                      Icons.play_circle_outline_rounded,
+                      size: 17,
+                    ),
+                    label: Text(context.t('继续清理')),
+                  ),
                 TextButton.icon(
-                  onPressed: busy ? null : onRestore,
+                  onPressed: busy || session.pendingCount == 0
+                      ? null
+                      : onRestore,
                   icon: const Icon(Icons.restore_rounded, size: 17),
                   label: Text(context.t('恢复全部')),
                 ),
-                const SizedBox(width: 4),
                 TextButton.icon(
                   onPressed: busy ? null : onPurge,
                   style: TextButton.styleFrom(foregroundColor: scheme.error),
@@ -1136,27 +1294,39 @@ class _SessionCard extends StatelessWidget {
 }
 
 class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.partial});
+  const _StatusChip({required this.partial, required this.resumable});
 
   final bool partial;
+  final bool resumable;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final container = resumable
+        ? scheme.primaryContainer
+        : partial
+        ? scheme.tertiaryContainer
+        : scheme.primaryContainer;
+    final foreground = resumable
+        ? scheme.onPrimaryContainer
+        : partial
+        ? scheme.onTertiaryContainer
+        : scheme.onPrimaryContainer;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: (partial ? scheme.tertiaryContainer : scheme.primaryContainer)
-            .withValues(alpha: 0.55),
+        color: container.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
-        partial ? context.t('部分可恢复') : context.t('可恢复'),
+        resumable
+            ? context.t('待继续清理')
+            : partial
+            ? context.t('部分可恢复')
+            : context.t('可恢复'),
         style: theme.textTheme.labelSmall?.copyWith(
-          color: partial
-              ? scheme.onTertiaryContainer
-              : scheme.onPrimaryContainer,
+          color: foreground,
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -1789,4 +1959,188 @@ String _purgeMessage(QuarantinePurgeReport report) {
     'bytes': formatBytes(report.removedBytes),
     'failed': report.failureCount,
   });
+}
+
+Future<bool> _confirmResume(BuildContext context, int remaining) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      icon: const Icon(Icons.play_circle_outline_rounded, size: 30),
+      title: Text(context.t('继续清理剩余文件？')),
+      content: Text(
+        context.tf('还有 {count} 个文件未处理。继续后会把这些文件移入隔离区，过程中可以停止。', {
+          'count': remaining,
+        }),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: Text(context.t('取消')),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: Text(context.t('继续清理')),
+        ),
+      ],
+    ),
+  );
+  return confirmed ?? false;
+}
+
+String _resumeMessage(CleanReport report) {
+  if (report.cancelled) {
+    return trf('清理已停止，还有 {count} 个文件未处理，可再次继续。', {
+      'count': report.remainingCount,
+    });
+  }
+  final parts = <String>[
+    if (report.movedCount > 0)
+      trf('已继续清理 {count} 个文件', {'count': report.movedCount}),
+    if (report.failureCount > 0)
+      trf('{count} 个文件未能清理', {'count': report.failureCount}),
+  ];
+  if (parts.isEmpty) return tr('没有剩余文件需要清理。');
+  return '${parts.join(tr('；'))}${tr('。')}';
+}
+
+class _ResumeBanner extends StatelessWidget {
+  const _ResumeBanner({
+    required this.remainingCount,
+    required this.busy,
+    required this.onResume,
+  });
+
+  final int remainingCount;
+  final bool busy;
+  final VoidCallback onResume;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer.withValues(alpha: 0.38),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.16)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.play_circle_outline_rounded,
+            size: 21,
+            color: scheme.primary,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              context.tf(
+                '这次清理还有 {count} 个文件未处理。'
+                '继续后会将这些文件移入隔离区。',
+                {'count': remainingCount},
+              ),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+                height: 1.5,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          FilledButton.icon(
+            key: const ValueKey('resume-clean-detail-button'),
+            onPressed: busy ? null : onResume,
+            icon: const Icon(Icons.play_arrow_rounded, size: 18),
+            label: Text(context.t('继续清理')),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ResumeProgressCard extends StatelessWidget {
+  const _ResumeProgressCard({
+    required this.progress,
+    required this.stopping,
+    required this.onStop,
+  });
+
+  final CleanProgress progress;
+  final bool stopping;
+  final VoidCallback onStop;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 12, 10),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.55),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.cleaning_services_rounded,
+                size: 18,
+                color: scheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  stopping ? context.t('正在停止…') : context.t('正在继续清理…'),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Text(
+                context.tf('{processed} / {total}', {
+                  'processed': formatCount(progress.processed),
+                  'total': formatCount(progress.total),
+                }),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          LinearProgressIndicator(
+            value: progress.total == 0
+                ? null
+                : progress.processed / progress.total,
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  context.tf('{count} 个文件已移入隔离区（{bytes}）', {
+                    'count': formatCount(progress.moved),
+                    'bytes': formatBytes(progress.movedBytes),
+                  }),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: stopping ? null : onStop,
+                child: Text(context.t('停止')),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }

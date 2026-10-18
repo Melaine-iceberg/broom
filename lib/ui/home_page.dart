@@ -103,7 +103,7 @@ class _HomePageState extends State<HomePage> {
         content: Text(
           strings.t(
             'Broom 上次退出时还有清理没有正常结束，或恢复只完成了一部分。'
-            '已移动的文件仍保存在隔离区，可以继续恢复，也可以确认后永久释放。',
+            '已移动的文件仍保存在隔离区，可以继续恢复；中断的清理也可以继续。',
           ),
         ),
         actions: [
@@ -2126,7 +2126,10 @@ class _DoneView extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   report.cancelled
-                      ? context.t('已停止清理，已经移动的文件仍保存在隔离区中。')
+                      ? context.t(
+                          '已停止清理，已经移动的文件仍保存在隔离区中，'
+                          '未处理的文件可以继续清理。',
+                        )
                       : noMoves
                       ? context.t('没有文件成功移入隔离区，可以稍后重试。')
                       : context.t(
@@ -2244,11 +2247,20 @@ class _DoneView extends StatelessWidget {
                   spacing: 10,
                   runSpacing: 10,
                   children: [
-                    if (!noMoves)
+                    if (!noMoves || controller.canResumeLastReport)
                       OutlinedButton.icon(
                         onPressed: onOpenQuarantine,
-                        icon: const Icon(Icons.inventory_2_outlined, size: 18),
-                        label: Text(context.t('管理隔离区')),
+                        icon: controller.canResumeLastReport
+                            ? const Icon(
+                                Icons.play_circle_outline_rounded,
+                                size: 18,
+                              )
+                            : const Icon(Icons.inventory_2_outlined, size: 18),
+                        label: Text(
+                          controller.canResumeLastReport
+                              ? context.t('继续清理')
+                              : context.t('管理隔离区'),
+                        ),
                       ),
                     if (controller.canUndoLastReport)
                       OutlinedButton.icon(

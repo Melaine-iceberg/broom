@@ -21,10 +21,15 @@ QuarantineEntry fakeQuarantineEntry(
 );
 
 class FakeQuarantineService implements QuarantineService {
-  FakeQuarantineService([List<QuarantineEntry> entries = const []])
-    : _entriesBySession = entries.isEmpty ? {} : {sessionId: List.of(entries)};
+  FakeQuarantineService([
+    List<QuarantineEntry> entries = const [],
+    this.remainingCount = 0,
+  ]) : _entriesBySession = entries.isEmpty ? {} : {sessionId: List.of(entries)};
 
   static const sessionId = '20261018_120000_abcd';
+
+  int remainingCount;
+  final List<String> resumeRequests = [];
 
   @override
   final String quarantineRoot =
@@ -50,6 +55,38 @@ class FakeQuarantineService implements QuarantineService {
   @override
   Future<List<QuarantineEntry>> listEntries(String sessionId) async =>
       List.of(_entriesBySession[sessionId] ?? const []);
+
+  @override
+  Future<QuarantineSessionInfo> getSession(String sessionId) async {
+    final entries = _entriesBySession[sessionId];
+    if (entries == null) throw StateError('找不到隔离区记录');
+    return _sessionInfo(sessionId, entries);
+  }
+
+  @override
+  Future<CleanReport> resumeClean(
+    String sessionId, {
+    void Function(CleanProgress progress)? onProgress,
+    bool Function()? isCancelled,
+  }) async {
+    if (!_entriesBySession.containsKey(sessionId)) {
+      throw StateError('找不到隔离区记录');
+    }
+    resumeRequests.add(sessionId);
+    final total = remainingCount;
+    remainingCount = 0;
+    onProgress?.call(
+      CleanProgress(moved: 0, processed: total, total: total, movedBytes: 0),
+    );
+    return CleanReport(
+      sessionId: sessionId,
+      movedCount: 0,
+      movedBytes: 0,
+      failureCount: 0,
+      failures: const [],
+      cancelled: false,
+    );
+  }
 
   @override
   Future<UndoReport> undo(
@@ -154,7 +191,8 @@ class FakeQuarantineService implements QuarantineService {
   QuarantineSessionInfo _sessionInfo(String id, List<QuarantineEntry> entries) {
     final pending = entries.where((entry) => !entry.restored).toList();
     final status =
-        pending.length == entries.length &&
+        remainingCount == 0 &&
+            pending.length == entries.length &&
             pending.every((entry) => entry.restorable)
         ? QuarantineStatus.ready
         : QuarantineStatus.partial;
@@ -166,6 +204,8 @@ class FakeQuarantineService implements QuarantineService {
       totalBytes: entries.fold(0, (total, entry) => total + entry.size),
       pendingCount: pending.length,
       pendingBytes: pending.fold(0, (total, entry) => total + entry.size),
+      plannedCount: entries.length + remainingCount,
+      remainingCount: remainingCount,
     );
   }
 }

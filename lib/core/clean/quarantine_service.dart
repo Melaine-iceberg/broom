@@ -63,7 +63,154 @@ class QuarantineService {
     void Function(CleanProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) async {
+    if (items.isEmpty) {
+      return const CleanReport(
+        sessionId: null,
+        movedCount: 0,
+        movedBytes: 0,
+        failureCount: 0,
+        failures: [],
+        cancelled: false,
+      );
+    }
+
+    final baseDir = Directory(quarantineRoot);
+    await baseDir.create(recursive: true);
+
+    final sessionId = await _createSessionId(baseDir);
+    final sessionDir = Directory(p.windows.join(baseDir.path, sessionId));
+    final filesDir = Directory(p.windows.join(sessionDir.path, 'files'));
+    final createdAt = _clock().toUtc().toIso8601String();
+
+    try {
+      await filesDir.create(recursive: true);
+      await _writePlan(sessionDir, items);
+      await _writeSessionJson(sessionDir, {
+        'schemaVersion': _schemaVersion,
+        'id': sessionId,
+        'createdAt': createdAt,
+        'status': 'cleaning',
+        'entryCount': 0,
+        'totalBytes': 0,
+        'pendingCount': 0,
+        'pendingBytes': 0,
+        'failureCount': 0,
+        'plannedCount': items.length,
+        'remainingCount': items.length,
+      });
+    } catch (_) {
+      await _deleteSessionDirectory(sessionDir);
+      rethrow;
+    }
+
+    return _runSession(
+      sessionDir: sessionDir,
+      sessionId: sessionId,
+      createdAt: createdAt,
+      items: items,
+      plannedCount: items.length,
+      previousFailureCount: 0,
+      onProgress: onProgress,
+      isCancelled: isCancelled,
+    );
+  }
+
+  /// Continues an interrupted cleanup using the plan written before the first
+  /// file was moved. Entries already in [entries.jsonl] are never touched, so
+  /// a resumed run cannot move content that appeared at an original path after
+  /// the interruption.
+  Future<CleanReport> resumeClean(
+    String sessionId, {
+    void Function(CleanProgress progress)? onProgress,
+    bool Function()? isCancelled,
+  }) async {
+    final sessionDir = await _requireSessionDirectory(sessionId);
+    final meta = await _readSessionJson(sessionDir);
+    if (meta == null) {
+      throw StateError('隔离区记录格式无效');
+    }
+
+    final plan = await _readPlan(sessionDir);
+    final plannedCount = (meta['plannedCount'] as num?)?.toInt() ?? plan.length;
+    if (plan.isEmpty || plannedCount <= 0 || plan.length != plannedCount) {
+      throw StateError('找不到可继续的清理计划');
+    }
+
+    final entries = await _readEntries(sessionDir);
+    final donePaths = {for (final entry in entries) entry.originalPath};
+    final remaining = [
+      for (final item in plan)
+        if (!donePaths.contains(item.path)) item,
+    ];
+    final createdAt = meta['createdAt'] is String
+        ? meta['createdAt'] as String
+        : _clock().toUtc().toIso8601String();
+    final previousFailureCount = (meta['failureCount'] as num?)?.toInt() ?? 0;
+
+    if (remaining.isEmpty) {
+      final outcome = await _finalizeSession(
+        sessionDir: sessionDir,
+        sessionId: sessionId,
+        createdAt: createdAt,
+        plannedCount: plannedCount,
+        remainingCount: 0,
+        failureCount: previousFailureCount,
+      );
+      return CleanReport(
+        sessionId: outcome.sessionRemoved ? null : sessionId,
+        movedCount: 0,
+        movedBytes: 0,
+        failureCount: 0,
+        failures: const [],
+        cancelled: false,
+      );
+    }
+
+    final restoredNames = await _readRestoredNames(sessionDir);
+    final pending = await _pendingEntries(sessionDir, entries, restoredNames);
+    await _writeSessionJson(sessionDir, {
+      'schemaVersion': _schemaVersion,
+      'id': sessionId,
+      'createdAt': createdAt,
+      'status': 'cleaning',
+      'entryCount': entries.length,
+      'totalBytes': entries.fold<int>(0, (total, entry) => total + entry.size),
+      'pendingCount': pending.length,
+      'pendingBytes': pending.fold<int>(
+        0,
+        (total, entry) => total + entry.size,
+      ),
+      'failureCount': previousFailureCount,
+      'plannedCount': plannedCount,
+      'remainingCount': remaining.length,
+    });
+
+    return _runSession(
+      sessionDir: sessionDir,
+      sessionId: sessionId,
+      createdAt: createdAt,
+      items: remaining,
+      plannedCount: plannedCount,
+      previousFailureCount: previousFailureCount,
+      onProgress: onProgress,
+      isCancelled: isCancelled,
+    );
+  }
+
+  Future<CleanReport> _runSession({
+    required Directory sessionDir,
+    required String sessionId,
+    required String createdAt,
+    required List<JunkItem> items,
+    required int plannedCount,
+    required int previousFailureCount,
+    void Function(CleanProgress progress)? onProgress,
+    bool Function()? isCancelled,
+  }) async {
     final failures = <CleanFailure>[];
+    final filesDir = Directory(p.windows.join(sessionDir.path, 'files'));
+    final priorEntries = await _readEntries(sessionDir);
+    var sequence = _maxSequence(priorEntries);
     var failureCount = 0;
     var movedCount = 0;
     var movedBytes = 0;
@@ -71,9 +218,6 @@ class QuarantineService {
     var cancelled = false;
     var lastReportAt = DateTime.fromMillisecondsSinceEpoch(0);
     RandomAccessFile? entriesFile;
-    Directory? sessionDir;
-    String? sessionId;
-    String? createdAt;
 
     void recordFailure(String path, Object error) {
       failureCount++;
@@ -100,44 +244,22 @@ class QuarantineService {
       );
     }
 
-    CleanReport buildReport() => CleanReport(
-      sessionId: sessionId,
+    CleanReport buildReport({required bool sessionRemoved}) => CleanReport(
+      sessionId: sessionRemoved ? null : sessionId,
       movedCount: movedCount,
       movedBytes: movedBytes,
       failureCount: failureCount,
       failures: List.unmodifiable(failures),
       cancelled: cancelled,
+      remainingCount: items.length - processed,
     );
 
+    var sessionRemoved = false;
     try {
-      if (items.isEmpty) return buildReport();
-
-      final baseDir = Directory(quarantineRoot);
-      await baseDir.create(recursive: true);
-
-      sessionId = await _createSessionId(baseDir);
-      sessionDir = Directory(p.windows.join(baseDir.path, sessionId));
-      final filesDir = Directory(p.windows.join(sessionDir.path, 'files'));
       await filesDir.create(recursive: true);
-
-      final now = _clock();
-      createdAt = now.toUtc().toIso8601String();
-      await _writeSessionJson(sessionDir, {
-        'schemaVersion': _schemaVersion,
-        'id': sessionId,
-        'createdAt': createdAt,
-        'status': 'cleaning',
-        'entryCount': 0,
-        'totalBytes': 0,
-        'pendingCount': 0,
-        'pendingBytes': 0,
-        'failureCount': 0,
-      });
-
       entriesFile = await File(p.windows.join(sessionDir.path, 'entries.jsonl'))
-          .open(mode: FileMode.write);
+          .open(mode: FileMode.append);
 
-      var sequence = 0;
       for (final item in items) {
         if (isCancelled?.call() ?? false) {
           cancelled = true;
@@ -220,27 +342,17 @@ class QuarantineService {
       await entriesFile.close();
       entriesFile = null;
 
-      if (movedCount == 0) {
-        await _deleteSessionDirectory(sessionDir);
-        sessionDir = null;
-        sessionId = null;
-        report(force: true);
-        return buildReport();
-      }
-
-      await _writeSessionJson(sessionDir, {
-        'schemaVersion': _schemaVersion,
-        'id': sessionId,
-        'createdAt': createdAt,
-        'status': 'ready',
-        'entryCount': movedCount,
-        'totalBytes': movedBytes,
-        'pendingCount': movedCount,
-        'pendingBytes': movedBytes,
-        'failureCount': failureCount,
-      });
+      final outcome = await _finalizeSession(
+        sessionDir: sessionDir,
+        sessionId: sessionId,
+        createdAt: createdAt,
+        plannedCount: plannedCount,
+        remainingCount: items.length - processed,
+        failureCount: previousFailureCount + failureCount,
+      );
+      sessionRemoved = outcome.sessionRemoved;
       report(force: true);
-      return buildReport();
+      return buildReport(sessionRemoved: sessionRemoved);
     } catch (_) {
       try {
         await entriesFile?.close();
@@ -248,24 +360,17 @@ class QuarantineService {
         // Ignore cleanup failures; the session metadata is updated below.
       }
       entriesFile = null;
-      if (sessionDir != null && movedCount > 0) {
-        try {
-          await _writeSessionJson(sessionDir, {
-            'schemaVersion': _schemaVersion,
-            'id': sessionId,
-            'createdAt': createdAt,
-            'status': 'partial',
-            'entryCount': movedCount,
-            'totalBytes': movedBytes,
-            'pendingCount': movedCount,
-            'pendingBytes': movedBytes,
-            'failureCount': failureCount,
-          });
-        } on FileSystemException {
-          // The initial metadata still allows crash recovery on next start.
-        }
-      } else if (sessionDir != null) {
-        await _deleteSessionDirectory(sessionDir);
+      try {
+        await _finalizeSession(
+          sessionDir: sessionDir,
+          sessionId: sessionId,
+          createdAt: createdAt,
+          plannedCount: plannedCount,
+          remainingCount: items.length - processed,
+          failureCount: previousFailureCount + failureCount,
+        );
+      } on FileSystemException {
+        // The plan and entries on disk still allow a later resume.
       }
       rethrow;
     } finally {
@@ -276,6 +381,46 @@ class QuarantineService {
       }
       report(force: true);
     }
+  }
+
+  Future<({bool sessionRemoved, int remainingCount})> _finalizeSession({
+    required Directory sessionDir,
+    required String sessionId,
+    required String createdAt,
+    required int plannedCount,
+    required int remainingCount,
+    required int failureCount,
+  }) async {
+    final entries = await _readEntries(sessionDir);
+    final restoredNames = await _readRestoredNames(sessionDir);
+    final pending = await _pendingEntries(sessionDir, entries, restoredNames);
+
+    if (entries.isEmpty && remainingCount == 0) {
+      await _deleteSessionDirectory(sessionDir);
+      return (sessionRemoved: true, remainingCount: 0);
+    }
+
+    if (remainingCount == 0) {
+      await _deletePlanFile(sessionDir);
+    }
+
+    await _writeSessionJson(sessionDir, {
+      'schemaVersion': _schemaVersion,
+      'id': sessionId,
+      'createdAt': createdAt,
+      'status': remainingCount > 0 ? 'partial' : 'ready',
+      'entryCount': entries.length,
+      'totalBytes': entries.fold<int>(0, (total, entry) => total + entry.size),
+      'pendingCount': pending.length,
+      'pendingBytes': pending.fold<int>(
+        0,
+        (total, entry) => total + entry.size,
+      ),
+      'failureCount': failureCount,
+      'plannedCount': plannedCount,
+      'remainingCount': remainingCount,
+    });
+    return (sessionRemoved: false, remainingCount: remainingCount);
   }
 
   Future<UndoReport> undo(
@@ -644,47 +789,8 @@ class QuarantineService {
         final id = p.windows.basename(entity.path);
         if (!_isValidSessionId(id)) continue;
 
-        final meta = await _readSessionJson(entity);
-        if (meta == null) continue;
-
-        var status = _parseStatus(meta['status']);
-        if (status == null) continue;
-        var entryCount = (meta['entryCount'] as num?)?.toInt() ?? 0;
-        var totalBytes = (meta['totalBytes'] as num?)?.toInt() ?? 0;
-        var pendingCount =
-            (meta['pendingCount'] as num?)?.toInt() ?? entryCount;
-        var pendingBytes =
-            (meta['pendingBytes'] as num?)?.toInt() ?? totalBytes;
-
-        if (status == QuarantineStatus.cleaning) {
-          final entries = await _readEntries(entity);
-          if (entries.isEmpty) continue;
-          entryCount = entries.length;
-          totalBytes = entries.fold<int>(
-            0,
-            (total, entry) => total + entry.size,
-          );
-          pendingCount = entryCount;
-          pendingBytes = totalBytes;
-          status = QuarantineStatus.partial;
-        }
-
-        if (pendingCount <= 0) continue;
-
-        final createdAt =
-            DateTime.tryParse('${meta['createdAt'] ?? ''}') ??
-            DateTime.fromMillisecondsSinceEpoch(0);
-        sessions.add(
-          QuarantineSessionInfo(
-            id: id,
-            createdAt: createdAt,
-            status: status,
-            entryCount: entryCount,
-            totalBytes: totalBytes,
-            pendingCount: pendingCount,
-            pendingBytes: pendingBytes,
-          ),
-        );
+        final info = await _readSessionInfo(entity);
+        if (info != null) sessions.add(info);
       }
     } on FileSystemException {
       return sessions;
@@ -692,6 +798,90 @@ class QuarantineService {
 
     sessions.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return sessions;
+  }
+
+  Future<QuarantineSessionInfo> getSession(String sessionId) async {
+    final sessionDir = await _requireSessionDirectory(sessionId);
+    final info = await _readSessionInfo(sessionDir);
+    if (info == null) {
+      throw StateError('找不到隔离区记录');
+    }
+    return info;
+  }
+
+  Future<QuarantineSessionInfo?> _readSessionInfo(Directory sessionDir) async {
+    final meta = await _readSessionJson(sessionDir);
+    if (meta == null) return null;
+
+    var status = _parseStatus(meta['status']);
+    if (status == null) return null;
+    var entryCount = (meta['entryCount'] as num?)?.toInt() ?? 0;
+    var totalBytes = (meta['totalBytes'] as num?)?.toInt() ?? 0;
+    var pendingCount = (meta['pendingCount'] as num?)?.toInt() ?? entryCount;
+    var pendingBytes = (meta['pendingBytes'] as num?)?.toInt() ?? totalBytes;
+    var plannedCount = (meta['plannedCount'] as num?)?.toInt() ?? 0;
+    var remainingCount = 0;
+
+    if (status == QuarantineStatus.cleaning) {
+      final entries = await _readEntries(sessionDir);
+      final plan = await _readPlan(sessionDir);
+      final planned = plannedCount > 0 ? plannedCount : plan.length;
+      final planComplete = plan.isNotEmpty && plan.length == planned;
+      final restoredNames = await _readRestoredNames(sessionDir);
+      final pending = await _pendingEntries(sessionDir, entries, restoredNames);
+      entryCount = entries.length;
+      totalBytes = entries.fold<int>(0, (total, entry) => total + entry.size);
+      pendingCount = pending.length;
+      pendingBytes = pending.fold<int>(0, (total, entry) => total + entry.size);
+      plannedCount = planned;
+      if (planComplete) {
+        final donePaths = {for (final entry in entries) entry.originalPath};
+        remainingCount = plan
+            .where((item) => !donePaths.contains(item.path))
+            .length;
+      }
+      if (entries.isEmpty && remainingCount == 0) return null;
+      status = planComplete && remainingCount == 0
+          ? QuarantineStatus.ready
+          : QuarantineStatus.partial;
+    } else if (status == QuarantineStatus.partial) {
+      final plan = await _readPlan(sessionDir);
+      final planComplete =
+          plan.isNotEmpty && (plannedCount <= 0 || plan.length == plannedCount);
+      if (planComplete) {
+        plannedCount = plan.length;
+        final storedRemaining = (meta['remainingCount'] as num?)?.toInt();
+        if (storedRemaining != null && storedRemaining >= 0) {
+          remainingCount = storedRemaining > plannedCount
+              ? plannedCount
+              : storedRemaining;
+        } else {
+          final entries = await _readEntries(sessionDir);
+          final donePaths = {for (final entry in entries) entry.originalPath};
+          remainingCount = plan
+              .where((item) => !donePaths.contains(item.path))
+              .length;
+        }
+      }
+    }
+
+    if (pendingCount <= 0 && remainingCount <= 0) return null;
+
+    final id = p.windows.basename(sessionDir.path);
+    final createdAt =
+        DateTime.tryParse('${meta['createdAt'] ?? ''}') ??
+        DateTime.fromMillisecondsSinceEpoch(0);
+    return QuarantineSessionInfo(
+      id: id,
+      createdAt: createdAt,
+      status: status,
+      entryCount: entryCount,
+      totalBytes: totalBytes,
+      pendingCount: pendingCount,
+      pendingBytes: pendingBytes,
+      plannedCount: plannedCount,
+      remainingCount: remainingCount,
+    );
   }
 
   Future<Directory> _requireSessionDirectory(String sessionId) async {
@@ -957,7 +1147,9 @@ class QuarantineService {
     Map<String, dynamic> data,
   ) async {
     final file = File(p.windows.join(sessionDir.path, 'session.json'));
-    await file.writeAsString(jsonEncode(data), flush: true);
+    final temp = File('${file.path}.tmp');
+    await temp.writeAsString(jsonEncode(data), flush: true);
+    await temp.rename(file.path);
   }
 
   Future<List<_StoredEntry>> _readEntries(Directory sessionDir) async {
@@ -1017,6 +1209,123 @@ class QuarantineService {
     } on FileSystemException {
       return <String>{};
     }
+  }
+
+  Future<void> _writePlan(Directory sessionDir, List<JunkItem> items) async {
+    final planFile = File(p.windows.join(sessionDir.path, 'plan.jsonl'));
+    final temp = File('${planFile.path}.tmp');
+    final sink = temp.openWrite();
+    var closed = false;
+    try {
+      for (final item in items) {
+        sink.writeln(
+          jsonEncode({
+            'originalPath': item.path,
+            'rootPath': item.rootPath,
+            'ruleId': item.ruleId,
+            'size': item.size,
+            'modified': item.modified.toUtc().toIso8601String(),
+          }),
+        );
+      }
+      await sink.close();
+      closed = true;
+    } finally {
+      if (!closed) {
+        try {
+          await sink.close();
+        } on FileSystemException {
+          // The incomplete temporary plan is removed below.
+        }
+        try {
+          await temp.delete();
+        } on FileSystemException {
+          // A leftover temporary plan is never read.
+        }
+      }
+    }
+    try {
+      await temp.rename(planFile.path);
+    } on FileSystemException {
+      try {
+        await temp.delete();
+      } on FileSystemException {
+        // A leftover temporary plan is never read.
+      }
+      rethrow;
+    }
+  }
+
+  Future<List<JunkItem>> _readPlan(Directory sessionDir) async {
+    final file = File(p.windows.join(sessionDir.path, 'plan.jsonl'));
+    if (!await file.exists()) return const [];
+    final items = <JunkItem>[];
+    try {
+      final lines = await file.readAsLines();
+      for (final line in lines) {
+        if (line.trim().isEmpty) continue;
+        try {
+          final map = jsonDecode(line);
+          if (map is! Map<String, dynamic>) continue;
+          final originalPath = map['originalPath'];
+          final rootPath = map['rootPath'];
+          final size = map['size'];
+          if (originalPath is! String ||
+              originalPath.isEmpty ||
+              !p.windows.isAbsolute(originalPath) ||
+              rootPath is! String ||
+              rootPath.isEmpty ||
+              !p.windows.isAbsolute(rootPath) ||
+              size is! num ||
+              size < 0) {
+            continue;
+          }
+          final rawModified = map['modified'];
+          final modified = rawModified is String
+              ? DateTime.tryParse(rawModified)
+              : null;
+          final rawRuleId = map['ruleId'];
+          items.add(
+            JunkItem(
+              ruleId: rawRuleId is String ? rawRuleId : '',
+              rootPath: rootPath,
+              path: originalPath,
+              size: size.toInt(),
+              modified: modified ?? _clock(),
+            ),
+          );
+        } on FormatException {
+          continue;
+        }
+      }
+    } on FileSystemException {
+      return items;
+    }
+    return items;
+  }
+
+  static Future<void> _deletePlanFile(Directory sessionDir) async {
+    try {
+      final file = File(p.windows.join(sessionDir.path, 'plan.jsonl'));
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } on FileSystemException {
+      // A leftover plan on a completed session is ignored.
+    }
+  }
+
+  static int _maxSequence(List<_StoredEntry> entries) {
+    var sequence = 0;
+    for (final entry in entries) {
+      final separator = entry.storedName.indexOf('_');
+      if (separator <= 0) continue;
+      final parsed = int.tryParse(entry.storedName.substring(0, separator));
+      if (parsed != null && parsed > sequence) {
+        sequence = parsed;
+      }
+    }
+    return sequence;
   }
 
   static QuarantineStatus? _parseStatus(Object? raw) {

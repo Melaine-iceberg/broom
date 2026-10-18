@@ -136,6 +136,61 @@ void main() {
     expect(service.isEmpty, isTrue);
   });
 
+  testWidgets('resumes an interrupted cleanup from the session list', (
+    tester,
+  ) async {
+    final service = FakeQuarantineService([
+      fakeQuarantineEntry('moved.txt'),
+    ], 2);
+
+    await pumpPage(tester, service);
+
+    expect(find.text('待继续清理'), findsOneWidget);
+    expect(find.textContaining('还有 2 个未处理'), findsOneWidget);
+    expect(find.textContaining('可继续清理'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('resume-clean-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('继续清理剩余文件？'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, '继续清理'));
+    await tester.pumpAndSettle();
+
+    expect(service.resumeRequests, [FakeQuarantineService.sessionId]);
+    expect(find.text('待继续清理'), findsNothing);
+    expect(find.text('可恢复'), findsOneWidget);
+  });
+
+  testWidgets('resumes an interrupted cleanup from the session details', (
+    tester,
+  ) async {
+    final service = FakeQuarantineService([
+      fakeQuarantineEntry('moved.txt'),
+    ], 1);
+
+    await pumpPage(tester, service);
+    await tester.tap(find.text('查看文件'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('还有 1 个文件未处理'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('resume-clean-detail-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.widgetWithText(FilledButton, '继续清理'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(service.resumeRequests, [FakeQuarantineService.sessionId]);
+    expect(
+      find.byKey(const ValueKey('resume-clean-detail-button')),
+      findsNothing,
+    );
+  });
+
   testWidgets('requires acknowledgment before permanent release', (
     tester,
   ) async {

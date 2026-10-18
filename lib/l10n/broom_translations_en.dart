@@ -82,7 +82,7 @@ const translationsEn = <String, String>{
 
   // Home: startup and clean prompts
   '发现 {count} 个未完成的清理会话': '{count, plural, one{# unfinished cleaning session found} other{# unfinished cleaning sessions found}}',
-  'Broom 上次退出时还有清理没有正常结束，或恢复只完成了一部分。已移动的文件仍保存在隔离区，可以继续恢复，也可以确认后永久释放。': 'Broom exited before a clean finished, or a restore only partly completed. Moved files are still in quarantine; you can continue restoring them or permanently release them after confirmation.',
+  'Broom 上次退出时还有清理没有正常结束，或恢复只完成了一部分。已移动的文件仍保存在隔离区，可以继续恢复；中断的清理也可以继续。': 'Broom exited before a clean finished, or a restore only partly completed. Moved files are still in quarantine and can be restored; interrupted cleanups can also continue.',
   '稍后处理': 'Later',
   '查看隔离区': 'Open quarantine',
   '移入隔离区？': 'Move to quarantine?',
@@ -168,8 +168,7 @@ const translationsEn = <String, String>{
   '清理已停止': 'Cleaning stopped',
   '没有文件被移动': 'No files were moved',
   '清理完成': 'Cleaning complete',
-  '已停止清理，已经移动的文件仍保存在隔离区中。':
-      'Cleaning stopped. Files already moved remain in quarantine.',
+  '已停止清理，已经移动的文件仍保存在隔离区中，未处理的文件可以继续清理。': 'Cleaning stopped. Files already moved remain in quarantine, and the remaining files can be cleaned from quarantine.',
   '没有文件成功移入隔离区，可以稍后重试。':
       'No files were moved to quarantine. You can try again later.',
   '文件已安全移动到隔离区，可随时恢复。释放隔离区后才会回收磁盘空间。': 'Files were safely moved to quarantine and can be restored at any time. Disk space is reclaimed only after releasing quarantine.',
@@ -355,6 +354,24 @@ const translationsEn = <String, String>{
   '永久释放': 'Release permanently',
   '部分可恢复': 'Partly restorable',
   '可恢复': 'Restorable',
+  '待继续清理': 'Paused',
+  '继续清理': 'Continue cleaning',
+  '可继续清理': 'Resumable',
+  '{count} 次': '{count, plural, one{# run} other{# runs}}',
+  '{files} 个文件已暂存 · 还有 {remaining} 个未处理':
+      '{files} files staged · {remaining} still unprocessed',
+  '这次清理还有 {count} 个文件未处理。继续后会将这些文件移入隔离区。': '{count, plural, one{# file from this cleanup is still unprocessed. Continuing will move it to quarantine.} other{# files from this cleanup are still unprocessed. Continuing will move them to quarantine.}}',
+  '继续清理剩余文件？': 'Continue cleaning the remaining files?',
+  '还有 {count} 个文件未处理。继续后会把这些文件移入隔离区，过程中可以停止。': '{count, plural, one{# file is still unprocessed. Continuing will move it to quarantine; you can stop at any time.} other{# files are still unprocessed. Continuing will move them to quarantine; you can stop at any time.}}',
+  '正在继续清理…': 'Continuing cleanup…',
+  '{processed} / {total}': '{processed} / {total}',
+  '{count} 个文件已移入隔离区（{bytes}）': '{count, plural, one{# file moved to quarantine} other{# files moved to quarantine}} ({bytes})',
+  '停止': 'Stop',
+  '继续清理失败：{error}': 'Could not continue cleaning: {error}',
+  '清理已停止，还有 {count} 个文件未处理，可再次继续。': '{count, plural, one{Cleaning stopped. # file is still unprocessed and can be resumed.} other{Cleaning stopped. # files are still unprocessed and can be resumed.}}',
+  '已继续清理 {count} 个文件': '{count, plural, one{Continued cleaning # file} other{Continued cleaning # files}}',
+  '{count} 个文件未能清理': '{count, plural, one{# file could not be cleaned} other{# files could not be cleaned}}',
+  '没有剩余文件需要清理。': 'No remaining files need cleaning.',
   '{count} 个文件 · {bytes} 仍在隔离区。冲突文件可选择跳过、保留两者或覆盖；永久释放后无法找回。': '{count} files · {bytes} remain in quarantine. Conflicts can be skipped, kept as a copy, or overwritten. Permanently released files cannot be recovered.',
   '永久删除剩余': 'Permanently delete remaining',
   '已恢复': 'Restored',

@@ -29,6 +29,7 @@ class CleanReport {
     required this.failureCount,
     required this.failures,
     required this.cancelled,
+    this.remainingCount = 0,
   });
 
   final String? sessionId;
@@ -37,6 +38,9 @@ class CleanReport {
   final int failureCount;
   final List<CleanFailure> failures;
   final bool cancelled;
+  final int remainingCount;
+
+  bool get resumable => remainingCount > 0;
 }
 
 enum UndoConflictPolicy { skip, keepBoth, overwrite }
@@ -81,6 +85,8 @@ class QuarantineSessionInfo {
     required this.totalBytes,
     required this.pendingCount,
     required this.pendingBytes,
+    this.plannedCount = 0,
+    this.remainingCount = 0,
   });
 
   final String id;
@@ -90,6 +96,10 @@ class QuarantineSessionInfo {
   final int totalBytes;
   final int pendingCount;
   final int pendingBytes;
+  final int plannedCount;
+  final int remainingCount;
+
+  bool get resumable => remainingCount > 0;
 }
 
 class QuarantineEntry {

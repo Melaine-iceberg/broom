@@ -81,6 +81,136 @@ void main() {
     );
   });
 
+  test('continues an interrupted cleanup from the persisted plan', () async {
+    final first = await createFile('first.txt', 'alpha');
+    final second = await createFile('second.txt', 'bravo');
+    final third = await createFile('third.txt', 'charlie');
+    var cancel = false;
+
+    final interrupted = await quarantine.clean(
+      [await itemFor(first), await itemFor(second), await itemFor(third)],
+      onProgress: (progress) {
+        if (progress.moved >= 1) cancel = true;
+      },
+      isCancelled: () => cancel,
+    );
+
+    expect(interrupted.cancelled, isTrue);
+    expect(interrupted.movedCount, 1);
+    expect(interrupted.remainingCount, 2);
+    expect(interrupted.sessionId, isNotNull);
+    expect(await second.exists(), isTrue);
+    expect(await third.exists(), isTrue);
+
+    final interruptedSession = (await quarantine.listSessions()).single;
+    expect(interruptedSession.status, QuarantineStatus.partial);
+    expect(interruptedSession.resumable, isTrue);
+    expect(interruptedSession.remainingCount, 2);
+    expect(interruptedSession.pendingCount, 1);
+
+    // A hard crash leaves the session in "cleaning"; listing must recover the
+    // remaining count from the plan and entries instead of trusting metadata.
+    final metaFile = File(
+      p.windows.join(
+        temp.path,
+        'quarantine',
+        interrupted.sessionId!,
+        'session.json',
+      ),
+    );
+    final crashedMeta =
+        jsonDecode(await metaFile.readAsString()) as Map<String, dynamic>;
+    crashedMeta['status'] = 'cleaning';
+    crashedMeta.remove('remainingCount');
+    await metaFile.writeAsString(jsonEncode(crashedMeta));
+
+    final recovered = (await quarantine.listSessions()).single;
+    expect(recovered.status, QuarantineStatus.partial);
+    expect(recovered.resumable, isTrue);
+    expect(recovered.remainingCount, 2);
+    expect(recovered.pendingCount, 1);
+
+    final resumed = await quarantine.resumeClean(interrupted.sessionId!);
+
+    expect(resumed.cancelled, isFalse);
+    expect(resumed.movedCount, 2);
+    expect(resumed.failureCount, 0);
+    expect(resumed.remainingCount, 0);
+    expect(await first.exists(), isFalse);
+    expect(await second.exists(), isFalse);
+    expect(await third.exists(), isFalse);
+
+    final readySession = (await quarantine.listSessions()).single;
+    expect(readySession.status, QuarantineStatus.ready);
+    expect(readySession.resumable, isFalse);
+    expect(readySession.pendingCount, 3);
+    expect(readySession.remainingCount, 0);
+    expect(
+      File(
+        p.windows.join(
+          temp.path,
+          'quarantine',
+          interrupted.sessionId!,
+          'plan.jsonl',
+        ),
+      ).existsSync(),
+      isFalse,
+    );
+
+    final undo = await quarantine.undo(interrupted.sessionId!);
+
+    expect(undo.restoredCount, 3);
+    expect(undo.sessionRemoved, isTrue);
+    expect(await first.readAsString(), 'alpha');
+    expect(await second.readAsString(), 'bravo');
+    expect(await third.readAsString(), 'charlie');
+    await expectLater(
+      quarantine.resumeClean(interrupted.sessionId!),
+      throwsStateError,
+    );
+  });
+
+  test('keeps a resumable session when no file was moved', () async {
+    final movable = await createFile('movable.txt', 'alpha');
+    final missing = JunkItem(
+      ruleId: 'test.rule',
+      rootPath: source.path,
+      path: p.windows.join(source.path, 'missing.txt'),
+      size: 1,
+      modified: DateTime(2026, 10, 18),
+    );
+    var cancel = false;
+
+    final interrupted = await quarantine.clean(
+      [missing, await itemFor(movable)],
+      onProgress: (_) => cancel = true,
+      isCancelled: () => cancel,
+    );
+
+    expect(interrupted.cancelled, isTrue);
+    expect(interrupted.movedCount, 0);
+    expect(interrupted.failureCount, 1);
+    expect(interrupted.remainingCount, 1);
+    expect(interrupted.sessionId, isNotNull);
+
+    final session = (await quarantine.listSessions()).single;
+    expect(session.status, QuarantineStatus.partial);
+    expect(session.resumable, isTrue);
+    expect(session.pendingCount, 0);
+    expect(session.remainingCount, 1);
+
+    final resumed = await quarantine.resumeClean(interrupted.sessionId!);
+
+    expect(resumed.movedCount, 1);
+    expect(resumed.failureCount, 1);
+    expect(resumed.remainingCount, 0);
+    expect(await movable.exists(), isFalse);
+    expect(
+      (await quarantine.listSessions()).single.status,
+      QuarantineStatus.ready,
+    );
+  });
+
   test('records a SHA-256 digest for small quarantine entries', () async {
     final file = await createFile('hashed.txt', 'alpha');
     final report = await quarantine.clean([await itemFor(file)]);
