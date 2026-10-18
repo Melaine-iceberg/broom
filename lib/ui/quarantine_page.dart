@@ -753,6 +753,22 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
                 }),
               ),
             ],
+            if (report.recreatedDirectoryCount > 0) ...[
+              const SizedBox(height: 8),
+              Text(
+                context.tf('已重建 {count} 个空缓存目录。', {
+                  'count': report.recreatedDirectoryCount,
+                }),
+              ),
+            ],
+            if (report.directoryFailureCount > 0) ...[
+              const SizedBox(height: 8),
+              Text(
+                context.tf('{count} 个空目录未能重建。', {
+                  'count': report.directoryFailureCount,
+                }),
+              ),
+            ],
             if (!report.sessionRemoved) ...[
               const SizedBox(height: 8),
               Text(
@@ -1955,6 +1971,14 @@ String _restoreMessage(UndoReport report) {
   if (report.metadataFailureCount > 0) {
     parts.add(trf('{count} 个元数据未还原', {'count': report.metadataFailureCount}));
   }
+  if (report.recreatedDirectoryCount > 0) {
+    parts.add(
+      trf('{count} 个空缓存目录已重建', {'count': report.recreatedDirectoryCount}),
+    );
+  }
+  if (report.directoryFailureCount > 0) {
+    parts.add(trf('{count} 个空目录未能重建', {'count': report.directoryFailureCount}));
+  }
   return parts.join('；');
 }
 
@@ -2011,6 +2035,8 @@ String _resumeMessage(CleanReport report) {
       trf('跳过 {count} 个被占用或已不存在的文件', {'count': report.skippedCount}),
     if (report.failureCount > 0)
       trf('{count} 个文件未能清理', {'count': report.failureCount}),
+    if (report.removedDirectoryCount > 0)
+      trf('清理了 {count} 个空目录', {'count': report.removedDirectoryCount}),
   ];
   if (parts.isEmpty) return tr('没有剩余文件需要清理。');
   return '${parts.join(tr('；'))}${tr('。')}';

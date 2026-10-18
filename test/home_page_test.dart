@@ -441,4 +441,57 @@ void main() {
     expect(find.text('1 个文件清理失败。'), findsOneWidget);
     expect(find.textContaining('没有访问权限'), findsOneWidget);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('reports removed empty cache directories', (tester) async {
+    tester.view.physicalSize = const Size(1200, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const root = r'C:\broom_widget_test\cache';
+    final item = JunkItem(
+      ruleId: 'test.cache',
+      rootPath: root,
+      path: p.windows.join(root, 'nested', 'cache.tmp'),
+      size: 42,
+      modified: DateTime(2026, 10, 18),
+    );
+    const rule = CleanerRule(
+      id: 'test.cache',
+      title: '测试缓存',
+      category: '测试',
+      description: '测试用缓存规则',
+      pathPatterns: [],
+    );
+    final controller = CleanController(
+      platform: _FixedRootsPlatform(rule: rule, roots: [root]),
+      guard: PathGuard(protectedRoots: const []),
+      quarantine: _ReportingQuarantineService(
+        CleanReport(
+          sessionId: null,
+          movedCount: 1,
+          movedBytes: 42,
+          failureCount: 0,
+          failures: const [],
+          cancelled: false,
+          removedDirectoryCount: 2,
+        ),
+      ),
+      exclusions: _exclusionsStore(),
+      scanServiceFactory: () => _FixedScanService([item]),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    await controller.scan();
+
+    await tester.pumpWidget(
+      BroomApp(controller: controller, systemShell: _FakeSystemShell()),
+    );
+    await tester.pumpAndSettle();
+    await controller.cleanSelected();
+    await tester.pumpAndSettle();
+
+    expect(controller.phase, CleanPhase.done);
+    expect(find.text('已清理 2 个空缓存目录。'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 }

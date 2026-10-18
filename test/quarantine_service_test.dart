@@ -87,6 +87,168 @@ void main() {
     );
   });
 
+  test('removes empty cache directories and recreates them on undo', () async {
+    final file = await createFile(
+      p.join('cache', 'nested', 'file.tmp'),
+      'alpha',
+    );
+    final report = await quarantine.clean([await itemFor(file)]);
+
+    expect(report.removedDirectoryCount, 2);
+    expect(await file.exists(), isFalse);
+    expect(
+      await Directory(p.windows.join(source.path, 'cache', 'nested')).exists(),
+      isFalse,
+    );
+    expect(
+      await Directory(p.windows.join(source.path, 'cache')).exists(),
+      isFalse,
+    );
+    expect(await source.exists(), isTrue);
+
+    final undo = await quarantine.undo(report.sessionId!);
+
+    expect(undo.restoredCount, 1);
+    expect(undo.recreatedDirectoryCount, 2);
+    expect(undo.directoryFailureCount, 0);
+    expect(
+      await Directory(p.windows.join(source.path, 'cache', 'nested')).exists(),
+      isTrue,
+    );
+    expect(await file.readAsString(), 'alpha');
+  });
+
+  test('leaves pre-existing empty directories and directories with remaining files', () async {
+    final selected = await createFile(p.join('cache', 'selected.tmp'), 'alpha');
+    final kept = await createFile(p.join('cache', 'kept.tmp'), 'bravo');
+    final existingEmpty = Directory(
+      p.windows.join(source.path, 'already_empty'),
+    );
+    await existingEmpty.create();
+
+    final report = await quarantine.clean([await itemFor(selected)]);
+
+    expect(report.removedDirectoryCount, 0);
+    expect(
+      await Directory(p.windows.join(source.path, 'cache')).exists(),
+      isTrue,
+    );
+    expect(await existingEmpty.exists(), isTrue);
+    expect(await kept.readAsString(), 'bravo');
+  });
+
+  test(
+    'removes directories from earlier interrupted moves after resume',
+    () async {
+      final first = await createFile(p.join('a', 'first.tmp'), 'alpha');
+      final second = await createFile(p.join('b', 'second.tmp'), 'bravo');
+      var cancel = false;
+
+      final interrupted = await quarantine.clean(
+        [await itemFor(first), await itemFor(second)],
+        onProgress: (progress) {
+          if (progress.moved >= 1) cancel = true;
+        },
+        isCancelled: () => cancel,
+      );
+
+      expect(interrupted.cancelled, isTrue);
+      expect(interrupted.removedDirectoryCount, 0);
+      expect(
+        await Directory(p.windows.join(source.path, 'a')).exists(),
+        isTrue,
+      );
+      expect(await second.exists(), isTrue);
+
+      final resumed = await quarantine.resumeClean(interrupted.sessionId!);
+
+      expect(resumed.movedCount, 1);
+      expect(resumed.removedDirectoryCount, 2);
+      expect(
+        await Directory(p.windows.join(source.path, 'a')).exists(),
+        isFalse,
+      );
+      expect(
+        await Directory(p.windows.join(source.path, 'b')).exists(),
+        isFalse,
+      );
+
+      final undo = await quarantine.undo(interrupted.sessionId!);
+
+      expect(undo.restoredCount, 2);
+      expect(undo.recreatedDirectoryCount, 2);
+      expect(
+        await Directory(p.windows.join(source.path, 'a')).exists(),
+        isTrue,
+      );
+      expect(
+        await Directory(p.windows.join(source.path, 'b')).exists(),
+        isTrue,
+      );
+    },
+  );
+
+  test('recreates removed directories when no file can be restored', () async {
+    final file = await createFile(
+      p.join('cache', 'nested', 'lost.tmp'),
+      'alpha',
+    );
+    final report = await quarantine.clean([await itemFor(file)]);
+    final entry = (await quarantine.listEntries(report.sessionId!)).single;
+    await File(
+      p.windows.join(
+        temp.path,
+        'quarantine',
+        report.sessionId!,
+        'files',
+        entry.storedName,
+      ),
+    ).delete();
+
+    final undo = await quarantine.undo(report.sessionId!);
+
+    expect(undo.restoredCount, 0);
+    expect(undo.missingCount, 1);
+    expect(undo.recreatedDirectoryCount, 2);
+    expect(
+      await Directory(p.windows.join(source.path, 'cache', 'nested')).exists(),
+      isTrue,
+    );
+    expect(undo.sessionRemoved, isTrue);
+  });
+
+  test('ignores tampered removed directory records', () async {
+    final file = await createFile(
+      p.join('cache', 'nested', 'file.tmp'),
+      'alpha',
+    );
+    final report = await quarantine.clean([await itemFor(file)]);
+    final recordsFile = File(
+      p.windows.join(
+        temp.path,
+        'quarantine',
+        report.sessionId!,
+        'removed_dirs.jsonl',
+      ),
+    );
+    final outside = Directory(p.windows.join(temp.path, 'outside'));
+    final unrelated = Directory(p.windows.join(source.path, 'unrelated'));
+    final existing = await recordsFile.readAsString();
+    await recordsFile.writeAsString(
+      '$existing'
+      '${jsonEncode({'path': outside.path, 'rootPath': source.path})}\n'
+      '${jsonEncode({'path': unrelated.path, 'rootPath': source.path})}\n',
+      flush: true,
+    );
+
+    final undo = await quarantine.undo(report.sessionId!);
+
+    expect(undo.restoredCount, 1);
+    expect(await outside.exists(), isFalse);
+    expect(await unrelated.exists(), isFalse);
+    expect(undo.recreatedDirectoryCount, 2);
+  });
+
   test('continues an interrupted cleanup from the persisted plan', () async {
     final first = await createFile('first.txt', 'alpha');
     final second = await createFile('second.txt', 'bravo');

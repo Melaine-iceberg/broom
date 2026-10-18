@@ -134,48 +134,42 @@ void main() {
       }
     }, skip: _windowsOnly);
 
-    test(
-      'restores a long path when the original folder is recreated',
-      () async {
-        final temp = await Directory.systemTemp.createTemp('broom_long_undo_');
-        try {
-          final testRoot = p.windows.join(temp.path, 'cache');
-          await Directory(WindowsPath.forIo(testRoot)).create(recursive: true);
-          final deepRoot = _deepRoot(testRoot, 3);
-          final filePath = p.windows.join(deepRoot, 'removed.bin');
-          await Directory(WindowsPath.forIo(deepRoot)).create(recursive: true);
-          await File(WindowsPath.forIo(filePath)).writeAsString('long');
+    test('restores a long path after cleanup removed its folders', () async {
+      final temp = await Directory.systemTemp.createTemp('broom_long_undo_');
+      try {
+        final testRoot = p.windows.join(temp.path, 'cache');
+        await Directory(WindowsPath.forIo(testRoot)).create(recursive: true);
+        final deepRoot = _deepRoot(testRoot, 3);
+        final filePath = p.windows.join(deepRoot, 'removed.bin');
+        await Directory(WindowsPath.forIo(deepRoot)).create(recursive: true);
+        await File(WindowsPath.forIo(filePath)).writeAsString('long');
 
-          final quarantine = QuarantineService(
-            quarantineRoot: p.windows.join(temp.path, 'quarantine'),
-            guard: PathGuard(protectedRoots: const []),
-            metadataAccess: FakeFileMetadataAccess(),
-          );
-          final stat = await File(WindowsPath.forIo(filePath)).stat();
-          final report = await quarantine.clean([
-            JunkItem(
-              ruleId: 'test.long',
-              rootPath: testRoot,
-              path: filePath,
-              size: stat.size,
-              modified: stat.modified,
-            ),
-          ]);
-          expect(report.movedCount, 1);
-          await Directory(WindowsPath.forIo(deepRoot)).delete(recursive: true);
+        final quarantine = QuarantineService(
+          quarantineRoot: p.windows.join(temp.path, 'quarantine'),
+          guard: PathGuard(protectedRoots: const []),
+          metadataAccess: FakeFileMetadataAccess(),
+        );
+        final stat = await File(WindowsPath.forIo(filePath)).stat();
+        final report = await quarantine.clean([
+          JunkItem(
+            ruleId: 'test.long',
+            rootPath: testRoot,
+            path: filePath,
+            size: stat.size,
+            modified: stat.modified,
+          ),
+        ]);
+        expect(report.movedCount, 1);
+        expect(report.removedDirectoryCount, 3);
+        expect(await Directory(WindowsPath.forIo(deepRoot)).exists(), isFalse);
 
-          final undo = await quarantine.undo(report.sessionId!);
-          expect(undo.restoredCount, 1, reason: '${undo.failures}');
-          expect(
-            await File(WindowsPath.forIo(filePath)).readAsString(),
-            'long',
-          );
-        } finally {
-          await _deleteTreeQuietly(temp.path);
-        }
-      },
-      skip: _windowsOnly,
-    );
+        final undo = await quarantine.undo(report.sessionId!);
+        expect(undo.restoredCount, 1, reason: '${undo.failures}');
+        expect(await File(WindowsPath.forIo(filePath)).readAsString(), 'long');
+      } finally {
+        await _deleteTreeQuietly(temp.path);
+      }
+    }, skip: _windowsOnly);
   });
 
   group('UNC', () {

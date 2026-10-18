@@ -34,6 +34,7 @@ class CleanReport {
     this.skippedCount = 0,
     this.skips = const [],
     this.remainingCount = 0,
+    this.removedDirectoryCount = 0,
   });
 
   final String? sessionId;
@@ -50,6 +51,10 @@ class CleanReport {
   final List<CleanFailure> failures;
   final bool cancelled;
   final int remainingCount;
+
+  /// Empty directories below the rule roots that were removed after their
+  /// files moved to quarantine. Undo recreates them from the session records.
+  final int removedDirectoryCount;
 
   bool get resumable => remainingCount > 0;
 
@@ -72,6 +77,9 @@ class UndoReport {
     required this.sessionRemoved,
     this.metadataFailureCount = 0,
     this.metadataWarnings = const [],
+    this.recreatedDirectoryCount = 0,
+    this.directoryFailureCount = 0,
+    this.directoryWarnings = const [],
   });
 
   final int restoredCount;
@@ -86,6 +94,9 @@ class UndoReport {
   final bool sessionRemoved;
   final int metadataFailureCount;
   final List<CleanFailure> metadataWarnings;
+  final int recreatedDirectoryCount;
+  final int directoryFailureCount;
+  final List<CleanFailure> directoryWarnings;
 
   bool get hasPending =>
       conflictCount > 0 || failureCount > 0 || integrityFailureCount > 0;

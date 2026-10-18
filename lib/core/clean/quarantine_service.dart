@@ -156,6 +156,9 @@ class QuarantineService {
     final previousFailureCount = (meta['failureCount'] as num?)?.toInt() ?? 0;
 
     if (remaining.isEmpty) {
+      final removedDirectoryCount = await _tryRemoveEmptyDirectories(
+        sessionDir,
+      );
       final outcome = await _finalizeSession(
         sessionDir: sessionDir,
         sessionId: sessionId,
@@ -171,6 +174,7 @@ class QuarantineService {
         failureCount: 0,
         failures: const [],
         cancelled: false,
+        removedDirectoryCount: removedDirectoryCount,
       );
     }
 
@@ -224,6 +228,7 @@ class QuarantineService {
     var skippedCount = 0;
     var movedCount = 0;
     var movedBytes = 0;
+    var removedDirectoryCount = 0;
     var processed = 0;
     var cancelled = false;
     var lastReportAt = DateTime.fromMillisecondsSinceEpoch(0);
@@ -280,6 +285,7 @@ class QuarantineService {
       failures: List.unmodifiable(failures),
       cancelled: cancelled,
       remainingCount: items.length - processed,
+      removedDirectoryCount: removedDirectoryCount,
     );
 
     var sessionRemoved = false;
@@ -408,6 +414,10 @@ class QuarantineService {
       await entriesFile.close();
       entriesFile = null;
 
+      if (!cancelled) {
+        removedDirectoryCount = await _tryRemoveEmptyDirectories(sessionDir);
+      }
+
       final outcome = await _finalizeSession(
         sessionDir: sessionDir,
         sessionId: sessionId,
@@ -447,6 +457,142 @@ class QuarantineService {
       }
       report(force: true);
     }
+  }
+
+  Future<int> _tryRemoveEmptyDirectories(Directory sessionDir) async {
+    try {
+      return await _removeEmptyDirectories(sessionDir);
+    } catch (_) {
+      // Empty-directory cleanup is best-effort; moved files stay undoable.
+      return 0;
+    }
+  }
+
+  /// Removes only directories below the rule roots that are empty after this
+  /// session's files moved out. A directory is considered only when it is a
+  /// strict ancestor of a moved file, so directories that were already empty
+  /// before cleanup are left untouched.
+  Future<int> _removeEmptyDirectories(Directory sessionDir) async {
+    final entries = await _readEntries(sessionDir);
+    if (entries.isEmpty) return 0;
+
+    final candidates = <String, _RemovedDirectory>{};
+    for (final entry in entries) {
+      var directory = p.windows.dirname(entry.originalPath);
+      while (guard.allows(path: directory, root: entry.rootPath)) {
+        final key = _key(directory);
+        candidates.putIfAbsent(
+          key,
+          () => _RemovedDirectory(path: directory, rootPath: entry.rootPath),
+        );
+        final parent = p.windows.dirname(directory);
+        if (parent == directory) break;
+        directory = parent;
+      }
+    }
+    if (candidates.isEmpty) return 0;
+
+    final recorded = {
+      for (final directory in await _readRemovedDirectories(sessionDir))
+        _key(directory.path),
+    };
+    final ordered = candidates.values.toList()
+      ..sort((a, b) => b.path.length.compareTo(a.path.length));
+
+    var removedCount = 0;
+    RandomAccessFile? recordFile;
+    try {
+      recordFile = await File(
+        p.windows.join(sessionDir.path, 'removed_dirs.jsonl'),
+      ).open(mode: FileMode.append);
+
+      for (final directory in ordered) {
+        if (_exclusions.excludes(directory.path)) continue;
+        if (_isInsideQuarantine(directory.path)) continue;
+        if (!await _isDirectoryEmpty(directory.path)) continue;
+
+        // Record before deleting so a crash can never lose a directory that
+        // undo would need to recreate.
+        final key = _key(directory.path);
+        final alreadyRecorded = recorded.contains(key);
+        final recordStart = await recordFile.position();
+        if (!alreadyRecorded) {
+          try {
+            await recordFile.writeString(
+              '${jsonEncode({'path': directory.path, 'rootPath': directory.rootPath})}\n',
+            );
+            await recordFile.flush();
+          } on FileSystemException {
+            continue;
+          }
+        }
+
+        try {
+          // Non-recursive so content that appeared after the emptiness check
+          // is never deleted.
+          await Directory(WindowsPath.forIo(directory.path)).delete();
+          removedCount++;
+          recorded.add(key);
+        } on FileSystemException {
+          if (!alreadyRecorded) {
+            try {
+              await recordFile.truncate(recordStart);
+              await recordFile.setPosition(recordStart);
+              await recordFile.flush();
+            } on FileSystemException {
+              // An extra record only causes a no-op recreation during undo.
+            }
+          }
+        }
+      }
+    } on FileSystemException {
+      // Every removal is preceded by a record; stopping early is safe.
+    } finally {
+      try {
+        await recordFile?.close();
+      } on FileSystemException {
+        // Nothing else to do.
+      }
+    }
+    return removedCount;
+  }
+
+  static bool _isRelatedToEntries(
+    _RemovedDirectory directory,
+    List<_StoredEntry> entries,
+  ) {
+    final directoryKey = _key(directory.path);
+    final rootKey = _key(directory.rootPath);
+    for (final entry in entries) {
+      if (_key(entry.rootPath) != rootKey) continue;
+      final entryKey = _key(entry.originalPath);
+      if (entryKey != directoryKey && _isWithinKey(directoryKey, entryKey)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static Future<bool> _isDirectoryEmpty(String path) async {
+    try {
+      final type = await FileSystemEntity.type(
+        WindowsPath.forIo(path),
+        followLinks: false,
+      );
+      if (type != FileSystemEntityType.directory) return false;
+      await for (final _ in Directory(
+        WindowsPath.forIo(path),
+      ).list(followLinks: false)) {
+        return false;
+      }
+      return true;
+    } on FileSystemException {
+      return false;
+    }
+  }
+
+  bool _isInsideQuarantine(String path) {
+    return _isWithinKey(_key(quarantineRoot), _key(path));
   }
 
   Future<({bool sessionRemoved, int remainingCount})> _finalizeSession({
@@ -506,6 +652,7 @@ class QuarantineService {
         : entries
               .where((entry) => storedNames.contains(entry.storedName))
               .toList();
+    final removedDirectories = await _readRemovedDirectories(sessionDir);
     final filesDir = p.windows.join(sessionDir.path, 'files');
     final failures = <CleanFailure>[];
     var failureCount = 0;
@@ -517,7 +664,10 @@ class QuarantineService {
     var missingCount = 0;
     var integrityFailureCount = 0;
     var metadataFailureCount = 0;
+    var recreatedDirectoryCount = 0;
+    var directoryFailureCount = 0;
     final metadataWarnings = <CleanFailure>[];
+    final directoryWarnings = <CleanFailure>[];
 
     void recordFailure(String path, Object error) {
       failureCount++;
@@ -530,6 +680,15 @@ class QuarantineService {
       metadataFailureCount++;
       if (metadataWarnings.length < _maxFailureDetails) {
         metadataWarnings.add(
+          CleanFailure(path: path, reason: _failureReason(error)),
+        );
+      }
+    }
+
+    void recordDirectoryWarning(String path, Object error) {
+      directoryFailureCount++;
+      if (directoryWarnings.length < _maxFailureDetails) {
+        directoryWarnings.add(
           CleanFailure(path: path, reason: _failureReason(error)),
         );
       }
@@ -568,6 +727,48 @@ class QuarantineService {
       } on FileSystemException {
         // If the marker cannot be written, a retry will see the restored
         // original path and skip it as a conflict instead of overwriting.
+      }
+    }
+
+    final directoryTargets = <String, _RemovedDirectory>{};
+    for (final directory in removedDirectories) {
+      if (!_isRelatedToEntries(directory, entries)) continue;
+      directoryTargets.putIfAbsent(_key(directory.path), () => directory);
+    }
+    final orderedDirectories = directoryTargets.values.toList()
+      ..sort((a, b) => a.path.length.compareTo(b.path.length));
+    for (final directory in orderedDirectories) {
+      if (_exclusions.excludes(directory.path)) {
+        recordDirectoryWarning(directory.path, '目录位于排除列表中，未重建');
+        continue;
+      }
+      if (!guard.allows(path: directory.path, root: directory.rootPath)) {
+        recordDirectoryWarning(directory.path, '目录未通过安全检查');
+        continue;
+      }
+
+      FileSystemEntityType type;
+      try {
+        type = await FileSystemEntity.type(
+          WindowsPath.forIo(directory.path),
+          followLinks: false,
+        );
+      } on FileSystemException catch (error) {
+        recordDirectoryWarning(directory.path, error);
+        continue;
+      }
+      if (type == FileSystemEntityType.directory) continue;
+      if (type != FileSystemEntityType.notFound) {
+        recordDirectoryWarning(directory.path, '路径已被其他文件占用，无法重建目录');
+        continue;
+      }
+
+      try {
+        await Directory(WindowsPath.forIo(directory.path))
+            .create(recursive: true);
+        recreatedDirectoryCount++;
+      } on FileSystemException catch (error) {
+        recordDirectoryWarning(directory.path, error);
       }
     }
 
@@ -719,6 +920,9 @@ class QuarantineService {
       sessionRemoved: pendingCount == 0,
       metadataFailureCount: metadataFailureCount,
       metadataWarnings: List.unmodifiable(metadataWarnings),
+      recreatedDirectoryCount: recreatedDirectoryCount,
+      directoryFailureCount: directoryFailureCount,
+      directoryWarnings: List.unmodifiable(directoryWarnings),
     );
   }
 
@@ -1075,6 +1279,16 @@ class QuarantineService {
     return '${sequence.toString().padLeft(6, '0')}_$name';
   }
 
+  static String _key(String path) => PathGuard.normalize(path).toLowerCase();
+
+  static bool _isWithinKey(String rootKey, String candidateKey) {
+    if (candidateKey == rootKey) return true;
+    final prefix = rootKey.endsWith(p.windows.separator)
+        ? rootKey
+        : '$rootKey${p.windows.separator}';
+    return candidateKey.startsWith(prefix);
+  }
+
   static String _failureReason(Object error) => describeFilesystemError(error);
 
   static bool _isSkippableError(Object error) {
@@ -1374,6 +1588,45 @@ class QuarantineService {
     return entries;
   }
 
+  Future<List<_RemovedDirectory>> _readRemovedDirectories(
+    Directory sessionDir,
+  ) async {
+    final file = File(p.windows.join(sessionDir.path, 'removed_dirs.jsonl'));
+    if (!await file.exists()) return const [];
+    final directories = <_RemovedDirectory>[];
+    try {
+      final lines = await file.readAsLines();
+      for (final line in lines) {
+        if (line.trim().isEmpty) continue;
+        try {
+          final map = jsonDecode(line);
+          if (map is! Map<String, dynamic>) continue;
+          final path = map['path'];
+          final rootPath = map['rootPath'];
+          if (path is! String ||
+              path.isEmpty ||
+              !p.windows.isAbsolute(path) ||
+              rootPath is! String ||
+              rootPath.isEmpty ||
+              !p.windows.isAbsolute(rootPath)) {
+            continue;
+          }
+          directories.add(
+            _RemovedDirectory(
+              path: WindowsPath.canonical(path),
+              rootPath: WindowsPath.canonical(rootPath),
+            ),
+          );
+        } on FormatException {
+          continue;
+        }
+      }
+    } on FileSystemException {
+      return directories;
+    }
+    return directories;
+  }
+
   static FileMetadata? _parseMetadata(Map<String, dynamic> map) {
     final rawModified = map['modified'];
     final modified = rawModified is String
@@ -1557,6 +1810,13 @@ class QuarantineService {
         return null;
     }
   }
+}
+
+class _RemovedDirectory {
+  const _RemovedDirectory({required this.path, required this.rootPath});
+
+  final String path;
+  final String rootPath;
 }
 
 class _StoredEntry {

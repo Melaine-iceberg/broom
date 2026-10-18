@@ -2248,6 +2248,18 @@ class _DoneView extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (report.removedDirectoryCount > 0) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    context.tf('已清理 {count} 个空缓存目录。', {
+                      'count': report.removedDirectoryCount,
+                    }),
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
                 if (report.skippedCount > 0) ...[
                   const SizedBox(height: 14),
                   Container(
@@ -2602,6 +2614,22 @@ class _UndoResultDialog extends StatelessWidget {
             Text(
               strings.tf('{count} 个文件的内容已恢复，但时间戳、只读属性或 ACL 未能完全还原。', {
                 'count': report.metadataFailureCount,
+              }),
+            ),
+          ],
+          if (report.recreatedDirectoryCount > 0) ...[
+            const SizedBox(height: 8),
+            Text(
+              strings.tf('已重建 {count} 个空缓存目录。', {
+                'count': report.recreatedDirectoryCount,
+              }),
+            ),
+          ],
+          if (report.directoryFailureCount > 0) ...[
+            const SizedBox(height: 8),
+            Text(
+              strings.tf('{count} 个空目录未能重建。', {
+                'count': report.directoryFailureCount,
               }),
             ),
           ],
