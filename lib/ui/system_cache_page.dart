@@ -47,6 +47,9 @@ class _SystemCachePageState extends State<SystemCachePage> {
       fileCount: controller.selectedCount,
       bytes: controller.selectedBytes,
       services: controller.selectedServices,
+      includesWindowsOld: controller.selectedResults.any(
+        (result) => result.rule.location == SystemCacheLocation.windowsOld,
+      ),
     );
     if (confirmed && mounted) {
       await controller.cleanSelected();
@@ -75,7 +78,7 @@ class _SystemCachePageState extends State<SystemCachePage> {
                 Text(context.t('系统级缓存')),
                 const SizedBox(height: 1),
                 Text(
-                  context.t('Windows 更新与传递优化 · 需管理员权限'),
+                  context.t('Windows 更新、传递优化与 Windows.old · 需管理员权限'),
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -224,7 +227,7 @@ class _AdminGate extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 context.t(
-                  'Windows 更新缓存位于系统目录中。Broom 会通过 Windows UAC '
+                  '系统级缓存与 Windows.old 位于受保护的系统位置。Broom 会通过 Windows UAC '
                   '以管理员身份重新启动，只在新的管理员窗口中进行扫描和清理。',
                 ),
                 style: theme.textTheme.bodySmall?.copyWith(
@@ -363,8 +366,9 @@ class _ReviewWarning extends StatelessWidget {
           Expanded(
             child: Text(
               context.t(
-                '系统级缓存属于 Review 级操作：被清理的缓存会永久删除，'
-                '不会进入 Broom 隔离区，也没有撤销入口。'
+                '系统级缓存属于 Review 级操作：被清理的内容会永久删除，'
+                '不会进入 Broom 隔离区，也没有撤销入口。Windows.old 还会失去系统回滚能力，'
+                '并可能包含需要备份的旧用户配置文件副本。'
                 '如有正在下载或安装的 Windows 更新，建议完成后再清理。',
               ),
               style: theme.textTheme.bodySmall?.copyWith(
@@ -488,8 +492,8 @@ class _BoundaryNote extends StatelessWidget {
           Text(
             context.t(
               'Broom 只使用 Windows 原生 API 定位缓存目录，不接受任意路径输入，'
-              '并且只删除这些目录内的普通文件。更新历史、系统设置、'
-              'Windows.old 与用户文档不在处理范围内。',
+              '并且只删除这些目录内的普通文件。Windows.old 仅在单独规则中处理，'
+              '其中可能包含旧用户配置文件副本；当前系统、更新历史与系统还原点不在处理范围内。',
             ),
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
@@ -569,7 +573,7 @@ class _IdleView extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(
                           context.t(
-                            '扫描 Windows 更新与传递优化的下载缓存，'
+                            '扫描 Windows 更新、传递优化缓存与 Windows.old，'
                             '确认后永久删除以释放磁盘空间。',
                           ),
                           style: theme.textTheme.bodySmall?.copyWith(
@@ -693,6 +697,14 @@ class _SystemRuleCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 3),
+                    Text(
+                      context.strings.systemRuleCategory(rule),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.tertiary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
                     Text(
                       result == null
                           ? context.strings.systemRuleDescription(rule)
@@ -1532,6 +1544,7 @@ IconData _ruleIcon(String ruleId) {
   return switch (ruleId) {
     'windows.update_cache' => Icons.system_update_alt_rounded,
     'windows.delivery_optimization' => Icons.hub_outlined,
+    'windows.old' => Icons.history_rounded,
     _ => Icons.admin_panel_settings_outlined,
   };
 }

@@ -62,6 +62,10 @@ class RuleDetailPage extends StatelessWidget {
               ],
             ),
             actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: RiskBadge(risk: rule.risk),
+              ),
               if (rule.audit != null)
                 IconButton(
                   key: ValueKey('rule-audit-${rule.id}'),

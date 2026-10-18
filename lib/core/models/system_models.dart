@@ -1,7 +1,7 @@
 import 'clean_models.dart';
 import 'cleaner_rule.dart';
 
-enum SystemCacheLocation { windowsUpdate, deliveryOptimization }
+enum SystemCacheLocation { windowsUpdate, deliveryOptimization, windowsOld }
 
 class SystemServiceSpec {
   const SystemServiceSpec({
@@ -53,14 +53,17 @@ class SystemCacheRoots {
   const SystemCacheRoots({
     required this.windowsUpdateDownload,
     required this.deliveryOptimizationCache,
+    required this.windowsOld,
   });
 
   final String windowsUpdateDownload;
   final String deliveryOptimizationCache;
+  final String windowsOld;
 
   String pathFor(SystemCacheLocation location) => switch (location) {
     SystemCacheLocation.windowsUpdate => windowsUpdateDownload,
     SystemCacheLocation.deliveryOptimization => deliveryOptimizationCache,
+    SystemCacheLocation.windowsOld => windowsOld,
   };
 }
 

@@ -2,6 +2,7 @@ import 'package:broom/app.dart';
 import 'package:broom/core/models/clean_models.dart';
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/models/system_models.dart';
+import 'package:broom/core/rules/windows_system_rules.dart';
 import 'package:broom/ui/system_cache_controller.dart';
 import 'package:broom/ui/system_cache_page.dart';
 import 'package:flutter/material.dart';
@@ -43,9 +44,14 @@ SystemCacheController _controller({
   required FakeSystemAccess access,
   FakeSystemCacheCleaner? cleaner,
   FakeScanService? scanner,
+  List<SystemCacheRule>? rules,
+  List<String> Function(SystemCacheRule rule)? resolver,
 }) {
   final controller = SystemCacheController(
-    platform: FakeSystemCachePlatform(resolver: (_) => [_updateRoot]),
+    platform: FakeSystemCachePlatform(
+      rules: rules,
+      resolver: resolver ?? (_) => [_updateRoot],
+    ),
     access: access,
     cleaner: cleaner ?? FakeSystemCacheCleaner(),
     scanServiceFactory: () => scanner ?? FakeScanService(),
@@ -146,6 +152,70 @@ void main() {
     expect(controller.phase, SystemCachePhase.done);
     expect(find.text('清理完成'), findsOneWidget);
     expect(find.textContaining('2.0 KB'), findsWidgets);
+  });
+
+  testWidgets('warns separately before permanently deleting Windows.old', (
+    tester,
+  ) async {
+    const windowsOldRoot = r'C:\Windows.old';
+    final rule = windowsSystemCacheRules.singleWhere(
+      (rule) => rule.location == SystemCacheLocation.windowsOld,
+    );
+    final scanner = FakeScanService(
+      result: ScanResult(
+        items: [
+          JunkItem(
+            ruleId: rule.id,
+            rootPath: windowsOldRoot,
+            path: p.windows.join(windowsOldRoot, r'Windows\System32\old.dll'),
+            size: 4096,
+            modified: DateTime(2026, 1, 1),
+          ),
+        ],
+        scannedFiles: 1,
+        directoryErrors: 0,
+        truncated: false,
+        cancelled: false,
+      ),
+    );
+    final cleaner = FakeSystemCacheCleaner(
+      report: const SystemCleanReport(
+        deletedCount: 1,
+        deletedBytes: 4096,
+        failureCount: 0,
+        failures: [],
+        cancelled: false,
+        serviceIssues: [],
+      ),
+    );
+    final controller = _controller(
+      access: FakeSystemAccess(),
+      cleaner: cleaner,
+      scanner: scanner,
+      rules: [rule],
+      resolver: (_) => [windowsOldRoot],
+    );
+    await _pumpPage(tester, controller);
+
+    await tester.tap(find.text('扫描系统缓存'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byType(Checkbox).first);
+    await tester.tap(find.byType(Checkbox).first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, '永久删除 1 项'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('所选内容包含 Windows.old'), findsOneWidget);
+    expect(find.textContaining('失去回滚到上一版本 Windows 的能力'), findsWidgets);
+    await tester.tap(find.text('我明白系统缓存将被永久删除，且无法撤销'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '永久删除'));
+    await tester.pumpAndSettle();
+
+    expect(cleaner.calls, 1);
+    expect(cleaner.serviceNames, isEmpty);
+    expect(controller.phase, SystemCachePhase.done);
   });
 
   testWidgets('separates skipped files from failures in the done view', (

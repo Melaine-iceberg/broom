@@ -66,6 +66,11 @@ class JunkScanner {
     for (var jobIndex = 0; jobIndex < jobs.length; jobIndex++) {
       final job = jobs[jobIndex];
       currentRuleId = job.ruleId;
+      final jobExcludedKeys = {
+        for (final path in job.excludedRoots) _key(path),
+      };
+      bool isJobExcluded(String key) =>
+          jobExcludedKeys.any((excluded) => _isWithin(excluded, key));
       report(force: true, jobIndex: jobIndex);
 
       for (final rawRoot in job.roots) {
@@ -78,7 +83,7 @@ class JunkScanner {
           continue;
         }
         final rootKey = _key(root);
-        if (_isExcluded(rootKey)) continue;
+        if (_isExcluded(rootKey) || isJobExcluded(rootKey)) continue;
 
         final pending = Queue<({String directory, String root})>();
         pending.add((directory: root, root: root));
@@ -90,7 +95,9 @@ class JunkScanner {
           }
           final current = pending.removeLast();
           final directoryKey = _key(current.directory);
-          if (_isExcluded(directoryKey)) continue;
+          if (_isExcluded(directoryKey) || isJobExcluded(directoryKey)) {
+            continue;
+          }
 
           try {
             await for (final entity in Directory(
@@ -103,7 +110,7 @@ class JunkScanner {
               if (entity is Link) continue;
               final entityPath = WindowsPath.canonical(entity.path);
               final entityKey = _key(entityPath);
-              if (_isExcluded(entityKey)) continue;
+              if (_isExcluded(entityKey) || isJobExcluded(entityKey)) continue;
 
               if (entity is Directory) {
                 pending.add((directory: entityPath, root: current.root));

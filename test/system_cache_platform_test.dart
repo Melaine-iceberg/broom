@@ -28,6 +28,7 @@ void main() {
   late Directory temp;
   late Directory updateRoot;
   late Directory deliveryRoot;
+  late Directory windowsOldRoot;
 
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('broom_system_platform_');
@@ -46,6 +47,8 @@ void main() {
       ),
     );
     await deliveryRoot.create(recursive: true);
+    windowsOldRoot = Directory(p.join(temp.path, 'Windows.old'));
+    await windowsOldRoot.create(recursive: true);
   });
 
   tearDown(() async {
@@ -54,11 +57,16 @@ void main() {
     }
   });
 
-  _FakeAccess accessFor({String? update, String? delivery}) {
+  _FakeAccess accessFor({
+    String? update,
+    String? delivery,
+    String? windowsOld,
+  }) {
     return _FakeAccess(
       SystemCacheRoots(
         windowsUpdateDownload: update ?? updateRoot.path,
         deliveryOptimizationCache: delivery ?? deliveryRoot.path,
+        windowsOld: windowsOld ?? windowsOldRoot.path,
       ),
     );
   }
@@ -75,6 +83,32 @@ void main() {
     final roots = await platform.resolveRoots(windowsSystemCacheRules[1]);
 
     expect(roots, [PathGuard.normalize(deliveryRoot.path)]);
+  });
+
+  test('resolves the declared Windows.old directory', () async {
+    final platform = WindowsSystemCachePlatform(access: accessFor());
+    final roots = await platform.resolveRoots(windowsSystemCacheRules[2]);
+
+    expect(roots, [PathGuard.normalize(windowsOldRoot.path)]);
+  });
+
+  test('rejects a Windows.old-like path with the wrong name', () async {
+    final wrong = Directory(p.join(temp.path, 'Windows.old.000'));
+    await wrong.create(recursive: true);
+    final platform = WindowsSystemCachePlatform(
+      access: accessFor(windowsOld: wrong.path),
+    );
+
+    await expectLater(
+      platform.resolveRoots(windowsSystemCacheRules[2]),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains('不符合规则声明'),
+        ),
+      ),
+    );
   });
 
   test('returns no roots when the cache directory does not exist', () async {
@@ -148,10 +182,11 @@ void main() {
   });
 
   test('system rules stay review level with fixed cache locations', () {
-    expect(windowsSystemCacheRules, hasLength(2));
+    expect(windowsSystemCacheRules, hasLength(3));
     expect(windowsSystemCacheRules.map((rule) => rule.location), [
       SystemCacheLocation.windowsUpdate,
       SystemCacheLocation.deliveryOptimization,
+      SystemCacheLocation.windowsOld,
     ]);
     expect(
       windowsSystemCacheRules.every((rule) => rule.risk == CleanRisk.review),
@@ -162,5 +197,7 @@ void main() {
       'bits',
     ]);
     expect(windowsSystemCacheRules[1].services.single.name, 'dosvc');
+    expect(windowsSystemCacheRules[2].id, 'windows.old');
+    expect(windowsSystemCacheRules[2].services, isEmpty);
   });
 }

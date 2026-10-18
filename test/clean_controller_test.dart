@@ -111,12 +111,18 @@ void main() {
     filePath: p.windows.join(temp.path, 'settings', 'exclusions.json'),
   );
 
-  CleanerRule createRule() => const CleanerRule(
-    id: 'test.rule',
+  CleanerRule createRule({
+    String id = 'test.rule',
+    CleanRisk risk = CleanRisk.safe,
+    List<String> excludedPathPatterns = const [],
+  }) => CleanerRule(
+    id: id,
     title: '测试缓存',
     category: '测试',
     description: '测试规则',
-    pathPatterns: [],
+    risk: risk,
+    pathPatterns: const [],
+    excludedPathPatterns: excludedPathPatterns,
   );
 
   CleanController createController({
@@ -163,6 +169,31 @@ void main() {
       expect(controller.phase, CleanPhase.preview);
     },
   );
+
+  test('forwards per-rule excluded roots to the scanner job', () async {
+    final exclusions = createStore();
+    await exclusions.ensureLoaded();
+    final scanner = _RecordingScanService();
+    final rule = createRule(excludedPathPatterns: ['claimed']);
+    final controller = createController(
+      exclusions: exclusions,
+      scanner: scanner,
+      rules: [rule],
+      rootsByRule: {
+        rule.id: [rootA.path],
+        '${rule.id}.excluded': [rootB.path],
+      },
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    await controller.scan();
+
+    expect(scanner.jobs, hasLength(1));
+    expect(scanner.jobs!.single.excludedRoots, [
+      PathGuard.normalize(rootB.path),
+    ]);
+  });
 
   test('skips scanning when every rule root is excluded', () async {
     final exclusions = createStore();
@@ -321,6 +352,60 @@ void main() {
 
     expect(controller.selectedCount, 2);
     expect(controller.selectedBytesForRule(rule.id), 35);
+  });
+
+  test('scans review rules but leaves them unselected by default', () async {
+    final safeRule = createRule();
+    final reviewRule = createRule(id: 'test.review', risk: CleanRisk.review);
+    final safeItem = JunkItem(
+      ruleId: safeRule.id,
+      rootPath: rootA.path,
+      path: p.windows.join(rootA.path, 'safe.tmp'),
+      size: 10,
+      modified: DateTime(2026, 10, 18),
+    );
+    final reviewItem = JunkItem(
+      ruleId: reviewRule.id,
+      rootPath: rootB.path,
+      path: p.windows.join(rootB.path, 'review.tmp'),
+      size: 25,
+      modified: DateTime(2026, 10, 18),
+    );
+    final scanner = _RecordingScanService(items: [safeItem, reviewItem]);
+    final controller = createController(
+      exclusions: createStore(),
+      scanner: scanner,
+      rules: [safeRule, reviewRule],
+      rootsByRule: {
+        safeRule.id: [rootA.path],
+        reviewRule.id: [rootB.path],
+      },
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    await controller.scan();
+
+    expect(scanner.jobs, hasLength(2));
+    expect(controller.phase, CleanPhase.preview);
+    expect(controller.selectedCount, 1);
+    expect(controller.isItemSelected(safeItem.path), isTrue);
+    expect(controller.isItemSelected(reviewItem.path), isFalse);
+    expect(controller.ruleSelectionValue(reviewRule.id), isFalse);
+    expect(controller.selectedReviewRuleCount, 0);
+    expect(controller.previewReviewRuleCount, 1);
+
+    controller.setRuleSelected(reviewRule.id, true);
+
+    expect(controller.selectedCount, 2);
+    expect(controller.selectedReviewRuleCount, 1);
+    expect(controller.hasSelectedReview, isTrue);
+
+    controller.clearRuleSelection();
+    controller.selectAllRules();
+
+    expect(controller.selectedCount, 2);
+    expect(controller.selectedReviewRuleCount, 1);
   });
 
   test('skips rules disabled in settings', () async {

@@ -60,6 +60,7 @@ class CleanerRule {
     this.risk = CleanRisk.safe,
     this.minAge = Duration.zero,
     this.extensions,
+    this.excludedPathPatterns = const [],
     this.note,
     this.titleEn,
     this.categoryEn,
@@ -76,6 +77,11 @@ class CleanerRule {
   final List<String> pathPatterns;
   final Duration minAge;
   final Set<String>? extensions;
+
+  /// Cache subdirectories claimed by a different rule. When this rule's roots
+  /// overlap another rule with a stricter retention policy, these paths are
+  /// skipped so the owning rule can apply its own filters.
+  final List<String> excludedPathPatterns;
   final String? note;
   final String? titleEn;
   final String? categoryEn;

@@ -542,4 +542,25 @@ const translationsEn = <String, String>{
   '最小化': 'Minimize',
   '最大化': 'Maximize',
   '还原': 'Restore',
+
+  // Rules and review levels
+  'WINDOWS · SAFE + REVIEW 级清理': 'WINDOWS · SAFE + REVIEW CLEANUP',
+  '先扫描预览：Safe 缓存默认勾选，Review 缓存需手动选择。\n所有内容都会先移入隔离区，随时可以撤销。': 'Scan and preview first: safe caches are selected by default, while review caches must be chosen manually.\nEverything goes to quarantine first and can be undone.',
+  'Review 级规则默认不勾选，需要在预览中手动选择。': 'Review rules are not selected by default; choose them manually in the preview.',
+  '扫描结果包含 {count} 条 Review 规则，默认未勾选。勾选后仍需额外确认；文件同样会进入隔离区并可撤销，但可能带来重新下载或首次启动变慢。': 'The results include {count} review rules, which are not selected by default. Selecting one still requires an extra confirmation. Files go to quarantine and can be undone, but may need to be downloaded again or slow the next launch.',
+  '所选内容包含 {count} 条 Review 规则。它们默认不会勾选，清理后仍会进入隔离区并可撤销；但离线数据需要重新下载，首次构建或启动也可能变慢。': 'The selection includes {count} review rules. They are not selected by default; files still go to quarantine and can be undone, but offline data may need to be downloaded again and the next build or launch may be slower.',
+  '我了解 Review 规则的影响，并仍要清理所选内容': 'I understand the impact of review rules and still want to clean the selection',
+  '已选 {count} 条 Review 规则，提交前需要额外确认': '{count, plural, one{# review rule selected; an extra confirmation is required} other{# review rules selected; an extra confirmation is required}}',
+  '清理 Windows 更新、传递优化与 Windows.old，需要管理员权限。': 'Clean Windows Update, Delivery Optimization, and Windows.old. Administrator rights required.',
+  '关闭的规则不会参与扫描，也不会出现在清理结果中。Review 级规则默认扫描但不预选，需要在预览中手动勾选。排除列表仍然优先于所有规则。': 'Disabled rules are skipped and never appear in results. Review rules are scanned but not preselected; choose them manually in the preview. Exclusions still take precedence over every rule.',
+
+  // System caches and Windows.old
+  'Windows 更新、传递优化与 Windows.old · 需管理员权限': 'Windows Update, Delivery Optimization, and Windows.old · Administrator required',
+  '系统级缓存与 Windows.old 位于受保护的系统位置。Broom 会通过 Windows UAC 以管理员身份重新启动，只在新的管理员窗口中进行扫描和清理。': 'System caches and Windows.old live in protected locations. Broom relaunches through Windows UAC and scans or cleans only in the new administrator window.',
+  '系统级缓存属于 Review 级操作：被清理的内容会永久删除，不会进入 Broom 隔离区，也没有撤销入口。Windows.old 还会失去系统回滚能力，并可能包含需要备份的旧用户配置文件副本。如有正在下载或安装的 Windows 更新，建议完成后再清理。': 'System caches are a review-level operation: cleaned content is permanently deleted, never enters Broom quarantine, and cannot be undone. Deleting Windows.old also removes the ability to roll back Windows and may contain old user-profile copies that need backing up. If an update is downloading or installing, finish it before cleaning.',
+  'Broom 只使用 Windows 原生 API 定位缓存目录，不接受任意路径输入，并且只删除这些目录内的普通文件。Windows.old 仅在单独规则中处理，其中可能包含旧用户配置文件副本；当前系统、更新历史与系统还原点不在处理范围内。': 'Broom locates cache folders only through native Windows APIs and never accepts arbitrary paths. It deletes only regular files inside those folders. Windows.old is handled by a separate rule and may contain old user-profile copies; the current system, update history, and restore points are out of scope.',
+  '扫描 Windows 更新、传递优化缓存与 Windows.old，确认后永久删除以释放磁盘空间。': 'Scan Windows Update, Delivery Optimization, and Windows.old, then permanently delete after confirmation to free space.',
+  '这些系统缓存不会进入 Broom 隔离区，删除后无法撤销。更新与共享缓存会在需要时重新下载。': 'These system caches do not enter Broom quarantine and cannot be undone. Update and sharing caches are downloaded again when needed.',
+  '所选内容包含 Windows.old。删除后将失去回滚到上一版本 Windows 的能力，并可能移除其中保留的旧用户配置文件副本、旧程序和系统设置，且无法恢复。请先备份所需文件；当前系统的个人文件、还原点和更新历史不受影响。': 'The selection includes Windows.old. Deleting it removes the ability to roll back to the previous Windows version and may remove old user-profile copies, programs, and system settings retained there, with no recovery. Back up needed files first; personal files in the current system, restore points, and update history are unaffected.',
+  '不会删除当前 Windows、个人文件、系统还原点或更新历史。': 'The current Windows installation, personal files, restore points, and update history are not deleted.',
 };

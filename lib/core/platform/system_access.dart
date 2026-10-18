@@ -63,15 +63,19 @@ class MethodChannelSystemAccess implements SystemAccess {
       }
       final windowsUpdate = result['windowsUpdate'];
       final deliveryOptimization = result['deliveryOptimization'];
+      final windowsOld = result['windowsOld'];
       if (windowsUpdate is! String ||
           deliveryOptimization is! String ||
+          windowsOld is! String ||
           windowsUpdate.isEmpty ||
-          deliveryOptimization.isEmpty) {
+          deliveryOptimization.isEmpty ||
+          windowsOld.isEmpty) {
         throw const SystemAccessException('系统缓存目录返回了无法识别的数据。');
       }
       return SystemCacheRoots(
         windowsUpdateDownload: windowsUpdate,
         deliveryOptimizationCache: deliveryOptimization,
+        windowsOld: windowsOld,
       );
     } on PlatformException catch (error) {
       throw _mapError(error, '无法定位系统缓存目录。');

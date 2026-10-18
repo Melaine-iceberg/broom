@@ -9,6 +9,7 @@ Future<bool> showSystemCacheConfirmDialog(
   required int fileCount,
   required int bytes,
   required List<SystemServiceSpec> services,
+  bool includesWindowsOld = false,
 }) async {
   final confirmed = await showDialog<bool>(
     context: context,
@@ -16,6 +17,7 @@ Future<bool> showSystemCacheConfirmDialog(
       fileCount: fileCount,
       bytes: bytes,
       services: services,
+      includesWindowsOld: includesWindowsOld,
     ),
   );
   return confirmed ?? false;
@@ -27,11 +29,13 @@ class SystemCacheConfirmDialog extends StatefulWidget {
     required this.fileCount,
     required this.bytes,
     required this.services,
+    this.includesWindowsOld = false,
   });
 
   final int fileCount;
   final int bytes;
   final List<SystemServiceSpec> services;
+  final bool includesWindowsOld;
 
   @override
   State<SystemCacheConfirmDialog> createState() =>
@@ -67,14 +71,35 @@ class _SystemCacheConfirmDialogState extends State<SystemCacheConfirmDialog> {
             const SizedBox(height: 10),
             Text(
               context.t(
-                '这些缓存不会进入 Broom 隔离区，删除后无法撤销。'
-                'Windows 会在需要时重新下载更新或共享内容。',
+                '这些系统缓存不会进入 Broom 隔离区，删除后无法撤销。'
+                '更新与共享缓存会在需要时重新下载。',
               ),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onSurfaceVariant,
                 height: 1.5,
               ),
             ),
+            if (widget.includesWindowsOld) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: scheme.errorContainer.withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  context.t(
+                    '所选内容包含 Windows.old。删除后将失去回滚到上一版本 Windows '
+                    '的能力，并可能移除其中保留的旧用户配置文件副本、旧程序和系统设置，'
+                    '且无法恢复。请先备份所需文件；当前系统的个人文件、还原点和更新历史不受影响。',
+                  ),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onErrorContainer,
+                    height: 1.5,
+                  ),
+                ),
+              ),
+            ],
             if (widget.services.isNotEmpty) ...[
               const SizedBox(height: 10),
               Text(
@@ -89,7 +114,7 @@ class _SystemCacheConfirmDialogState extends State<SystemCacheConfirmDialog> {
             ],
             const SizedBox(height: 8),
             Text(
-              context.t('不会删除 Windows 更新历史、系统设置或 Windows.old。'),
+              context.t('不会删除当前 Windows、个人文件、系统还原点或更新历史。'),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onSurfaceVariant,
                 height: 1.5,

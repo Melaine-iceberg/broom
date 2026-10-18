@@ -119,6 +119,13 @@ void SendSystemCacheRoots(
     return;
   }
 
+  const std::wstring drive_root = DirectoryOf(windows_dir);
+  if (drive_root.empty()) {
+    SendWindowsError(std::move(result), "system_cache_roots_failed",
+                     ERROR_PATH_NOT_FOUND);
+    return;
+  }
+
   const std::wstring program_data =
       KnownFolderPath(FOLDERID_ProgramData);
   if (program_data.empty()) {
@@ -131,12 +138,15 @@ void SendSystemCacheRoots(
       windows_dir + L"\\SoftwareDistribution\\Download";
   const std::wstring delivery_cache =
       program_data + L"\\Microsoft\\Windows\\DeliveryOptimization\\Cache";
+  const std::wstring windows_old = drive_root + L"\\Windows.old";
 
   flutter::EncodableMap map;
   map[flutter::EncodableValue("windowsUpdate")] =
       flutter::EncodableValue(Utf8FromUtf16(update_cache.c_str()));
   map[flutter::EncodableValue("deliveryOptimization")] =
       flutter::EncodableValue(Utf8FromUtf16(delivery_cache.c_str()));
+  map[flutter::EncodableValue("windowsOld")] =
+      flutter::EncodableValue(Utf8FromUtf16(windows_old.c_str()));
   result->Success(flutter::EncodableValue(map));
 }
 

@@ -65,6 +65,7 @@ void main() {
       resolver: (rule) => switch (rule.location) {
         SystemCacheLocation.windowsUpdate => [updateRoot],
         SystemCacheLocation.deliveryOptimization => [deliveryRoot],
+        SystemCacheLocation.windowsOld => const [],
       },
     );
     scanner = FakeScanService(

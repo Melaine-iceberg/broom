@@ -111,6 +111,40 @@ void main() {
     expect(p.windows.basename(result.items.single.path), 'dump.dmp');
   });
 
+  test('skips paths claimed by another job through excludedRoots', () async {
+    final broad = await createFile(
+      root,
+      'broad.tmp',
+      'broad',
+      age: const Duration(days: 2),
+    );
+    final claimedRoot = Directory(p.windows.join(root.path, 'claimed'));
+    final claimed = await createFile(
+      claimedRoot,
+      'old.tmp',
+      'claimed',
+      age: const Duration(days: 2),
+    );
+
+    final scanner = JunkScanner(
+      jobs: [
+        ScanJob(
+          ruleId: 'test.broad',
+          roots: [root.path],
+          excludedRoots: [claimedRoot.path],
+        ),
+        ScanJob(ruleId: 'test.claimed', roots: [claimedRoot.path]),
+      ],
+      clock: () => now,
+    );
+    final result = await scanner.scan();
+
+    expect(result.items, hasLength(2));
+    final byPath = {for (final item in result.items) item.path: item.ruleId};
+    expect(byPath[broad.path], 'test.broad');
+    expect(byPath[claimed.path], 'test.claimed');
+  });
+
   test('deduplicates files matched by overlapping jobs', () async {
     await createFile(root, 'a.tmp', 'a', age: const Duration(days: 2));
     await createFile(root, 'b.tmp', 'b', age: const Duration(days: 2));

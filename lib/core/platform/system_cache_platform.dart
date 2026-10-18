@@ -61,6 +61,7 @@ class WindowsSystemCachePlatform implements SystemCachePlatform {
         basename == 'download' && parent == 'softwaredistribution',
       SystemCacheLocation.deliveryOptimization =>
         basename == 'cache' && parent == 'deliveryoptimization',
+      SystemCacheLocation.windowsOld => basename == 'windows.old',
     };
   }
 }

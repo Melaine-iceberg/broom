@@ -26,16 +26,16 @@ const windowsSystemCacheRules = <SystemCacheRule>[
         labelEn: 'Background Intelligent Transfer Service (BITS)',
       ),
     ],
-    note: '清理期间会临时停止 Windows Update 与 BITS，完成或中止后自动恢复；不会删除更新历史、系统设置或 Windows.old。',
-    noteEn: 'Windows Update and BITS are stopped temporarily and restarted afterwards. Update history, system settings, and Windows.old are not removed.',
+    note: '清理期间会临时停止 Windows Update 与 BITS，完成或中止后自动恢复；不会删除更新历史、系统设置；Windows.old 由独立规则处理。',
+    noteEn: 'Windows Update and BITS are stopped temporarily and restarted afterwards. Update history and system settings are not removed; Windows.old is handled by a separate rule.',
     audit: RuleAudit(
       reviewNotes:
           '仅覆盖 Windows Update 的 SoftwareDistribution\\Download；清理时临时停止 '
-          'wuauserv 与 bits，不删除更新历史、系统设置或 Windows.old。',
+          'wuauserv 与 bits，不删除更新历史或系统设置；Windows.old 由独立规则处理。',
       reviewNotesEn:
           'Covers only SoftwareDistribution\\Download for Windows Update. '
-          'wuauserv and bits are stopped temporarily; update history, system '
-          'settings, and Windows.old are not removed.',
+          'wuauserv and bits are stopped temporarily; update history and system '
+          'settings are not removed. Windows.old is handled by a separate rule.',
       reverseEvidence: 'SoftwareDistribution\\DataStore、WinSxS 与 DownloadExtra 等相邻目录不在规则根下；根目录本身永不删除。',
       reverseEvidenceEn:
           'Sibling locations such as SoftwareDistribution\\DataStore, WinSxS, '
@@ -116,6 +116,60 @@ const windowsSystemCacheRules = <SystemCacheRule>[
           path: r'%ProgramData%\Microsoft\Windows\DeliveryOptimization\CacheExtra\file.cab',
           inScope: false,
           reason: '相邻的 CacheExtra 目录必须保留',
+        ),
+      ],
+    ),
+  ),
+  SystemCacheRule(
+    id: 'windows.old',
+    title: 'Windows.old 旧版安装',
+    titleEn: 'Windows.old previous installation',
+    category: 'Windows 升级残留',
+    categoryEn: 'Windows upgrade leftovers',
+    description: '系统升级后保留的上一版 Windows 与可能包含的旧用户配置文件副本。删除后无法回滚，也不能撤销。',
+    descriptionEn: 'The previous Windows installation and any old user-profile copies it retains. Deleting it removes rollback and cannot be undone.',
+    location: SystemCacheLocation.windowsOld,
+    displayPath: r'%SystemDrive%\Windows.old',
+    note: '仅在你已确认系统稳定、已备份所需文件且不再需要回滚时使用。删除可能同时移除 Windows.old 中保留的旧用户配置文件副本、旧程序和系统设置；当前系统的个人文件、还原点与更新历史不受影响。',
+    noteEn: 'Use only after confirming the system is stable, backing up any needed files, and accepting that rollback is no longer needed. Deleting may also remove old user-profile copies, programs, and system settings retained in Windows.old. Personal files in the current system, restore points, and update history are unaffected.',
+    audit: RuleAudit(
+      reviewNotes:
+          '仅覆盖系统盘根目录下的 Windows.old；清理会永久删除其中的普通文件。'
+          '该目录可能保留上一版用户配置文件副本、旧程序与系统设置，删除后'
+          '无法恢复；当前 Windows、当前个人文件、系统还原点与更新历史不受影响。'
+          '该操作需要管理员权限，且没有撤销入口。',
+      reviewNotesEn:
+          'Covers only Windows.old at the system drive root. Cleaning '
+          'permanently deletes regular files inside it. The folder may retain '
+          'old user-profile copies, programs, and system settings, and deletion '
+          'cannot be undone. The current Windows installation, current personal '
+          'files, restore points, and update history are unaffected. The '
+          'operation requires administrator rights and has no undo.',
+      reverseEvidence:
+          r'当前 Windows 目录、相邻的 Windows.old.000 目录、$WINDOWS.~BT 与'
+          '磁盘根目录本身都不会被命中；符号链接与 junction 会被跳过。',
+      reverseEvidenceEn:
+          r'The current Windows folder, an adjacent Windows.old.000 folder, '
+          r'$WINDOWS.~BT, and the drive root itself do not match. Symbolic links '
+          'and junctions are skipped.',
+      samples: [
+        RuleAuditSample(
+          pattern: r'%SystemDrive%\Windows.old',
+          path: r'%SystemDrive%\Windows.old\Windows\System32\broom-audit.dll',
+          inScope: true,
+        ),
+        RuleAuditSample(
+          pattern: r'%SystemDrive%\Windows.old',
+          path:
+              r'%SystemDrive%\Windows.old.000\Windows\System32\broom-audit.dll',
+          inScope: false,
+          reason: '相邻的旧版本目录不能被前缀匹配',
+        ),
+        RuleAuditSample(
+          pattern: r'%SystemDrive%\Windows.old',
+          path: r'%SystemDrive%\Windows\System32\broom-audit.dll',
+          inScope: false,
+          reason: '当前 Windows 目录不属于规则根',
         ),
       ],
     ),

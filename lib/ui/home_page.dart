@@ -197,31 +197,84 @@ class _HomePageState extends State<HomePage> {
     final count = controller.selectedCount;
     if (count == 0) return;
     final bytes = controller.selectedBytes;
+    final reviewCount = controller.selectedReviewRuleCount;
     final strings = context.strings;
+    var reviewAcknowledged = reviewCount == 0;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
-          icon: const Icon(Icons.cleaning_services_rounded, size: 30),
-          title: Text(strings.t('移入隔离区？')),
-          content: Text(
-            strings.tf(
-              '将暂存 {count} 个文件，共 {bytes}。\n\n'
-              '文件会先移动到 Broom 的隔离区，磁盘空间不会立即释放。'
-              '你可以随时恢复，或在隔离区中永久释放。',
-              {'count': count, 'bytes': formatBytes(bytes)},
+        return StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            icon: const Icon(Icons.cleaning_services_rounded, size: 30),
+            title: Text(strings.t('移入隔离区？')),
+            content: SizedBox(
+              width: 480,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    strings.tf(
+                      '将暂存 {count} 个文件，共 {bytes}。\n\n'
+                      '文件会先移动到 Broom 的隔离区，磁盘空间不会立即释放。'
+                      '你可以随时恢复，或在隔离区中永久释放。',
+                      {'count': count, 'bytes': formatBytes(bytes)},
+                    ),
+                  ),
+                  if (reviewCount > 0) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.tertiaryContainer
+                            .withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        strings.tf(
+                          '所选内容包含 {count} 条 Review 规则。它们默认不会勾选，'
+                          '清理后仍会进入隔离区并可撤销；但离线数据需要重新下载，'
+                          '首次构建或启动也可能变慢。',
+                          {'count': reviewCount},
+                        ),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onTertiaryContainer,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                    CheckboxListTile(
+                      key: const ValueKey('acknowledge-review-clean'),
+                      value: reviewAcknowledged,
+                      onChanged: (value) =>
+                          setState(() => reviewAcknowledged = value ?? false),
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      dense: true,
+                      title: Text(
+                        strings.t('我了解 Review 规则的影响，并仍要清理所选内容'),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(strings.t('取消')),
+              ),
+              FilledButton(
+                onPressed: reviewAcknowledged
+                    ? () => Navigator.of(dialogContext).pop(true)
+                    : null,
+                child: Text(strings.tf('暂存 {count} 项', {'count': count})),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: Text(strings.t('取消')),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: Text(strings.tf('暂存 {count} 项', {'count': count})),
-            ),
-          ],
         );
       },
     );
@@ -505,7 +558,7 @@ class _HeroCopy extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Text(
-              context.t('WINDOWS · SAFE 级清理'),
+              context.t('WINDOWS · SAFE + REVIEW 级清理'),
               style: theme.textTheme.labelSmall?.copyWith(
                 color: scheme.onPrimaryContainer.withValues(alpha: 0.8),
                 fontWeight: FontWeight.w700,
@@ -532,7 +585,10 @@ class _HeroCopy extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Text(
-          context.t('先扫描预览，再把 Safe 级缓存移入隔离区。\n随时可以撤销，不用担心误删。'),
+          context.t(
+            '先扫描预览：Safe 缓存默认勾选，Review 缓存需手动选择。\n'
+            '所有内容都会先移入隔离区，随时可以撤销。',
+          ),
           style: theme.textTheme.bodyMedium?.copyWith(
             color: scheme.onSurfaceVariant,
             height: 1.6,
@@ -815,7 +871,7 @@ class _ToolsSection extends StatelessWidget {
                       risk: CleanRisk.review,
                       title: context.t('系统级缓存'),
                       description: context.t(
-                        '清理 Windows 更新与传递优化的下载缓存，需要管理员权限。',
+                        '清理 Windows 更新、传递优化与 Windows.old，需要管理员权限。',
                       ),
                       onTap: onOpenSystemCache!,
                     ),
@@ -1118,8 +1174,11 @@ class _ScopeSection extends StatelessWidget {
       }),
       _ => strings.ruleDescription(rule),
     };
-    if (enabled) return description;
-    return '$description\n${strings.t('此规则已在设置中关闭。')}';
+    final withRisk = rule.risk == CleanRisk.review
+        ? '$description\n${strings.t('Review 级规则默认不勾选，需要在预览中手动选择。')}'
+        : description;
+    if (enabled) return withRisk;
+    return '$withRisk\n${strings.t('此规则已在设置中关闭。')}';
   }
 }
 
@@ -1168,6 +1227,18 @@ class _RuleChip extends StatelessWidget {
               color: enabled ? scheme.onSurface : scheme.onSurfaceVariant,
             ),
           ),
+          if (rule.risk == CleanRisk.review) ...[
+            const SizedBox(width: 6),
+            Text(
+              'REVIEW',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: scheme.tertiary,
+                fontWeight: FontWeight.w700,
+                fontSize: 9,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ],
           if (excluded) ...[
             const SizedBox(width: 6),
             Text(
@@ -1517,6 +1588,16 @@ class _PreviewView extends StatelessWidget {
               'count': formatCount(controller.possiblyLockedCount),
             }),
           ),
+        if (controller.previewReviewRuleCount > 0)
+          _InlineBanner(
+            icon: Icons.shield_outlined,
+            message: context.tf(
+              '扫描结果包含 {count} 条 Review 规则，默认未勾选。'
+              '勾选后仍需额外确认；文件同样会进入隔离区并可撤销，'
+              '但可能带来重新下载或首次启动变慢。',
+              {'count': controller.previewReviewRuleCount},
+            ),
+          ),
         Row(
           children: [
             Expanded(
@@ -1759,6 +1840,10 @@ class _RuleResultCard extends StatelessWidget {
                               ),
                             ),
                           ),
+                          if (rule.risk == CleanRisk.review) ...[
+                            const SizedBox(width: 8),
+                            const RiskBadge(risk: CleanRisk.review),
+                          ],
                           const SizedBox(width: 12),
                           Text(
                             formatBytes(result.totalBytes),
@@ -1921,6 +2006,29 @@ class _CleanActionBar extends StatelessWidget {
                             'count': formatCount(
                               controller.selectedPossiblyLockedCount,
                             ),
+                          }),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: scheme.tertiary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (controller.selectedReviewRuleCount > 0) ...[
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.shield_outlined,
+                        size: 13,
+                        color: scheme.tertiary,
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          context.tf('已选 {count} 条 Review 规则，提交前需要额外确认', {
+                            'count': controller.selectedReviewRuleCount,
                           }),
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: scheme.tertiary,
@@ -2672,19 +2780,35 @@ IconData _categoryIcon(String category) {
   if (category.contains('浏览器') || lower.contains('browser')) {
     return Icons.public_rounded;
   }
+  if (category.contains('日志') || lower.contains('log')) {
+    return Icons.receipt_long_outlined;
+  }
+  if (category.contains('缩略图') || lower.contains('thumbnail')) {
+    return Icons.image_outlined;
+  }
+  if (category.contains('GPU') || lower.contains('graphics')) {
+    return Icons.memory_rounded;
+  }
+  if (category.contains('应用') || lower.contains('app cache')) {
+    return Icons.apps_rounded;
+  }
   if (category.contains('开发') || lower.contains('developer')) {
     return Icons.code_rounded;
   }
-  return Icons.memory_rounded;
+  return Icons.folder_outlined;
 }
 
 IconData _ruleIcon(String ruleId) {
   if (ruleId.startsWith('browser')) return Icons.public_rounded;
   if (ruleId.startsWith('dev')) return Icons.terminal_rounded;
+  if (ruleId.startsWith('app')) return Icons.apps_rounded;
+  if (ruleId.startsWith('gpu')) return Icons.memory_rounded;
+  if (ruleId.startsWith('logs')) return Icons.receipt_long_outlined;
   return switch (ruleId) {
     'windows.user_temp' => Icons.folder_open_outlined,
     'windows.crash_dumps' => Icons.bug_report_outlined,
     'windows.wer_reports' => Icons.error_outline_rounded,
+    'windows.thumbnail_icon_cache' => Icons.image_outlined,
     _ => Icons.delete_outline_rounded,
   };
 }

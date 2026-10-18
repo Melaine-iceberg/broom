@@ -32,7 +32,7 @@ class WindowsCleanerPlatform implements CleanerPlatform {
   String get displayName => 'Windows';
 
   @override
-  List<CleanerRule> get rules => windowsSafeRules;
+  List<CleanerRule> get rules => windowsCleanupRules;
 
   @override
   String? get quarantineRoot {

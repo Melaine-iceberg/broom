@@ -14,6 +14,7 @@ class FakeSystemAccess implements SystemAccess {
   SystemCacheRoots roots = const SystemCacheRoots(
     windowsUpdateDownload: '',
     deliveryOptimizationCache: '',
+    windowsOld: '',
   );
   Object? isElevatedError;
   Object? relaunchError;

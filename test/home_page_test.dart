@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:broom/app.dart';
 import 'package:broom/core/clean/quarantine_service.dart';
@@ -14,7 +13,7 @@ import 'package:broom/core/settings/exclusion_store.dart';
 import 'package:broom/core/shell/system_shell.dart';
 import 'package:broom/ui/clean_controller.dart';
 import 'package:broom/ui/system_cache_controller.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -440,6 +439,73 @@ void main() {
     expect(find.textContaining('文件正被其他程序占用'), findsOneWidget);
     expect(find.text('1 个文件清理失败。'), findsOneWidget);
     expect(find.textContaining('没有访问权限'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('keeps review rules unselected and requires extra confirmation', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const root = r'C:\broom_widget_test\review-cache';
+    final item = JunkItem(
+      ruleId: 'test.review',
+      rootPath: root,
+      path: p.windows.join(root, 'offline-cache.bin'),
+      size: 128,
+      modified: DateTime(2026, 10, 18),
+    );
+    const rule = CleanerRule(
+      id: 'test.review',
+      title: '测试 Review 缓存',
+      category: '测试',
+      description: '需要额外确认的测试规则',
+      risk: CleanRisk.review,
+      pathPatterns: [],
+    );
+    final controller = CleanController(
+      platform: _FixedRootsPlatform(rule: rule, roots: [root]),
+      guard: PathGuard(protectedRoots: const []),
+      quarantine: FakeQuarantineService(),
+      exclusions: _exclusionsStore(),
+      scanServiceFactory: () => _FixedScanService([item]),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    await controller.scan();
+
+    await tester.pumpWidget(
+      BroomApp(controller: controller, systemShell: _FakeSystemShell()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(controller.phase, CleanPhase.preview);
+    expect(controller.selectedCount, 0);
+    expect(find.textContaining('扫描结果包含 1 条 Review 规则'), findsOneWidget);
+    expect(find.text('REVIEW · 需确认'), findsWidgets);
+
+    await tester.ensureVisible(find.byType(Checkbox).first);
+    await tester.tap(find.byType(Checkbox).first);
+    await tester.pumpAndSettle();
+    expect(controller.selectedCount, 1);
+
+    await tester.tap(find.widgetWithText(FilledButton, '清理 1 项'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('移入隔离区？'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('acknowledge-review-clean')),
+      findsOneWidget,
+    );
+    final confirm = find.widgetWithText(FilledButton, '暂存 1 项');
+    expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
+
+    await tester.tap(find.byKey(const ValueKey('acknowledge-review-clean')));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<FilledButton>(confirm).onPressed, isNotNull);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('reports removed empty cache directories', (tester) async {

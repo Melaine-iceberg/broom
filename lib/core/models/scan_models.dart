@@ -4,12 +4,16 @@ class ScanJob {
     required this.roots,
     this.minAge = Duration.zero,
     this.extensions,
+    this.excludedRoots = const [],
   });
 
   final String ruleId;
   final List<String> roots;
   final Duration minAge;
   final Set<String>? extensions;
+
+  /// Paths under [roots] that belong to another scan job with stricter rules.
+  final List<String> excludedRoots;
 }
 
 class JunkItem {

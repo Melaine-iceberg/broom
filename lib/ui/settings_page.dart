@@ -7,6 +7,7 @@ import '../core/models/cleaner_rule.dart';
 import '../core/models/quarantine_policy_models.dart';
 import '../core/shell/system_shell.dart';
 import '../l10n/broom_strings.dart';
+import 'analysis_widgets.dart';
 import 'clean_controller.dart';
 import 'exclusions_page.dart';
 import 'format.dart';
@@ -38,9 +39,7 @@ class SettingsPage extends StatelessWidget {
       listenable: Listenable.merge([settings, cleanController]),
       builder: (context, _) {
         final strings = context.strings;
-        final rules = cleanController.platform.rules
-            .where((rule) => rule.risk == CleanRisk.safe)
-            .toList();
+        final rules = cleanController.platform.rules;
         final disabledCount = rules
             .where((rule) => !settings.isRuleEnabled(rule.id))
             .length;
@@ -151,7 +150,9 @@ class SettingsPage extends StatelessWidget {
                     icon: Icons.rule_rounded,
                     title: strings.t('清理规则'),
                     subtitle: strings.t(
-                      '关闭的规则不会参与扫描，也不会出现在清理结果中。排除列表仍然优先于所有规则。',
+                      '关闭的规则不会参与扫描，也不会出现在清理结果中。'
+                      'Review 级规则默认扫描但不预选，需要在预览中手动勾选。'
+                      '排除列表仍然优先于所有规则。',
                     ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -213,7 +214,21 @@ class SettingsPage extends StatelessWidget {
                                 horizontal: 4,
                               ),
                               dense: true,
-                              title: Text(strings.ruleTitle(rule)),
+                              title: Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      strings.ruleTitle(rule),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (rule.risk == CleanRisk.review) ...[
+                                    const SizedBox(width: 8),
+                                    const RiskBadge(risk: CleanRisk.review),
+                                  ],
+                                ],
+                              ),
                               subtitle: Text(
                                 strings.ruleDescription(rule),
                                 maxLines: 2,
@@ -577,8 +592,20 @@ IconData _categoryIcon(String category) {
   if (category.contains('浏览器') || lower.contains('browser')) {
     return Icons.public_rounded;
   }
+  if (category.contains('日志') || lower.contains('log')) {
+    return Icons.receipt_long_outlined;
+  }
+  if (category.contains('缩略图') || lower.contains('thumbnail')) {
+    return Icons.image_outlined;
+  }
+  if (category.contains('GPU') || lower.contains('graphics')) {
+    return Icons.memory_rounded;
+  }
+  if (category.contains('应用') || lower.contains('app cache')) {
+    return Icons.apps_rounded;
+  }
   if (category.contains('开发') || lower.contains('developer')) {
     return Icons.code_rounded;
   }
-  return Icons.memory_rounded;
+  return Icons.folder_outlined;
 }

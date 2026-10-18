@@ -98,12 +98,14 @@ void main() {
     const windowsUpdate = r'C:\Windows\SoftwareDistribution\Download';
     const deliveryOptimization =
         r'C:\ProgramData\Microsoft\Windows\DeliveryOptimization\Cache';
+    const windowsOld = r'C:\Windows.old';
     MethodCall? received;
     messenger.setMockMethodCallHandler(channel, (call) async {
       received = call;
       return <String, Object>{
         'windowsUpdate': windowsUpdate,
         'deliveryOptimization': deliveryOptimization,
+        'windowsOld': windowsOld,
       };
     });
 
@@ -112,6 +114,22 @@ void main() {
     expect(received?.method, 'systemCacheRoots');
     expect(roots.windowsUpdateDownload, windowsUpdate);
     expect(roots.deliveryOptimizationCache, deliveryOptimization);
+    expect(roots.windowsOld, windowsOld);
+  });
+
+  test('locateSystemCacheRoots requires the Windows.old path', () async {
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      return <String, Object>{
+        'windowsUpdate': r'C:\Windows\SoftwareDistribution\Download',
+        'deliveryOptimization':
+            r'C:\ProgramData\Microsoft\Windows\DeliveryOptimization\Cache',
+      };
+    });
+
+    await expectLater(
+      access.locateSystemCacheRoots(),
+      throwsA(isA<SystemAccessException>()),
+    );
   });
 
   test('locateSystemCacheRoots rejects malformed payloads', () async {

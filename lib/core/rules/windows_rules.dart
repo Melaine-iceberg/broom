@@ -1,6 +1,6 @@
 import '../models/cleaner_rule.dart';
 
-const windowsSafeRules = <CleanerRule>[
+final windowsSafeRules = <CleanerRule>[
   CleanerRule(
     id: 'windows.user_temp',
     title: '用户临时文件',
@@ -11,14 +11,18 @@ const windowsSafeRules = <CleanerRule>[
     descriptionEn: 'Temporary files left by installers, extraction, and automatic updates. Only items older than 24 hours are cleaned.',
     pathPatterns: [r'%TEMP%'],
     minAge: Duration(hours: 24),
-    note: '被占用的文件会自动跳过，不影响正在运行的程序。',
-    noteEn: 'Files in use are skipped automatically, so running programs are unaffected.',
+    excludedPathPatterns: [r'%LOCALAPPDATA%\Temp\wsl-crashes'],
+    note: '被占用的文件会自动跳过，不影响正在运行的程序。WSL 崩溃转储由独立规则按 7 天保留期处理，不会被本规则提前清理。',
+    noteEn: 'Files in use are skipped automatically, so running programs are unaffected. WSL crash dumps have their own 7-day retention rule and are not claimed by this rule.',
     audit: RuleAudit(
-      reviewNotes: '仅扫描 %TEMP% 下的普通文件，并要求修改时间超过 24 小时；不进入文档、桌面、下载或应用安装目录。',
+      reviewNotes:
+          '仅扫描 %TEMP% 下的普通文件，并要求修改时间超过 24 小时；不进入文档、桌面、下载或应用安装目录。'
+          'WSL 崩溃转储目录由独立规则处理，先从本规则中排除。',
       reviewNotesEn:
           'Scans only regular files under %TEMP% that have not changed for '
           '24 hours. Documents, Desktop, Downloads, and application install '
-          'directories are out of scope.',
+          'directories are out of scope. The WSL crash dump folder is claimed '
+          'by a separate rule and excluded here.',
       reverseEvidence: '临时目录本身、24 小时内的文件、符号链接与被排除路径均不处理；路径守卫不会把范围扩大到相邻目录。',
       reverseEvidenceEn:
           'The temp directory itself, files younger than 24 hours, links, and '
@@ -29,7 +33,6 @@ const windowsSafeRules = <CleanerRule>[
           pattern: r'%TEMP%',
           path: r'%TEMP%\broom-audit-old.tmp',
           inScope: true,
-          reason: '超过 24 小时的临时文件应被扫描',
         ),
         RuleAuditSample(
           pattern: r'%TEMP%',
@@ -694,4 +697,773 @@ const windowsSafeRules = <CleanerRule>[
       ],
     ),
   ),
+  CleanerRule(
+    id: 'windows.thumbnail_icon_cache',
+    title: '缩略图与图标缓存',
+    titleEn: 'Thumbnail and icon cache',
+    category: '缩略图与图标缓存',
+    categoryEn: 'Thumbnail & icon cache',
+    description: '资源管理器用于显示缩略图与图标的重建缓存，删除后会按需重新生成。',
+    descriptionEn: 'Rebuildable Explorer caches for thumbnails and icons. They are regenerated on demand.',
+    pathPatterns: [r'%LOCALAPPDATA%\Microsoft\Windows\Explorer'],
+    extensions: {'db'},
+    note: '资源管理器运行时缓存文件通常被占用；关闭或重新启动资源管理器后再扫描更完整。Broom 不会强制解锁。',
+    noteEn: 'Explorer normally keeps these files open. Restart Explorer before scanning for a more complete cleanup; Broom never force-unlocks files.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅扫描 Explorer 目录下扩展名为 .db 的缩略图、图标缓存与对应索引文件；'
+          '不会触碰同一目录中的配置、日志或用户文档。',
+      reviewNotesEn:
+          'Scans only .db thumbnail, icon, and index caches under the Explorer '
+          'folder. Configuration, logs, and user documents in that folder are '
+          'out of scope.',
+      reverseEvidence:
+          '非 .db 文件与相邻的 ExplorerExtra 目录均不匹配；资源管理器的锁定文件会在清理时跳过，不会被强制解锁。',
+      reverseEvidenceEn:
+          'Non-.db files and the adjacent ExplorerExtra folder do not match. '
+          'Files locked by Explorer are skipped and never force-unlocked.',
+      patterns: [r'%LOCALAPPDATA%\Microsoft\Windows\Explorer'],
+      positiveRelativePath: 'broom-audit.db',
+      extraSamples: [
+        RuleAuditSample(
+          pattern: r'%LOCALAPPDATA%\Microsoft\Windows\Explorer',
+          path: r'%LOCALAPPDATA%\Microsoft\Windows\Explorer\broom-audit-settings.json',
+          inScope: false,
+          reason: '扩展名过滤必须保留非 .db 文件',
+        ),
+      ],
+    ),
+  ),
+  CleanerRule(
+    id: 'gpu.shader_caches',
+    title: 'DirectX 与显卡着色器缓存',
+    titleEn: 'DirectX and GPU shader caches',
+    category: 'DirectX / GPU 缓存',
+    categoryEn: 'DirectX / GPU cache',
+    description: 'DirectX 与显卡驱动生成的着色器编译缓存，删除后游戏或图形程序首次启动会稍慢。',
+    descriptionEn: 'Shader compilation caches created by DirectX and graphics drivers. Games or graphics apps may load slowly once after removal.',
+    pathPatterns: [
+      r'%LOCALAPPDATA%\D3DSCache',
+      r'%LOCALAPPDATA%\NVIDIA\DXCache',
+      r'%LOCALAPPDATA%\NVIDIA\GLCache',
+      r'%LOCALAPPDATA%\NVIDIA\OptixCache',
+      r'%LOCALAPPDATA%\NVIDIA Corporation\NV_Cache',
+      r'%LOCALAPPDATA%\AMD\DxCache',
+      r'%LOCALAPPDATA%\AMD\DxcCache',
+      r'%LOCALAPPDATA%\AMD\GLCache',
+      r'%LOCALAPPDATA%\Intel\ShaderCache',
+    ],
+    note: '显卡驱动会在需要时重新编译着色器；不会删除驱动、游戏或图形设置。',
+    noteEn: 'Graphics drivers recompile shaders as needed. Drivers, games, and graphics settings are not removed.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 DirectX 与 NVIDIA / AMD / Intel 明确声明的着色器缓存目录；'
+          '驱动安装目录、游戏文件与显卡控制面板设置不在范围内。',
+      reviewNotesEn:
+          'Covers only the explicitly declared DirectX and NVIDIA / AMD / Intel '
+          'shader cache folders. Driver installations, games, and graphics '
+          'control panel settings are out of scope.',
+      reverseEvidence:
+          '每个规则根都按完整目录名匹配，相邻的 DXCacheExtra 等目录不会命中；'
+          '驱动配置与游戏存档位于其他位置。',
+      reverseEvidenceEn:
+          'Each root matches a complete directory name, so adjacent folders '
+          'such as DXCacheExtra do not match. Driver configuration and game '
+          'saves live elsewhere.',
+      patterns: [
+        r'%LOCALAPPDATA%\D3DSCache',
+        r'%LOCALAPPDATA%\NVIDIA\DXCache',
+        r'%LOCALAPPDATA%\NVIDIA\GLCache',
+        r'%LOCALAPPDATA%\NVIDIA\OptixCache',
+        r'%LOCALAPPDATA%\NVIDIA Corporation\NV_Cache',
+        r'%LOCALAPPDATA%\AMD\DxCache',
+        r'%LOCALAPPDATA%\AMD\DxcCache',
+        r'%LOCALAPPDATA%\AMD\GLCache',
+        r'%LOCALAPPDATA%\Intel\ShaderCache',
+      ],
+    ),
+  ),
+  CleanerRule(
+    id: 'logs.app_diagnostics',
+    title: '应用日志与诊断',
+    titleEn: 'Application logs and diagnostics',
+    category: '日志与诊断',
+    categoryEn: 'Logs & diagnostics',
+    description: '常用应用生成的运行日志与诊断记录，只处理超过 7 天的内容。',
+    descriptionEn: 'Runtime logs and diagnostics from common applications. Only items older than 7 days are cleaned.',
+    pathPatterns: [
+      r'%APPDATA%\Code\logs',
+      r'%APPDATA%\Microsoft\Teams\logs',
+      r'%APPDATA%\Slack\logs',
+      r'%APPDATA%\discord\logs',
+    ],
+    minAge: Duration(days: 7),
+    note: 'Windows 事件日志、CBS 日志与系统目录日志受系统保护，不在扫描范围内；应用日志可用于排查问题，清理前请确认不再需要。',
+    noteEn: 'Windows Event Logs, CBS logs, and system-folder logs are protected and out of scope. Application logs can help with troubleshooting, so keep them if you still need them.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 VS Code、Teams、Slack 与 Discord 明确声明的 logs 目录，并要求'
+          '修改时间超过 7 天；Windows 事件日志与系统日志不在范围内。',
+      reviewNotesEn:
+          'Covers only the explicitly declared logs folders for VS Code, Teams, '
+          'Slack, and Discord, and only files older than 7 days. Windows Event '
+          'Logs and system logs are out of scope.',
+      reverseEvidence:
+          '7 天内的日志必须保留；同应用的缓存、配置与用户数据不在 logs 目录；'
+          '相邻的 logsExtra 目录不会被前缀匹配。',
+      reverseEvidenceEn:
+          'Logs younger than 7 days are kept. Application caches, '
+          'configuration, and user data are outside the logs folder, and the '
+          'adjacent logsExtra folder does not match by prefix.',
+      patterns: [
+        r'%APPDATA%\Code\logs',
+        r'%APPDATA%\Microsoft\Teams\logs',
+        r'%APPDATA%\Slack\logs',
+        r'%APPDATA%\discord\logs',
+      ],
+      positiveRelativePath: r'broom-audit\main.log',
+      extraSamples: [
+        RuleAuditSample(
+          pattern: r'%APPDATA%\Code\logs',
+          path: r'%APPDATA%\Code\logs\broom-audit\recent.log',
+          inScope: false,
+          age: Duration(days: 1),
+          reason: '7 天内的诊断日志必须保留',
+        ),
+      ],
+    ),
+  ),
+  CleanerRule(
+    id: 'browser.extension_scripts',
+    title: '浏览器扩展脚本缓存',
+    titleEn: 'Browser extension script cache',
+    category: '浏览器扩展缓存',
+    categoryEn: 'Browser extension cache',
+    description: 'Chromium 浏览器为网页与扩展预编译的脚本缓存，删除后会重新生成。',
+    descriptionEn: 'Precompiled script caches for pages and extensions in Chromium browsers. They are regenerated automatically.',
+    pathPatterns: [
+      r'%LOCALAPPDATA%\Google\Chrome\User Data\*\ScriptCache',
+      r'%LOCALAPPDATA%\Microsoft\Edge\User Data\*\ScriptCache',
+      r'%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\*\ScriptCache',
+    ],
+    note: '不会删除已安装扩展、扩展设置或本地扩展数据；仅清除可重新生成的脚本缓存。',
+    noteEn: 'Installed extensions, extension settings, and local extension data are untouched. Only rebuildable script caches are removed.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅匹配 Chrome、Edge 与 Brave 单个 profile 下的 ScriptCache；已安装'
+          '扩展、Extension State、Local Extension Settings 与存储数据不在范围内。',
+      reviewNotesEn:
+          'Matches only ScriptCache below one profile in Chrome, Edge, and Brave. '
+          'Installed extensions, Extension State, Local Extension Settings, and '
+          'storage data are out of scope.',
+      reverseEvidence:
+          '通配符只匹配一个 profile 层级，Extensions、Extension State 与相邻的 '
+          'ScriptCacheExtra 均不匹配任何规则根。',
+      reverseEvidenceEn:
+          'The wildcard matches exactly one profile segment. Extensions, '
+          'Extension State, and the adjacent ScriptCacheExtra folder do not '
+          'match any rule root.',
+      patterns: [
+        r'%LOCALAPPDATA%\Google\Chrome\User Data\*\ScriptCache',
+        r'%LOCALAPPDATA%\Microsoft\Edge\User Data\*\ScriptCache',
+        r'%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\*\ScriptCache',
+      ],
+    ),
+  ),
+  CleanerRule(
+    id: 'app.teams',
+    title: 'Microsoft Teams 缓存',
+    titleEn: 'Microsoft Teams cache',
+    category: '应用缓存',
+    categoryEn: 'App cache',
+    description: 'Teams 的网页、代码、GPU 与 Service Worker 缓存，不会影响聊天记录、文件或登录状态。',
+    descriptionEn: 'Teams web, code, GPU, and Service Worker caches. Chats, files, and sign-in state are untouched.',
+    pathPatterns: [
+      r'%APPDATA%\Microsoft\Teams\Cache',
+      r'%APPDATA%\Microsoft\Teams\Code Cache',
+      r'%APPDATA%\Microsoft\Teams\GPUCache',
+      r'%APPDATA%\Microsoft\Teams\Service Worker\CacheStorage',
+      r'%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\Default\Cache',
+      r'%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\Default\Code Cache',
+      r'%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\Default\GPUCache',
+      r'%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\Default\Service Worker\CacheStorage',
+    ],
+    note: '请关闭 Teams 后清理；被占用的缓存会自动跳过。聊天记录与已下载文件不在规则范围内。',
+    noteEn: 'Close Teams before cleaning; caches in use are skipped. Chats and downloaded files are out of scope.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 Teams 经典版与新版的网页、代码、GPU 与 Service Worker 缓存子目录；'
+          '聊天数据库、文件、登录信息、设置与扩展数据不在范围内。',
+      reviewNotesEn:
+          'Covers only web, code, GPU, and Service Worker cache folders for '
+          'classic and new Teams. Chat databases, files, sign-in data, settings, '
+          'and extension data are out of scope.',
+      reverseEvidence:
+          '通配或固定目录都指向明确的缓存子目录；同级的 Local Storage、IndexedDB、'
+          'CacheExtra 等目录不会被任何规则根命中。',
+      reverseEvidenceEn:
+          'Every root points to an explicit cache folder. Sibling Local Storage, '
+          'IndexedDB, CacheExtra, and similar folders do not match any rule root.',
+      patterns: [
+        r'%APPDATA%\Microsoft\Teams\Cache',
+        r'%APPDATA%\Microsoft\Teams\Code Cache',
+        r'%APPDATA%\Microsoft\Teams\GPUCache',
+        r'%APPDATA%\Microsoft\Teams\Service Worker\CacheStorage',
+        r'%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\Default\Cache',
+        r'%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\Default\Code Cache',
+        r'%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\Default\GPUCache',
+        r'%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\Default\Service Worker\CacheStorage',
+      ],
+    ),
+  ),
+  CleanerRule(
+    id: 'app.slack',
+    title: 'Slack 缓存',
+    titleEn: 'Slack cache',
+    category: '应用缓存',
+    categoryEn: 'App cache',
+    description: 'Slack 的网页、代码、GPU 与 Service Worker 缓存，不会影响消息、文件或登录状态。',
+    descriptionEn: 'Slack web, code, GPU, and Service Worker caches. Messages, files, and sign-in state are untouched.',
+    pathPatterns: [
+      r'%APPDATA%\Slack\Cache',
+      r'%APPDATA%\Slack\Code Cache',
+      r'%APPDATA%\Slack\GPUCache',
+      r'%APPDATA%\Slack\Service Worker\CacheStorage',
+    ],
+    note: '请关闭 Slack 后清理；被占用的缓存会自动跳过。工作区数据与本地文件不在规则范围内。',
+    noteEn: 'Close Slack before cleaning; caches in use are skipped. Workspace data and local files are out of scope.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 Slack 的网页、代码、GPU 与 Service Worker 缓存；消息数据库、工作区设置、文件与登录信息不在范围内。',
+      reviewNotesEn:
+          'Covers only Slack web, code, GPU, and Service Worker caches. Message '
+          'databases, workspace settings, files, and sign-in data are out of '
+          'scope.',
+      reverseEvidence:
+          '规则根只指向缓存子目录；同一应用目录下的 Local Storage、IndexedDB、'
+          'logs 与相邻的 CacheExtra 目录不会被命中。',
+      reverseEvidenceEn:
+          'Rule roots point only to cache folders. Local Storage, IndexedDB, '
+          'logs, and adjacent CacheExtra folders in the app directory do not '
+          'match.',
+      patterns: [
+        r'%APPDATA%\Slack\Cache',
+        r'%APPDATA%\Slack\Code Cache',
+        r'%APPDATA%\Slack\GPUCache',
+        r'%APPDATA%\Slack\Service Worker\CacheStorage',
+      ],
+    ),
+  ),
+  CleanerRule(
+    id: 'app.discord',
+    title: 'Discord 缓存',
+    titleEn: 'Discord cache',
+    category: '应用缓存',
+    categoryEn: 'App cache',
+    description: 'Discord 的网页、代码、GPU 与 Service Worker 缓存，不会影响消息、设置或登录状态。',
+    descriptionEn: 'Discord web, code, GPU, and Service Worker caches. Messages, settings, and sign-in state are untouched.',
+    pathPatterns: [
+      r'%APPDATA%\discord\Cache',
+      r'%APPDATA%\discord\Code Cache',
+      r'%APPDATA%\discord\GPUCache',
+      r'%APPDATA%\discord\Service Worker\CacheStorage',
+    ],
+    note: '请关闭 Discord 后清理；被占用的缓存会自动跳过。消息数据库与设置不在规则范围内。',
+    noteEn: 'Close Discord before cleaning; caches in use are skipped. Message databases and settings are out of scope.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 Discord 的网页、代码、GPU 与 Service Worker 缓存；消息数据库、设置、扩展与登录信息不在范围内。',
+      reviewNotesEn:
+          'Covers only Discord web, code, GPU, and Service Worker caches. Message '
+          'databases, settings, extensions, and sign-in data are out of scope.',
+      reverseEvidence:
+          '规则根只指向明确的缓存子目录；Local Storage、IndexedDB、logs 与相邻的 '
+          'GPUCacheExtra 目录不会被命中。',
+      reverseEvidenceEn:
+          'Rule roots point only to explicit cache folders. Local Storage, '
+          'IndexedDB, logs, and adjacent GPUCacheExtra folders do not match.',
+      patterns: [
+        r'%APPDATA%\discord\Cache',
+        r'%APPDATA%\discord\Code Cache',
+        r'%APPDATA%\discord\GPUCache',
+        r'%APPDATA%\discord\Service Worker\CacheStorage',
+      ],
+    ),
+  ),
+  CleanerRule(
+    id: 'app.spotify',
+    title: 'Spotify 缓存',
+    titleEn: 'Spotify cache',
+    category: '应用缓存',
+    categoryEn: 'App cache',
+    description: 'Spotify 的浏览器与音频缓存，清理后离线歌曲需要重新下载，播放列表与账号不受影响。',
+    descriptionEn: 'Spotify browser and audio caches. Offline songs will be downloaded again; playlists and your account are unaffected.',
+    pathPatterns: [
+      r'%LOCALAPPDATA%\Spotify\Storage',
+      r'%LOCALAPPDATA%\Spotify\Browser\Cache',
+    ],
+    note: '已下载的离线音乐会需要重新下载；账号、播放列表与设置不会被修改。',
+    noteEn: 'Downloaded offline music will need to download again. Your account, playlists, and settings are not modified.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 Spotify 的 Storage 音频缓存与 Browser\\Cache；账号、播放列表、'
+          '离线下载状态和其他应用数据不在范围内。',
+      reviewNotesEn:
+          'Covers only Spotify Storage audio cache and Browser\\Cache. Your '
+          'account, playlists, offline download state, and other app data are '
+          'out of scope.',
+      reverseEvidence:
+          'Spotify 目录中的 Browser\\Data、配置与相邻的 StorageExtra 不会匹配；'
+          '清理后只是需要重新下载离线音乐。',
+      reverseEvidenceEn:
+          'Browser\\Data, configuration, and the adjacent StorageExtra folder '
+          'under Spotify do not match. Cleaning only requires offline music to '
+          'be downloaded again.',
+      patterns: [
+        r'%LOCALAPPDATA%\Spotify\Storage',
+        r'%LOCALAPPDATA%\Spotify\Browser\Cache',
+      ],
+    ),
+  ),
+  CleanerRule(
+    id: 'app.vscode',
+    title: 'Visual Studio Code 缓存',
+    titleEn: 'Visual Studio Code cache',
+    category: '应用缓存',
+    categoryEn: 'App cache',
+    description: 'VS Code 的网页、代码、GPU、Service Worker、编译数据与扩展安装包缓存。',
+    descriptionEn: 'VS Code web, code, GPU, Service Worker, compiled data, and extension package caches.',
+    pathPatterns: [
+      r'%APPDATA%\Code\Cache',
+      r'%APPDATA%\Code\Code Cache',
+      r'%APPDATA%\Code\GPUCache',
+      r'%APPDATA%\Code\Service Worker\CacheStorage',
+      r'%APPDATA%\Code\CachedData',
+      r'%APPDATA%\Code\CachedExtensionVSIXs',
+    ],
+    note: '不会删除扩展代码、用户设置、工作区或未保存的内容；请关闭 VS Code 后清理。',
+    noteEn: 'Extension code, user settings, workspaces, and unsaved content are untouched. Close VS Code before cleaning.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 VS Code 的 Cache、Code Cache、GPUCache、Service Worker、'
+          'CachedData 与 CachedExtensionVSIXs；扩展目录、用户设置、'
+          'workspaceStorage 与日志不在范围内。',
+      reviewNotesEn:
+          'Covers only VS Code Cache, Code Cache, GPUCache, Service Worker, '
+          'CachedData, and CachedExtensionVSIXs. Extensions, user settings, '
+          'workspaceStorage, and logs are out of scope.',
+      reverseEvidence:
+          'User、Backups、extensions 与 workspaceStorage 等相邻目录不会被命中；'
+          'logs 由独立的日志规则按 7 天保留期处理。',
+      reverseEvidenceEn:
+          'Sibling folders such as User, Backups, extensions, and '
+          'workspaceStorage do not match. logs is handled separately by the '
+          'log rule with a 7-day retention.',
+      patterns: [
+        r'%APPDATA%\Code\Cache',
+        r'%APPDATA%\Code\Code Cache',
+        r'%APPDATA%\Code\GPUCache',
+        r'%APPDATA%\Code\Service Worker\CacheStorage',
+        r'%APPDATA%\Code\CachedData',
+        r'%APPDATA%\Code\CachedExtensionVSIXs',
+      ],
+    ),
+  ),
+  CleanerRule(
+    id: 'dev.yarn',
+    title: 'Yarn 缓存',
+    titleEn: 'Yarn cache',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    description: 'Yarn Classic 与 Yarn Berry 的包下载缓存，清理后下次安装依赖需要重新下载。',
+    descriptionEn: 'Package download caches for Yarn Classic and Yarn Berry. Dependencies will be downloaded again next time.',
+    pathPatterns: [
+      r'%LOCALAPPDATA%\Yarn\Cache',
+      r'%LOCALAPPDATA%\Yarn\Berry\cache',
+    ],
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 Yarn 全局下载缓存；项目中的 .yarn、node_modules、Yarn 配置与可执行文件不在范围内。',
+      reviewNotesEn:
+          'Covers only the global Yarn download caches. Project .yarn folders, '
+          'node_modules, Yarn configuration, and executables are out of scope.',
+      reverseEvidence: 'Yarn\\Berry 下只扫描 cache，同级的 plugins、releases 与相邻的 CacheExtra 目录不会被命中。',
+      reverseEvidenceEn:
+          'Only cache below Yarn\\Berry is scanned. Sibling plugins and releases '
+          'folders and the adjacent CacheExtra folder do not match.',
+      patterns: [
+        r'%LOCALAPPDATA%\Yarn\Cache',
+        r'%LOCALAPPDATA%\Yarn\Berry\cache',
+      ],
+    ),
+  ),
+  CleanerRule(
+    id: 'dev.pnpm',
+    title: 'pnpm 缓存',
+    titleEn: 'pnpm cache',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    description: 'pnpm 的全局内容寻址存储与下载缓存，清理后下次安装依赖需要重新下载。',
+    descriptionEn: 'pnpm global content-addressed store and download cache. Dependencies will be downloaded again next time.',
+    pathPatterns: [
+      r'%LOCALAPPDATA%\pnpm\store',
+      r'%LOCALAPPDATA%\pnpm\cache',
+      r'%LOCALAPPDATA%\pnpm-cache',
+    ],
+    audit: _directoryAudit(
+      reviewNotes: '仅覆盖 pnpm 的 store、cache 与旧版 pnpm-cache；项目 node_modules、pnpm 配置与可执行文件不在范围内。',
+      reviewNotesEn:
+          'Covers only pnpm store, cache, and the legacy pnpm-cache folder. '
+          'Project node_modules, pnpm configuration, and executables are out of '
+          'scope.',
+      reverseEvidence: '项目目录与 pnpm 配置不在任何规则根下；pnpm\\storeExtra 等相邻目录不会被前缀匹配。',
+      reverseEvidenceEn:
+          'Project folders and pnpm configuration are outside every rule root. '
+          'Adjacent folders such as pnpm\\storeExtra do not match by prefix.',
+      patterns: [
+        r'%LOCALAPPDATA%\pnpm\store',
+        r'%LOCALAPPDATA%\pnpm\cache',
+        r'%LOCALAPPDATA%\pnpm-cache',
+      ],
+    ),
+  ),
+  CleanerRule(
+    id: 'dev.bun',
+    title: 'Bun 缓存',
+    titleEn: 'Bun cache',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    description: 'Bun 安装依赖时使用的包缓存，清理后下次安装需要重新下载。',
+    descriptionEn: 'Package cache used when Bun installs dependencies. Packages will be downloaded again next time.',
+    pathPatterns: [r'%USERPROFILE%\.bun\install\cache'],
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖用户目录下 .bun\\install\\cache；Bun 可执行文件、全局工具与项目 node_modules 不在范围内。',
+      reviewNotesEn:
+          'Covers only .bun\\install\\cache under the user profile. The Bun '
+          'executable, global tools, and project node_modules are out of scope.',
+      reverseEvidence: '.bun\\bin、install 下的其他文件与相邻的 cacheExtra 目录均不匹配规则根。',
+      reverseEvidenceEn:
+          '.bun\\bin, other files under install, and the adjacent cacheExtra '
+          'folder do not match the rule root.',
+      patterns: [r'%USERPROFILE%\.bun\install\cache'],
+    ),
+  ),
+  CleanerRule(
+    id: 'dev.composer',
+    title: 'Composer 缓存',
+    titleEn: 'Composer cache',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    description: 'PHP Composer 的包下载与解压缓存，清理后下次安装依赖需要重新下载。',
+    descriptionEn: 'PHP Composer download and extraction caches. Dependencies will be downloaded again next time.',
+    pathPatterns: [
+      r'%LOCALAPPDATA%\Composer\cache',
+      r'%LOCALAPPDATA%\Composer\files',
+    ],
+    note: '项目中的 vendor 目录不受影响；只会重新下载全局 Composer 缓存。',
+    noteEn: 'Project vendor folders are unaffected. Only the global Composer cache is downloaded again.',
+    audit: _directoryAudit(
+      reviewNotes: '仅覆盖 Composer 的 cache 与 files 下载缓存；全局 Composer 配置、可执行文件与项目 vendor 目录不在范围内。',
+      reviewNotesEn:
+          'Covers only Composer cache and files download caches. Global '
+          'Composer configuration, executables, and project vendor folders are '
+          'out of scope.',
+      reverseEvidence:
+          'Composer\\config.json、Composer\\bin 与相邻的 cacheExtra 不会匹配；'
+          '项目 vendor 位于项目目录中。',
+      reverseEvidenceEn:
+          'Composer\\config.json, Composer\\bin, and adjacent cacheExtra '
+          'folders do not match. Project vendor folders live inside projects.',
+      patterns: [
+        r'%LOCALAPPDATA%\Composer\cache',
+        r'%LOCALAPPDATA%\Composer\files',
+      ],
+    ),
+  ),
+  CleanerRule(
+    id: 'dev.docker',
+    title: 'Docker Desktop 日志',
+    titleEn: 'Docker Desktop logs',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    description:
+        'Docker Desktop 在 Windows 侧生成的诊断日志；镜像、容器和构建缓存位于 WSL 虚拟磁盘中，不由 Broom 删除。',
+    descriptionEn: 'Docker Desktop diagnostic logs on the Windows side. Images, containers, and build caches live in the WSL virtual disk and are not removed by Broom.',
+    pathPatterns: [r'%LOCALAPPDATA%\Docker\log'],
+    minAge: Duration(days: 7),
+    note: '请使用 Docker Desktop 或 docker system prune / builder prune 清理镜像、容器与构建缓存；Broom 不直接修改 WSL 虚拟磁盘。',
+    noteEn: 'Use Docker Desktop or docker system prune / builder prune for images, containers, and build caches. Broom never modifies the WSL virtual disk directly.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅清理 Docker Desktop 的 Windows 侧 log 目录中超过 7 天的日志；'
+          'WSL 虚拟磁盘、镜像、容器、卷与构建缓存不在范围内。',
+      reviewNotesEn:
+          'Cleans only logs older than 7 days under Docker Desktop log on the '
+          'Windows side. The WSL virtual disk, images, containers, volumes, and '
+          'build caches are out of scope.',
+      reverseEvidence:
+          'Docker\\wsl 与其他同级目录不会被命中；Docker 数据必须通过 Docker 自身'
+          '的清理命令管理，Broom 不删除 ext4.vhdx。',
+      reverseEvidenceEn:
+          "Docker\\wsl and other sibling folders do not match. Docker data must "
+          "be managed with Docker's own cleanup commands; Broom never deletes "
+          'ext4.vhdx.',
+      patterns: [r'%LOCALAPPDATA%\Docker\log'],
+      positiveRelativePath: r'broom-audit\vm.log',
+      extraSamples: [
+        RuleAuditSample(
+          pattern: r'%LOCALAPPDATA%\Docker\log',
+          path: r'%LOCALAPPDATA%\Docker\log\broom-audit\recent.log',
+          inScope: false,
+          age: Duration(days: 2),
+          reason: '7 天内的 Docker 诊断日志必须保留',
+        ),
+      ],
+    ),
+  ),
+  CleanerRule(
+    id: 'dev.wsl',
+    title: 'WSL 崩溃转储',
+    titleEn: 'WSL crash dumps',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    description: 'WSL 在 Windows 临时目录生成的崩溃转储；Linux 发行版数据与虚拟磁盘不会被触碰。',
+    descriptionEn: 'Crash dumps generated by WSL in the Windows temporary folder. Linux distributions and virtual disks are untouched.',
+    pathPatterns: [r'%LOCALAPPDATA%\Temp\wsl-crashes'],
+    minAge: Duration(days: 7),
+    note: '发行版文件系统、ext4.vhdx 与 Linux 内缓存不在 Broom 范围内；如需回收空间，请在 WSL 中清理并使用官方虚拟磁盘压缩方式。',
+    noteEn: 'Distribution filesystems, ext4.vhdx, and in-Linux caches are outside Broom. Clean inside WSL and use the official virtual disk compaction method to reclaim space.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅清理 WSL 崩溃转储目录中超过 7 天的 .dmp / 转储文件；发行版'
+          ' ext4.vhdx、用户文件和 Linux 内部缓存不在范围内。',
+      reviewNotesEn:
+          'Cleans only .dmp / crash dump files older than 7 days in the WSL '
+          'crash dump folder. Distribution ext4.vhdx files, user files, and '
+          'caches inside Linux are out of scope.',
+      reverseEvidence:
+          'WSL 发行版虚拟磁盘位于 Packages 目录，不在本规则根下；相邻的 '
+          'wsl-crashes-extra 目录不会被前缀匹配。',
+      reverseEvidenceEn:
+          'WSL distribution virtual disks live under Packages and are outside '
+          'this rule root. The adjacent wsl-crashes-extra folder does not match '
+          'by prefix.',
+      patterns: [r'%LOCALAPPDATA%\Temp\wsl-crashes'],
+      positiveRelativePath: r'broom-audit\crash.dmp',
+      extraSamples: [
+        RuleAuditSample(
+          pattern: r'%LOCALAPPDATA%\Temp\wsl-crashes',
+          path: r'%LOCALAPPDATA%\Temp\wsl-crashes\broom-audit\recent.dmp',
+          inScope: false,
+          age: Duration(days: 1),
+          reason: '7 天内的 WSL 崩溃转储必须保留',
+        ),
+      ],
+    ),
+  ),
 ];
+
+final windowsReviewRules = <CleanerRule>[
+  CleanerRule(
+    id: 'dev.cargo',
+    title: 'Cargo 注册表缓存',
+    titleEn: 'Cargo registry cache',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    description: 'Rust Cargo 下载的 crate 归档与解压源码；清理后下次构建需要重新下载依赖。',
+    descriptionEn: 'Crate archives and extracted sources downloaded by Cargo. Dependencies will be downloaded again on the next build.',
+    risk: CleanRisk.review,
+    pathPatterns: [
+      r'%USERPROFILE%\.cargo\registry\cache',
+      r'%USERPROFILE%\.cargo\registry\src',
+    ],
+    note: 'Review：依赖体积可能很大，重新下载耗时；项目 target、Cargo 配置与工具链不受影响。',
+    noteEn: 'Review: dependencies can be large and take time to download again. Project targets, Cargo configuration, and toolchains are unaffected.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 .cargo\\registry 下的 cache 与 src；.cargo\\bin、config.toml、'
+          'git 仓库与项目文件不在范围内。',
+      reviewNotesEn:
+          'Covers only cache and src below .cargo\\registry. .cargo\\bin, '
+          'config.toml, git checkouts, and project files are out of scope.',
+      reverseEvidence:
+          '.cargo\\git、.cargo\\registry\\index 与相邻的 cacheExtra 目录不会命中；'
+          '项目 target 与工具链不受影响。',
+      reverseEvidenceEn:
+          '.cargo\\git, .cargo\\registry\\index, and adjacent cacheExtra folders '
+          'do not match. Project targets and toolchains are unaffected.',
+      patterns: [
+        r'%USERPROFILE%\.cargo\registry\cache',
+        r'%USERPROFILE%\.cargo\registry\src',
+      ],
+    ),
+  ),
+  CleanerRule(
+    id: 'dev.go',
+    title: 'Go 模块与构建缓存',
+    titleEn: 'Go module and build cache',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    risk: CleanRisk.review,
+    description: '默认 GOPATH 下的 Go 模块缓存与用户构建缓存；清理后首次构建需要重新下载与编译。',
+    descriptionEn: 'Go module cache under the default GOPATH and the user build cache. The first build afterwards will download and compile again.',
+    pathPatterns: [r'%USERPROFILE%\go\pkg\mod', r'%LOCALAPPDATA%\go-build'],
+    note: 'Review：模块缓存可能很大，首次构建会明显变慢；项目源码与 GOPATH 中的 bin 不受影响。',
+    noteEn: 'Review: the module cache can be large and the first build will be slower. Project sources and bin folders under GOPATH are unaffected.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖默认位置的 USERPROFILE\\go\\pkg\\mod 与 LOCALAPPDATA\\go-build；'
+          '项目源码、GOPATH\\bin、工具链与自定义 GOPATH 不在范围内。',
+      reviewNotesEn:
+          'Covers only the default USERPROFILE\\go\\pkg\\mod and '
+          'LOCALAPPDATA\\go-build. Project sources, GOPATH\\bin, toolchains, and '
+          'custom GOPATH locations are out of scope.',
+      reverseEvidence: 'go\\bin 与相邻的 go-build-cache 不会命中；自定义 GOPATH 不会被猜测或扫描。',
+      reverseEvidenceEn:
+          'go\\bin and the adjacent go-build-cache folder do not match. Custom '
+          'GOPATH locations are never guessed or scanned.',
+      patterns: [r'%USERPROFILE%\go\pkg\mod', r'%LOCALAPPDATA%\go-build'],
+    ),
+  ),
+  CleanerRule(
+    id: 'dev.nuget',
+    title: 'NuGet 包与 HTTP 缓存',
+    titleEn: 'NuGet packages and HTTP cache',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    description: 'NuGet 全局包目录与 HTTP / 插件缓存；清理后还原项目时需要重新下载包。',
+    descriptionEn: 'NuGet global packages plus HTTP and plugin caches. Projects will download packages again when restored.',
+    risk: CleanRisk.review,
+    pathPatterns: [
+      r'%USERPROFILE%\.nuget\packages',
+      r'%LOCALAPPDATA%\NuGet\Cache',
+      r'%LOCALAPPDATA%\NuGet\v3-cache',
+      r'%LOCALAPPDATA%\NuGet\plugins-cache',
+    ],
+    note: 'Review：全局包目录被多个项目共享，清理后首次还原会重新下载；NuGet 配置与项目文件不受影响。',
+    noteEn: 'Review: the global package folder is shared by multiple projects and will be downloaded again on the next restore. NuGet configuration and project files are unaffected.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 .nuget\\packages 与 NuGet 的 Cache、v3-cache、plugins-cache；'
+          'NuGet.Config、项目文件与 Visual Studio 配置不在范围内。',
+      reviewNotesEn:
+          'Covers only .nuget\\packages and NuGet Cache, v3-cache, and '
+          'plugins-cache. NuGet.Config, project files, and Visual Studio '
+          'configuration are out of scope.',
+      reverseEvidence:
+          '.nuget\\NuGet.Config 与其他同级文件不会命中；Visual Studio 缓存和项目目录'
+          ' 不在规则根下。',
+      reverseEvidenceEn:
+          '.nuget\\NuGet.Config and other sibling files do not match. Visual '
+          'Studio caches and project folders are outside the rule roots.',
+      patterns: [
+        r'%USERPROFILE%\.nuget\packages',
+        r'%LOCALAPPDATA%\NuGet\Cache',
+        r'%LOCALAPPDATA%\NuGet\v3-cache',
+        r'%LOCALAPPDATA%\NuGet\plugins-cache',
+      ],
+    ),
+  ),
+  CleanerRule(
+    id: 'dev.maven',
+    title: 'Maven 本地仓库',
+    titleEn: 'Maven local repository',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    description: '用户目录下 Maven 下载的依赖与插件；清理后首次构建需要重新下载。',
+    descriptionEn: 'Dependencies and plugins downloaded into the user Maven repository. The first build afterwards will download them again.',
+    risk: CleanRisk.review,
+    pathPatterns: [r'%USERPROFILE%\.m2\repository'],
+    note: 'Review：本地仓库可能包含离线构建所需依赖；settings.xml 与 wrapper 不受影响。',
+    noteEn: 'Review: the local repository may contain dependencies needed for offline builds. settings.xml and wrappers are unaffected.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 .m2\\repository；.m2\\settings.xml、wrapper、Maven 安装目录与'
+          '项目 pom.xml 不在范围内。',
+      reviewNotesEn:
+          'Covers only .m2\\repository. .m2\\settings.xml, wrappers, Maven '
+          'installations, and project pom.xml files are out of scope.',
+      reverseEvidence:
+          '.m2\\settings.xml 与相邻的 repositoryExtra 目录不会命中；项目 target 与'
+          '本地源码不在规则根下。',
+      reverseEvidenceEn:
+          '.m2\\settings.xml and the adjacent repositoryExtra folder do not '
+          'match. Project targets and local sources are outside the rule root.',
+      patterns: [r'%USERPROFILE%\.m2\repository'],
+    ),
+  ),
+  CleanerRule(
+    id: 'dev.jetbrains',
+    title: 'JetBrains IDE 缓存',
+    titleEn: 'JetBrains IDE caches',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    description: 'IntelliJ IDEA 等 JetBrains IDE 的索引与本地缓存；清理后首次打开项目需要重新索引。',
+    descriptionEn: 'Indexes and local caches for JetBrains IDEs such as IntelliJ IDEA. Projects will be re-indexed the next time they open.',
+    risk: CleanRisk.review,
+    pathPatterns: [r'%LOCALAPPDATA%\JetBrains\*\caches'],
+    note: 'Review：重新索引可能耗时；IDE 设置、插件、项目文件与本地历史不受影响。请关闭 IDE 后清理。',
+    noteEn: 'Review: re-indexing can take time. IDE settings, plugins, project files, and local history are unaffected. Close the IDE before cleaning.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 JetBrains 产品版本目录下的 caches；设置、插件、日志、'
+          '项目与本地历史目录不在范围内。',
+      reviewNotesEn:
+          'Covers only caches under each JetBrains product version folder. '
+          'Settings, plugins, logs, projects, and local history are out of '
+          'scope.',
+      reverseEvidence:
+          '通配符只匹配一个产品版本层级；同一产品下的 config、plugins、log 与'
+          '相邻的 cachesExtra 均不匹配。',
+      reverseEvidenceEn:
+          'The wildcard matches exactly one product version segment. config, '
+          'plugins, log, and adjacent cachesExtra folders under the same '
+          'product do not match.',
+      patterns: [r'%LOCALAPPDATA%\JetBrains\*\caches'],
+    ),
+  ),
+];
+
+final windowsCleanupRules = <CleanerRule>[
+  ...windowsSafeRules,
+  ...windowsReviewRules,
+];
+
+RuleAudit _directoryAudit({
+  required String reviewNotes,
+  required String reviewNotesEn,
+  required String reverseEvidence,
+  required String reverseEvidenceEn,
+  required List<String> patterns,
+  String positiveRelativePath = r'broom-audit\cache.bin',
+  List<RuleAuditSample> extraSamples = const [],
+}) {
+  final samples = <RuleAuditSample>[];
+  for (final pattern in patterns) {
+    final concrete = pattern.replaceAll('*', 'broom-audit-profile');
+    samples.add(
+      RuleAuditSample(
+        pattern: pattern,
+        path: '$concrete\\$positiveRelativePath',
+        inScope: true,
+      ),
+    );
+    samples.add(
+      RuleAuditSample(
+        pattern: pattern,
+        path: '${concrete}Extra\\broom-audit\\cache.bin',
+        inScope: false,
+        reason: '相邻或前缀相似的目录必须保留',
+      ),
+    );
+  }
+  samples.addAll(extraSamples);
+  return RuleAudit(
+    reviewNotes: reviewNotes,
+    reviewNotesEn: reviewNotesEn,
+    reverseEvidence: reverseEvidence,
+    reverseEvidenceEn: reverseEvidenceEn,
+    samples: samples,
+  );
+}

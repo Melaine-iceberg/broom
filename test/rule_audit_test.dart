@@ -15,9 +15,11 @@ final _windowsOnly = !Platform.isWindows ? 'Windows only' : false;
 const _environmentKeys = <String>[
   'TEMP',
   'LOCALAPPDATA',
+  'APPDATA',
   'USERPROFILE',
   'WINDIR',
   'ProgramData',
+  'SystemDrive',
 ];
 
 void main() {
@@ -27,6 +29,16 @@ void main() {
     for (final rule in windowsSafeRules) {
       expect(ids.add(rule.id), isTrue, reason: 'duplicate rule id ${rule.id}');
       expect(rule.risk, CleanRisk.safe, reason: '${rule.id} must stay safe');
+      _expectCompleteAudit(rule.id, rule.audit, rule.pathPatterns);
+    }
+
+    for (final rule in windowsReviewRules) {
+      expect(ids.add(rule.id), isTrue, reason: 'duplicate rule id ${rule.id}');
+      expect(
+        rule.risk,
+        CleanRisk.review,
+        reason: '${rule.id} must stay review level',
+      );
       _expectCompleteAudit(rule.id, rule.audit, rule.pathPatterns);
     }
 
@@ -59,13 +71,14 @@ void main() {
       }
     });
 
-    test('safe rules scan exactly their audited files', () async {
+    test('cleanup rules scan exactly their audited files', () async {
+      final rules = [...windowsSafeRules, ...windowsReviewRules];
       final created = <String>{};
-      for (final rule in windowsSafeRules) {
+      for (final rule in rules) {
         await _materialize(rule.audit!.samples, environment, created);
       }
 
-      for (final rule in windowsSafeRules) {
+      for (final rule in rules) {
         final roots = await WindowsRuleResolver(environment: environment)
             .resolve(rule);
         expect(

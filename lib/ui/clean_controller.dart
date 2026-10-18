@@ -151,6 +151,19 @@ class CleanController extends ChangeNotifier {
   int get selectedBytes =>
       selectedItems.fold(0, (total, item) => total + item.size);
 
+  int get selectedReviewRuleCount => _results
+      .where(
+        (result) =>
+            result.rule.risk == CleanRisk.review &&
+            (_selectedCountByRule[result.rule.id] ?? 0) > 0,
+      )
+      .length;
+
+  bool get hasSelectedReview => selectedReviewRuleCount > 0;
+
+  int get previewReviewRuleCount =>
+      _results.where((result) => result.rule.risk == CleanRisk.review).length;
+
   List<JunkItem> get selectedItems => [
     for (final result in _results)
       for (final item in result.items)
@@ -270,7 +283,7 @@ class CleanController extends ChangeNotifier {
         _scanTruncated = result.truncated;
         _results = _groupResults(result.items);
         _resetSelection();
-        _selectAllItems(notify: false);
+        _selectDefaultItems(notify: false);
         _phase = CleanPhase.preview;
         if (_results.isEmpty) {
           _notice = tr('没有发现可清理的内容。');
@@ -383,6 +396,21 @@ class CleanController extends ChangeNotifier {
         _itemsByPath[item.path] = item;
       }
       _selectedCountByRule[result.rule.id] = result.items.length;
+    }
+    if (notify) _notify();
+  }
+
+  /// Review rules are opt-in: a fresh scan selects Safe rules only.
+  void _selectDefaultItems({required bool notify}) {
+    for (final result in _results) {
+      for (final item in result.items) {
+        _itemsByPath[item.path] = item;
+        if (result.rule.risk != CleanRisk.safe) continue;
+        _selectedPaths.add(item.path);
+      }
+      _selectedCountByRule[result.rule.id] = result.rule.risk == CleanRisk.safe
+          ? result.items.length
+          : 0;
     }
     if (notify) _notify();
   }
@@ -550,29 +578,43 @@ class CleanController extends ChangeNotifier {
     final jobs = <ScanJob>[];
     final seenRoots = <String>{};
     for (final rule in platform.rules.where(
-      (rule) =>
-          rule.risk == CleanRisk.safe && (isRuleEnabled?.call(rule.id) ?? true),
+      (rule) => isRuleEnabled?.call(rule.id) ?? true,
     )) {
       final resolvedRoots = await platform.resolveRoots(rule);
-      final safeRoots = <String>[];
+      final scanRoots = <String>[];
       for (final root in resolvedRoots) {
         if (guard.isProtected(root)) continue;
         if (exclusions.excludes(root)) continue;
         final key = PathGuard.normalize(root).toLowerCase();
         if (!seenRoots.add(key)) continue;
-        safeRoots.add(root);
+        scanRoots.add(root);
       }
-      if (safeRoots.isEmpty) continue;
+      if (scanRoots.isEmpty) continue;
       jobs.add(
         ScanJob(
           ruleId: rule.id,
-          roots: safeRoots,
+          roots: scanRoots,
           minAge: rule.minAge,
           extensions: rule.extensions,
+          excludedRoots: await _resolveRuleExclusionRoots(rule),
         ),
       );
     }
     return jobs;
+  }
+
+  Future<List<String>> _resolveRuleExclusionRoots(CleanerRule rule) async {
+    if (rule.excludedPathPatterns.isEmpty) return const [];
+    return platform.resolveRoots(
+      CleanerRule(
+        id: '${rule.id}.excluded',
+        title: rule.title,
+        category: rule.category,
+        description: rule.description,
+        pathPatterns: rule.excludedPathPatterns,
+        risk: rule.risk,
+      ),
+    );
   }
 
   Future<void> _ensureExclusionsLoaded() async {
@@ -600,12 +642,10 @@ class CleanController extends ChangeNotifier {
       return;
     }
 
-    final safeRules = platform.rules.where(
-      (rule) => rule.risk == CleanRisk.safe,
-    );
+    final rules = platform.rules;
     final scopes = <String, RuleExclusionScope>{};
     if (exclusions.paths.isEmpty) {
-      for (final rule in safeRules) {
+      for (final rule in rules) {
         scopes[rule.id] = RuleExclusionScope.none;
       }
       if (revision != _scopeRevision) return;
@@ -614,7 +654,7 @@ class CleanController extends ChangeNotifier {
       return;
     }
 
-    for (final rule in safeRules) {
+    for (final rule in rules) {
       List<String> roots;
       try {
         roots = await platform.resolveRoots(rule);
