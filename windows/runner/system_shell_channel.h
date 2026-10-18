@@ -9,7 +9,8 @@
 #include <memory>
 
 // Exposes the small set of Windows shell features used by the Review/Info
-// tools: recycle bin stats/emptying, folder selection and Explorer reveal.
+// tools and settings: recycle bin stats/emptying, folder selection, JSON
+// configuration open/save dialogs and Explorer reveal.
 class SystemShellChannel {
  public:
   SystemShellChannel(flutter::BinaryMessenger* messenger, HWND window);

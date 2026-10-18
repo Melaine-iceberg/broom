@@ -224,6 +224,166 @@ void SystemShellChannel::HandleMethodCall(
     return;
   }
 
+  if (method == "pickJsonFile") {
+    Microsoft::WRL::ComPtr<IFileOpenDialog> dialog;
+    HRESULT hr = ::CoCreateInstance(CLSID_FileOpenDialog, nullptr,
+                                    CLSCTX_INPROC_SERVER,
+                                    IID_PPV_ARGS(dialog.GetAddressOf()));
+    if (FAILED(hr)) {
+      SendShellError(std::move(result), "config_picker_failed", hr);
+      return;
+    }
+
+    FILEOPENDIALOGOPTIONS options = 0;
+    if (SUCCEEDED(dialog->GetOptions(&options))) {
+      dialog->SetOptions(options | FOS_FORCEFILESYSTEM | FOS_FILEMUSTEXIST |
+                         FOS_PATHMUSTEXIST | FOS_NOCHANGEDIR);
+    }
+    const COMDLG_FILTERSPEC filters[] = {
+        {L"Broom configuration (*.json)", L"*.json"}};
+    dialog->SetFileTypes(1, filters);
+
+    std::wstring dialog_title = L"Import Broom configuration";
+    const auto requested_title =
+        StringArgument(call.arguments(), "title");
+    if (requested_title.has_value() && !requested_title->empty()) {
+      const std::wstring wide_title = WideFromUtf8(*requested_title);
+      if (!wide_title.empty()) {
+        dialog_title = wide_title;
+      }
+    }
+    dialog->SetTitle(dialog_title.c_str());
+
+    const auto initial_directory =
+        StringArgument(call.arguments(), "initialDirectory");
+    if (initial_directory.has_value() && !initial_directory->empty()) {
+      Microsoft::WRL::ComPtr<IShellItem> folder;
+      const std::wstring initial = WideFromUtf8(*initial_directory);
+      if (!initial.empty() &&
+          SUCCEEDED(::SHCreateItemFromParsingName(
+              initial.c_str(), nullptr, IID_PPV_ARGS(folder.GetAddressOf())))) {
+        dialog->SetFolder(folder.Get());
+      }
+    }
+
+    hr = dialog->Show(window_);
+    if (hr == HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
+      result->Success();
+      return;
+    }
+    if (FAILED(hr)) {
+      SendShellError(std::move(result), "config_picker_failed", hr);
+      return;
+    }
+
+    Microsoft::WRL::ComPtr<IShellItem> selected;
+    hr = dialog->GetResult(selected.GetAddressOf());
+    if (FAILED(hr)) {
+      SendShellError(std::move(result), "config_picker_failed", hr);
+      return;
+    }
+
+    PWSTR path = nullptr;
+    hr = selected->GetDisplayName(SIGDN_FILESYSPATH, &path);
+    if (FAILED(hr) || path == nullptr) {
+      if (path != nullptr) {
+        ::CoTaskMemFree(path);
+      }
+      SendShellError(std::move(result), "config_picker_failed", hr);
+      return;
+    }
+    const std::string utf8_path = Utf8FromUtf16(path);
+    ::CoTaskMemFree(path);
+    result->Success(flutter::EncodableValue(utf8_path));
+    return;
+  }
+
+  if (method == "saveJsonFile") {
+    Microsoft::WRL::ComPtr<IFileSaveDialog> dialog;
+    HRESULT hr = ::CoCreateInstance(CLSID_FileSaveDialog, nullptr,
+                                    CLSCTX_INPROC_SERVER,
+                                    IID_PPV_ARGS(dialog.GetAddressOf()));
+    if (FAILED(hr)) {
+      SendShellError(std::move(result), "config_save_failed", hr);
+      return;
+    }
+
+    FILEOPENDIALOGOPTIONS options = 0;
+    if (SUCCEEDED(dialog->GetOptions(&options))) {
+      dialog->SetOptions(options | FOS_OVERWRITEPROMPT | FOS_FORCEFILESYSTEM |
+                         FOS_PATHMUSTEXIST | FOS_NOCHANGEDIR);
+    }
+    const COMDLG_FILTERSPEC filters[] = {
+        {L"Broom configuration (*.json)", L"*.json"}};
+    dialog->SetFileTypes(1, filters);
+    dialog->SetDefaultExtension(L"json");
+
+    std::wstring suggested_name = L"broom-config.json";
+    const auto requested_name =
+        StringArgument(call.arguments(), "suggestedName");
+    if (requested_name.has_value() && !requested_name->empty()) {
+      const std::wstring wide_name = WideFromUtf8(*requested_name);
+      if (!wide_name.empty()) {
+        suggested_name = wide_name;
+      }
+    }
+    dialog->SetFileName(suggested_name.c_str());
+
+    std::wstring dialog_title = L"Export Broom configuration";
+    const auto requested_title =
+        StringArgument(call.arguments(), "title");
+    if (requested_title.has_value() && !requested_title->empty()) {
+      const std::wstring wide_title = WideFromUtf8(*requested_title);
+      if (!wide_title.empty()) {
+        dialog_title = wide_title;
+      }
+    }
+    dialog->SetTitle(dialog_title.c_str());
+
+    const auto initial_directory =
+        StringArgument(call.arguments(), "initialDirectory");
+    if (initial_directory.has_value() && !initial_directory->empty()) {
+      Microsoft::WRL::ComPtr<IShellItem> folder;
+      const std::wstring initial = WideFromUtf8(*initial_directory);
+      if (!initial.empty() &&
+          SUCCEEDED(::SHCreateItemFromParsingName(
+              initial.c_str(), nullptr, IID_PPV_ARGS(folder.GetAddressOf())))) {
+        dialog->SetFolder(folder.Get());
+      }
+    }
+
+    hr = dialog->Show(window_);
+    if (hr == HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
+      result->Success();
+      return;
+    }
+    if (FAILED(hr)) {
+      SendShellError(std::move(result), "config_save_failed", hr);
+      return;
+    }
+
+    Microsoft::WRL::ComPtr<IShellItem> selected;
+    hr = dialog->GetResult(selected.GetAddressOf());
+    if (FAILED(hr)) {
+      SendShellError(std::move(result), "config_save_failed", hr);
+      return;
+    }
+
+    PWSTR path = nullptr;
+    hr = selected->GetDisplayName(SIGDN_FILESYSPATH, &path);
+    if (FAILED(hr) || path == nullptr) {
+      if (path != nullptr) {
+        ::CoTaskMemFree(path);
+      }
+      SendShellError(std::move(result), "config_save_failed", hr);
+      return;
+    }
+    const std::string utf8_path = Utf8FromUtf16(path);
+    ::CoTaskMemFree(path);
+    result->Success(flutter::EncodableValue(utf8_path));
+    return;
+  }
+
   if (method == "revealPath") {
     const auto path = StringArgument(call.arguments(), "path");
     if (!path.has_value() || path->empty()) {

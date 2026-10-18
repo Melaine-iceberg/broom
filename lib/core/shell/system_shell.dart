@@ -38,6 +38,17 @@ abstract interface class SystemShell {
 
   Future<String?> pickFolder({String? initialDirectory});
 
+  /// Opens a JSON file picker used to import a Broom configuration bundle.
+  Future<String?> pickJsonFile({String? initialDirectory, String? title});
+
+  /// Opens a save dialog for a configuration bundle and returns the chosen
+  /// path. `suggestedName` should include the `.json` extension.
+  Future<String?> saveJsonFile({
+    required String suggestedName,
+    String? initialDirectory,
+    String? title,
+  });
+
   Future<void> revealPath(String path);
 }
 
@@ -117,6 +128,44 @@ class MethodChannelSystemShell implements SystemShell {
   }
 
   @override
+  Future<String?> pickJsonFile({
+    String? initialDirectory,
+    String? title,
+  }) async {
+    try {
+      final result = await channel.invokeMethod<String>('pickJsonFile', {
+        'initialDirectory': ?initialDirectory,
+        'title': ?title,
+      });
+      return result == null || result.isEmpty ? null : result;
+    } on PlatformException catch (error) {
+      throw _mapError(error, '无法打开配置文件选择器。');
+    } on MissingPluginException {
+      throw const SystemShellException('当前系统不支持选择配置文件。');
+    }
+  }
+
+  @override
+  Future<String?> saveJsonFile({
+    required String suggestedName,
+    String? initialDirectory,
+    String? title,
+  }) async {
+    try {
+      final result = await channel.invokeMethod<String>('saveJsonFile', {
+        'suggestedName': suggestedName,
+        'initialDirectory': ?initialDirectory,
+        'title': ?title,
+      });
+      return result == null || result.isEmpty ? null : result;
+    } on PlatformException catch (error) {
+      throw _mapError(error, '无法打开配置保存对话框。');
+    } on MissingPluginException {
+      throw const SystemShellException('当前系统不支持保存配置文件。');
+    }
+  }
+
+  @override
   Future<void> revealPath(String path) async {
     try {
       await channel.invokeMethod<void>('revealPath', {'path': path});
@@ -161,6 +210,19 @@ class UnsupportedSystemShell implements SystemShell {
   @override
   Future<String?> pickFolder({String? initialDirectory}) async =>
       _unsupported();
+
+  @override
+  Future<String?> pickJsonFile({
+    String? initialDirectory,
+    String? title,
+  }) async => _unsupported();
+
+  @override
+  Future<String?> saveJsonFile({
+    required String suggestedName,
+    String? initialDirectory,
+    String? title,
+  }) async => _unsupported();
 
   @override
   Future<RecycleBinSnapshot> queryRecycleBin() async => _unsupported();

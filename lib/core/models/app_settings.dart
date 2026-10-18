@@ -13,6 +13,7 @@ class AppSettings {
     this.useNtfsIndex = false,
     this.scanItemLimit,
     this.ruleUpdateUrl = '',
+    this.onboardingCompleted = true,
   });
 
   static const defaults = AppSettings();
@@ -38,6 +39,10 @@ class AppSettings {
   final int? scanItemLimit;
   final String ruleUpdateUrl;
 
+  /// False only for a fresh profile without a settings file. Existing users
+  /// are treated as having completed the introduction.
+  final bool onboardingCompleted;
+
   bool isRuleEnabled(String ruleId) => !disabledRuleIds.contains(ruleId);
 
   bool isCategoryEnabled(String categoryId) =>
@@ -54,6 +59,7 @@ class AppSettings {
     int? scanItemLimit,
     bool clearScanItemLimit = false,
     String? ruleUpdateUrl,
+    bool? onboardingCompleted,
   }) {
     return AppSettings(
       theme: theme ?? this.theme,
@@ -71,6 +77,7 @@ class AppSettings {
           ? null
           : (scanItemLimit ?? this.scanItemLimit),
       ruleUpdateUrl: ruleUpdateUrl ?? this.ruleUpdateUrl,
+      onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
     );
   }
 
@@ -87,7 +94,8 @@ class AppSettings {
         other.scanLowPriority == scanLowPriority &&
         other.useNtfsIndex == useNtfsIndex &&
         other.scanItemLimit == scanItemLimit &&
-        other.ruleUpdateUrl == ruleUpdateUrl;
+        other.ruleUpdateUrl == ruleUpdateUrl &&
+        other.onboardingCompleted == onboardingCompleted;
   }
 
   @override
@@ -101,5 +109,6 @@ class AppSettings {
     useNtfsIndex,
     scanItemLimit,
     ruleUpdateUrl,
+    onboardingCompleted,
   );
 }

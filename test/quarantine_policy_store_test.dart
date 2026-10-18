@@ -49,7 +49,8 @@ void main() {
 
     final raw = jsonDecode(await File(store.filePath).readAsString());
     expect(raw, {
-      'schemaVersion': 1,
+      'kind': 'broom.quarantine-policy',
+      'schemaVersion': 2,
       'enabled': true,
       'retentionDays': 14,
       'maxBytes': 2 * 1024 * 1024 * 1024,

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:broom/core/models/app_settings.dart';
@@ -30,6 +31,111 @@ void main() {
     expect(settings.language, AppLanguagePreference.zh);
     expect(settings.disabledRuleIds, isEmpty);
   });
+
+  test('migrates v1 settings and writes the v2 envelope on save', () async {
+    final file = File(p.windows.join(temp.path, 'settings.json'));
+    file.parent.createSync(recursive: true);
+    file.writeAsStringSync(
+      jsonEncode({
+        'schemaVersion': 1,
+        'theme': 'dark',
+        'language': 'en',
+        'disabledRuleIds': ['dev.npm'],
+      }),
+    );
+
+    final store = createStore();
+    final migrated = store.load();
+    expect(migrated.theme, AppThemePreference.dark);
+    expect(migrated.language, AppLanguagePreference.en);
+    expect(migrated.disabledRuleIds, {'dev.npm'});
+
+    await store.save(migrated);
+    final raw = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+    expect(raw['kind'], 'broom.settings');
+    expect(raw['schemaVersion'], 2);
+  });
+
+  test('restores defaults without restarting onboarding', () async {
+    final store = createStore();
+    await store.save(
+      const AppSettings(
+        theme: AppThemePreference.dark,
+        language: AppLanguagePreference.en,
+        disabledRuleIds: {'dev.npm'},
+        disabledCategoryIds: {'dev'},
+        scanParallelism: 8,
+        scanLowPriority: false,
+        useNtfsIndex: true,
+        scanItemLimit: 42,
+        ruleUpdateUrl: 'https://updates.example.test/manifest.json',
+        onboardingCompleted: true,
+      ),
+    );
+    final controller = SettingsController(store: store);
+    addTearDown(controller.dispose);
+    controller.load();
+
+    expect(await controller.restoreDefaults(), isNull);
+
+    final defaults = store.load();
+    expect(defaults.theme, AppThemePreference.system);
+    expect(defaults.language, AppLanguagePreference.zh);
+    expect(defaults.disabledRuleIds, isEmpty);
+    expect(defaults.disabledCategoryIds, isEmpty);
+    expect(defaults.scanParallelism, 2);
+    expect(defaults.scanLowPriority, isTrue);
+    expect(defaults.useNtfsIndex, isFalse);
+    expect(defaults.scanItemLimit, isNull);
+    expect(defaults.ruleUpdateUrl, isEmpty);
+    expect(defaults.onboardingCompleted, isTrue);
+  });
+
+  test('imports settings while keeping the current onboarding state', () async {
+    final store = createStore();
+    await store.save(const AppSettings(onboardingCompleted: false));
+    final controller = SettingsController(store: store);
+    addTearDown(controller.dispose);
+    controller.load();
+
+    expect(
+      await controller.importSettings(
+        const AppSettings(
+          theme: AppThemePreference.dark,
+          language: AppLanguagePreference.en,
+          disabledRuleIds: {'browser.chrome'},
+          scanParallelism: 0,
+          onboardingCompleted: false,
+        ),
+      ),
+      isNull,
+    );
+
+    final saved = store.load();
+    expect(saved.theme, AppThemePreference.dark);
+    expect(saved.language, AppLanguagePreference.en);
+    expect(saved.disabledRuleIds, {'browser.chrome'});
+    expect(saved.scanParallelism, 0);
+    expect(saved.onboardingCompleted, isFalse);
+  });
+
+  test(
+    'restore clears a previous load error after rewriting the file',
+    () async {
+      final file = File(p.windows.join(temp.path, 'settings.json'));
+      file.parent.createSync(recursive: true);
+      file.writeAsStringSync('{broken');
+      final controller = SettingsController(store: createStore());
+      addTearDown(controller.dispose);
+      controller.load();
+      expect(controller.loadError, isNotNull);
+
+      expect(await controller.restoreDefaults(), isNull);
+
+      expect(controller.loadError, isNull);
+      expect(createStore().load(), AppSettings.defaults);
+    },
+  );
 
   test('round-trips theme, language and disabled rules', () async {
     final store = createStore();

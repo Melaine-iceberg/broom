@@ -680,4 +680,47 @@ const translationsEn = <String, String>{
   '已恢复内置规则，上一版本保留用于回滚。':
       'Built-in rules restored; the previous version is kept for rollback.',
   '无法恢复内置规则：{error}': 'Could not restore built-in rules: {error}',
+
+  // Settings: configuration backup, import, and reset
+  '备份与恢复': 'Backup and restore',
+  '导出或导入主题、语言、规则开关、扫描设置、排除列表与保留策略。配置不包含隔离区文件、清理历史、扫描结果或在线规则目录。': 'Export or import theme, language, rule toggles, scan settings, exclusions, and the retention policy. Configurations never include quarantine files, cleaning history, scan results, or the online rule catalog.',
+  '导出配置': 'Export configuration',
+  '导入配置': 'Import configuration',
+  '导入会替换当前配置；保留策略以关闭状态导入，不会立即释放隔离区文件。排除目录的路径必须在本机存在才会生效。': 'Importing replaces the current configuration. The retention policy is imported as off and no quarantined files are released. Excluded folder paths must exist on this device to take effect.',
+  '导出文件包含排除目录的绝对路径，请妥善保管。': 'Exported files include the absolute paths of excluded folders. Store them carefully.',
+  '恢复默认配置': 'Restore default configuration',
+  '清除偏好设置与排除列表，并关闭自动保留策略；不会删除隔离区文件。': 'Clears preferences and exclusions and turns off automatic retention. Quarantine files are not deleted.',
+  '导出 Broom 配置': 'Export Broom configuration',
+  '导入 Broom 配置': 'Import Broom configuration',
+  '配置已导出：{name}': 'Configuration exported: {name}',
+  '无法导出配置：{error}': 'Could not export configuration: {error}',
+  '设置读取失败，请先恢复默认配置或导入配置。': 'Could not read settings. Restore the default configuration or import one first.',
+  '排除列表读取失败，请先重置后再导出：{error}':
+      'Could not read exclusions. Reset them before exporting: {error}',
+  '当前无法读取保留策略，配置未导出。': 'The retention policy is unavailable, so the configuration was not exported.',
+  '保留策略读取失败，请先恢复默认配置后再导出：{error}': 'Could not read the retention policy. Restore the default configuration before exporting: {error}',
+  '配置已导入。': 'Configuration imported.',
+  '配置已导入。为避免自动永久释放，保留策略保持关闭；可在隔离区页重新开启。': 'Configuration imported. The retention policy was kept off to avoid automatic permanent release; you can enable it again from the quarantine page.',
+  '配置已部分导入：{errors}': 'Configuration was only partly imported: {errors}',
+  '无法导入配置：{error}': 'Could not import configuration: {error}',
+  '当前无法保存保留策略，该部分未导入。':
+      'The retention policy could not be saved and was not imported.',
+  '保留策略未导入：{error}': 'Retention policy not imported: {error}',
+  '导入配置？': 'Import configuration?',
+  '将替换当前的主题、语言、规则开关、扫描设置、排除列表与保留策略。': 'This replaces the current theme, language, rule toggles, scan settings, exclusions, and retention policy.',
+  '{theme} · {language}': '{theme} · {language}',
+  '{rules} 条关闭规则 · {categories} 个关闭类别':
+      '{rules} disabled rules · {categories} disabled categories',
+  '{count} 个排除目录（路径需与本机一致才会生效）': '{count} excluded folders (paths must exist on this device to take effect)',
+  '保留策略已开启（保留 {days} 天 · 上限 {bytes}），导入后将保持关闭': 'Retention is on (keep {days} days · limit {bytes}); it will stay off after import',
+  '保留策略未开启（保留 {days} 天 · 上限 {bytes}）':
+      'Retention is off (keep {days} days · limit {bytes})',
+  '隔离区文件、清理历史与扫描结果不在配置中，导入不会删除或修改它们，也不会立即释放任何文件。': 'Quarantine files, cleaning history, and scan results are not part of a configuration. Importing does not delete or modify them and does not immediately release any files.',
+  '导入并替换': 'Import and replace',
+  '恢复默认配置？': 'Restore the default configuration?',
+  '主题、语言、规则开关、扫描设置与规则更新地址将恢复默认；排除列表会被清空，自动保留策略会关闭。隔离区文件、清理历史与扫描结果不会被删除或修改。': 'Theme, language, rule toggles, scan settings, and the rule update URL return to defaults. Exclusions are cleared and automatic retention is turned off. Quarantine files, cleaning history, and scan results are not deleted or modified.',
+  '保留策略未重置：{error}': 'Retention policy not reset: {error}',
+  '当前无法重置保留策略。': 'The retention policy could not be reset.',
+  '已恢复默认配置。隔离区文件与历史记录未受影响。': 'Default configuration restored. Quarantine files and history are unaffected.',
+  '配置未能全部重置：{errors}': 'The configuration was not fully reset: {errors}',
 };

@@ -260,6 +260,31 @@ void main() {
     expect(controller.ruleExclusionScopes[rule.id], RuleExclusionScope.all);
   });
 
+  test('replaces exclusions from an imported configuration', () async {
+    final exclusions = createStore();
+    final scanner = _RecordingScanService();
+    final rule = createRule();
+    final controller = createController(
+      exclusions: exclusions,
+      scanner: scanner,
+      rules: [rule],
+      rootsByRule: {
+        rule.id: [rootA.path, rootB.path],
+      },
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    expect(await controller.addExclusion(rootA.path), isNull);
+    expect(await controller.replaceExclusions([rootB.path]), isNull);
+
+    expect(controller.exclusionCount, 1);
+    expect(controller.ruleExclusionScopes[rule.id], RuleExclusionScope.partial);
+    final reloaded = createStore();
+    await reloaded.ensureLoaded();
+    expect(reloaded.paths, [PathGuard.normalize(rootB.path)]);
+  });
+
   test(
     'blocks scanning when exclusions fail to load and reset recovers',
     () async {

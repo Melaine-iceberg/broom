@@ -50,7 +50,8 @@ void main() {
     final raw = jsonDecode(
       await File(store.filePath).readAsString(),
     ) as Map<String, dynamic>;
-    expect(raw['schemaVersion'], 1);
+    expect(raw['kind'], 'broom.exclusions');
+    expect(raw['schemaVersion'], 2);
     expect(raw['paths'], [PathGuard.normalize(keep.path)]);
   });
 
@@ -147,5 +148,83 @@ void main() {
 
     await expectLater(store.ensureLoaded(), throwsA(isA<FormatException>()));
     expect(store.loadError, contains('不支持的排除列表版本'));
+  });
+
+  test('migrates v1 exclusions and writes the v2 envelope on reset', () async {
+    final store = createStore();
+    final keep = p.windows.join(temp.path, 'keep');
+    await File(store.filePath).parent.create(recursive: true);
+    await File(store.filePath).writeAsString(
+      jsonEncode({
+        'schemaVersion': 1,
+        'paths': [keep],
+      }),
+    );
+
+    await store.ensureLoaded();
+    expect(store.paths, [PathGuard.normalize(keep)]);
+
+    await store.reset();
+    final raw = jsonDecode(
+      await File(store.filePath).readAsString(),
+    ) as Map<String, dynamic>;
+    expect(raw['kind'], 'broom.exclusions');
+    expect(raw['schemaVersion'], 2);
+  });
+
+  test('replaces exclusions without requiring folders to exist', () async {
+    final store = createStore();
+    await store.ensureLoaded();
+    final offline = p.windows.join(temp.path, 'external-drive', 'keep');
+    final other = p.windows.join(temp.path, 'other');
+
+    await store.replaceAll([offline, other, offline]);
+
+    expect(store.paths, [
+      PathGuard.normalize(offline),
+      PathGuard.normalize(other),
+    ]);
+    final reloaded = createStore();
+    await reloaded.ensureLoaded();
+    expect(reloaded.paths, store.paths);
+
+    final raw = jsonDecode(
+      await File(store.filePath).readAsString(),
+    ) as Map<String, dynamic>;
+    expect(raw['kind'], 'broom.exclusions');
+    expect(raw['schemaVersion'], 2);
+  });
+
+  test(
+    'rejects overlapping imported exclusions without changing state',
+    () async {
+      final store = createStore();
+      await store.ensureLoaded();
+      final keep = p.windows.join(temp.path, 'keep');
+      final child = p.windows.join(keep, 'child');
+      await store.replaceAll([keep]);
+
+      await expectLater(
+        store.replaceAll([keep, child]),
+        throwsA(isA<ExclusionException>()),
+      );
+
+      expect(store.paths, [PathGuard.normalize(keep)]);
+    },
+  );
+
+  test('replacing exclusions recovers a corrupted file', () async {
+    final store = createStore();
+    await File(store.filePath).parent.create(recursive: true);
+    await File(store.filePath).writeAsString('{not-json');
+    await expectLater(store.ensureLoaded(), throwsA(isA<FormatException>()));
+    expect(store.loadError, isNotNull);
+
+    final keep = p.windows.join(temp.path, 'keep');
+    await store.replaceAll([keep]);
+
+    expect(store.isLoaded, isTrue);
+    expect(store.loadError, isNull);
+    expect(store.paths, [PathGuard.normalize(keep)]);
   });
 }

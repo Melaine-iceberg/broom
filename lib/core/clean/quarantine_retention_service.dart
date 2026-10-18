@@ -136,6 +136,21 @@ class QuarantineRetentionService {
     );
   }
 
+  /// Persists a policy without running automatic release.
+  ///
+  /// Imported or reset policies must never delete quarantine sessions as a
+  /// side effect of restoring preferences. The policy takes effect on the next
+  /// startup or the next explicit [save].
+  Future<void> replacePolicy(QuarantineRetentionPolicy policy) async {
+    if (!policy.isValid) {
+      throw const QuarantinePolicyException('保留策略参数超出允许范围');
+    }
+    await store.save(policy);
+    _policy = policy;
+    _loadError = null;
+    _initialized = true;
+  }
+
   Future<QuarantineRetentionReport?> save(
     QuarantineRetentionPolicy policy,
   ) async {

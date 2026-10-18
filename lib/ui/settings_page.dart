@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 
 import '../core/clean/quarantine_retention_service.dart';
 import '../core/models/app_settings.dart';
 import '../core/models/cleaner_rule.dart';
 import '../core/models/quarantine_policy_models.dart';
+import '../core/settings/config_bundle.dart';
 import '../core/shell/system_shell.dart';
 import '../l10n/broom_strings.dart';
 import 'analysis_widgets.dart';
@@ -425,6 +427,13 @@ class SettingsPage extends StatelessWidget {
                         ),
                       ],
                     ),
+                  ),
+                  const SizedBox(height: 16),
+                  _ConfigTransferSection(
+                    settings: settings,
+                    cleanController: cleanController,
+                    retention: retention,
+                    shell: shell,
                   ),
                   const SizedBox(height: 16),
                   _Section(
@@ -950,6 +959,490 @@ class _RuleUpdateSection extends StatelessWidget {
                 child: Text(context.t('恢复内置规则')),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConfigTransferSection extends StatefulWidget {
+  const _ConfigTransferSection({
+    required this.settings,
+    required this.cleanController,
+    required this.retention,
+    required this.shell,
+  });
+
+  final SettingsController settings;
+  final CleanController cleanController;
+  final QuarantineRetentionService? retention;
+  final SystemShell shell;
+
+  @override
+  State<_ConfigTransferSection> createState() => _ConfigTransferSectionState();
+}
+
+class _ConfigTransferSectionState extends State<_ConfigTransferSection> {
+  static const _transfer = ConfigTransferService();
+
+  bool _busy = false;
+
+  SettingsController get settings => widget.settings;
+
+  CleanController get cleanController => widget.cleanController;
+
+  QuarantineRetentionService? get retention => widget.retention;
+
+  bool get _blocked => _busy || cleanController.isBusy;
+
+  Future<void> _export() async {
+    if (_blocked) return;
+    setState(() => _busy = true);
+    try {
+      final bundle = await _snapshotForExport();
+      if (!mounted) return;
+      final path = await widget.shell.saveJsonFile(
+        suggestedName: _suggestedFileName(),
+        title: context.t('导出 Broom 配置'),
+      );
+      if (path == null || !mounted) return;
+      await _transfer.exportTo(filePath: path, bundle: bundle);
+      if (!mounted) return;
+      _showMessage(
+        context.tf('配置已导出：{name}', {'name': p.windows.basename(path)}),
+      );
+    } on SystemShellException catch (error) {
+      if (mounted) _showError(error.message);
+    } on ConfigTransferException catch (error) {
+      if (mounted) _showError(error.message);
+    } catch (error) {
+      if (mounted) {
+        _showError(context.tf('无法导出配置：{error}', {'error': error}));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<ConfigBundle> _snapshotForExport() async {
+    final strings = BroomStrings.instance;
+    if (settings.loadError != null) {
+      throw ConfigTransferException(strings.t('设置读取失败，请先恢复默认配置或导入配置。'));
+    }
+    try {
+      await cleanController.exclusions.ensureLoaded();
+    } catch (error) {
+      throw ConfigTransferException(
+        strings.tf('排除列表读取失败，请先重置后再导出：{error}', {'error': error}),
+      );
+    }
+    final service = retention;
+    if (service == null) {
+      throw ConfigTransferException(strings.t('当前无法读取保留策略，配置未导出。'));
+    }
+    await service.ensureInitialized();
+    if (service.loadError != null) {
+      throw ConfigTransferException(
+        strings.tf('保留策略读取失败，请先恢复默认配置后再导出：{error}', {
+          'error': service.loadError,
+        }),
+      );
+    }
+    return ConfigBundle(
+      settings: settings.settings,
+      exclusions: cleanController.exclusions.paths,
+      retention: service.policy ?? QuarantineRetentionPolicy.defaults,
+    );
+  }
+
+  Future<void> _import() async {
+    if (_blocked) return;
+    setState(() => _busy = true);
+    try {
+      final path = await widget.shell.pickJsonFile(
+        title: context.t('导入 Broom 配置'),
+      );
+      if (path == null || !mounted) return;
+      final bundle = await _transfer.importFrom(path);
+      if (!mounted) return;
+
+      // The modal dialog itself blocks the page; stop the spinner while the
+      // user reviews the summary so the frame can settle.
+      setState(() => _busy = false);
+      final confirmed = await _confirmImport(bundle, path);
+      if (confirmed != true || !mounted) return;
+      setState(() => _busy = true);
+
+      final errors = <String>[];
+      final exclusionError = await cleanController.replaceExclusions(
+        bundle.exclusions,
+      );
+      if (exclusionError != null) {
+        errors.add(exclusionError);
+      }
+      final settingsError = await settings.importSettings(bundle.settings);
+      if (settingsError != null) {
+        errors.add(settingsError);
+      }
+      final service = retention;
+      if (service == null) {
+        errors.add(BroomStrings.instance.t('当前无法保存保留策略，该部分未导入。'));
+      } else {
+        try {
+          // Never enable automatic permanent release just because a file was
+          // imported. The user can opt back in from the quarantine page.
+          await service.replacePolicy(
+            bundle.retention.copyWith(enabled: false),
+          );
+        } catch (error) {
+          errors.add(
+            BroomStrings.instance.tf('保留策略未导入：{error}', {'error': error}),
+          );
+        }
+      }
+
+      if (!mounted) return;
+      if (errors.isEmpty) {
+        _showMessage(
+          bundle.retention.enabled
+              ? context.t(
+                  '配置已导入。为避免自动永久释放，保留策略保持关闭；'
+                  '可在隔离区页重新开启。',
+                )
+              : context.t('配置已导入。'),
+        );
+      } else {
+        _showError(
+          context.tf('配置已部分导入：{errors}', {'errors': errors.join(' ')}),
+        );
+      }
+    } on SystemShellException catch (error) {
+      if (mounted) _showError(error.message);
+    } on ConfigBundleException catch (error) {
+      if (mounted) _showError(error.message);
+    } on ConfigTransferException catch (error) {
+      if (mounted) _showError(error.message);
+    } catch (error) {
+      if (mounted) {
+        _showError(context.tf('无法导入配置：{error}', {'error': error}));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<bool?> _confirmImport(ConfigBundle bundle, String path) {
+    final retention = bundle.retention;
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        final strings = dialogContext.strings;
+        return AlertDialog(
+          icon: const Icon(Icons.upload_file_rounded, size: 30),
+          title: Text(strings.t('导入配置？')),
+          content: SizedBox(
+            width: 500,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    strings.t(
+                      '将替换当前的主题、语言、规则开关、扫描设置、'
+                      '排除列表与保留策略。',
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _ImportSummaryLine(
+                    icon: Icons.palette_outlined,
+                    text: strings.tf('{theme} · {language}', {
+                      'theme': _themeLabel(strings, bundle.settings.theme),
+                      'language': _languageLabel(
+                        strings,
+                        bundle.settings.language,
+                      ),
+                    }),
+                  ),
+                  _ImportSummaryLine(
+                    icon: Icons.rule_rounded,
+                    text: strings.tf('{rules} 条关闭规则 · {categories} 个关闭类别', {
+                      'rules': bundle.settings.disabledRuleIds.length,
+                      'categories': bundle.settings.disabledCategoryIds.length,
+                    }),
+                  ),
+                  _ImportSummaryLine(
+                    icon: Icons.block_rounded,
+                    text: strings.tf('{count} 个排除目录（路径需与本机一致才会生效）', {
+                      'count': bundle.exclusions.length,
+                    }),
+                  ),
+                  _ImportSummaryLine(
+                    icon: Icons.auto_delete_outlined,
+                    text: retention.enabled
+                        ? strings.tf(
+                            '保留策略已开启（保留 {days} 天 · 上限 {bytes}），'
+                            '导入后将保持关闭',
+                            {
+                              'days': retention.retentionDays,
+                              'bytes': formatBytes(retention.maxBytes),
+                            },
+                          )
+                        : strings.tf('保留策略未开启（保留 {days} 天 · 上限 {bytes}）', {
+                            'days': retention.retentionDays,
+                            'bytes': formatBytes(retention.maxBytes),
+                          }),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    strings.t(
+                      '隔离区文件、清理历史与扫描结果不在配置中，'
+                      '导入不会删除或修改它们，也不会立即释放任何文件。',
+                    ),
+                    style: Theme.of(dialogContext).textTheme.bodySmall
+                        ?.copyWith(
+                          color: Theme.of(dialogContext)
+                              .colorScheme
+                              .onSurfaceVariant,
+                          height: 1.5,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  SelectableText(
+                    p.windows.basename(path),
+                    style: Theme.of(dialogContext).textTheme.labelSmall
+                        ?.copyWith(
+                          color: Theme.of(dialogContext)
+                              .colorScheme
+                              .onSurfaceVariant,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(strings.t('取消')),
+            ),
+            FilledButton(
+              key: const ValueKey('settings-config-confirm-import'),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(strings.t('导入并替换')),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _reset() async {
+    if (_blocked) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.restart_alt_rounded, size: 30),
+        title: Text(context.t('恢复默认配置？')),
+        content: Text(
+          context.t(
+            '主题、语言、规则开关、扫描设置与规则更新地址将恢复默认；'
+            '排除列表会被清空，自动保留策略会关闭。'
+            '隔离区文件、清理历史与扫描结果不会被删除或修改。',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(context.t('取消')),
+          ),
+          FilledButton(
+            key: const ValueKey('settings-config-confirm-reset'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(context.t('恢复默认')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _busy = true);
+    final errors = <String>[];
+    try {
+      final exclusionError = await cleanController.resetExclusions();
+      if (exclusionError != null) {
+        errors.add(exclusionError);
+      }
+      final service = retention;
+      if (service == null) {
+        errors.add(BroomStrings.instance.t('当前无法重置保留策略。'));
+      } else {
+        try {
+          await service.replacePolicy(QuarantineRetentionPolicy.defaults);
+        } catch (error) {
+          errors.add(
+            BroomStrings.instance.tf('保留策略未重置：{error}', {'error': error}),
+          );
+        }
+      }
+      final settingsError = await settings.restoreDefaults();
+      if (settingsError != null) {
+        errors.add(settingsError);
+      }
+
+      if (!mounted) return;
+      if (errors.isEmpty) {
+        _showMessage(context.t('已恢复默认配置。隔离区文件与历史记录未受影响。'));
+      } else {
+        _showError(
+          context.tf('配置未能全部重置：{errors}', {'errors': errors.join(' ')}),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  String _suggestedFileName() {
+    final now = DateTime.now();
+    String two(int value) => value.toString().padLeft(2, '0');
+    return 'broom-config-${now.year}-${two(now.month)}-${two(now.day)}.json';
+  }
+
+  String _themeLabel(BroomStrings strings, AppThemePreference theme) {
+    return switch (theme) {
+      AppThemePreference.system => strings.t('跟随系统'),
+      AppThemePreference.light => strings.t('浅色'),
+      AppThemePreference.dark => strings.t('深色'),
+    };
+  }
+
+  String _languageLabel(BroomStrings strings, AppLanguagePreference language) {
+    return switch (language) {
+      AppLanguagePreference.system => strings.t('跟随系统'),
+      AppLanguagePreference.zh => strings.t('简体中文'),
+      AppLanguagePreference.en => 'English',
+    };
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+      );
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Theme.of(context).colorScheme.errorContainer,
+        ),
+      );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return _Section(
+      icon: Icons.import_export_rounded,
+      title: context.t('备份与恢复'),
+      subtitle: context.t(
+        '导出或导入主题、语言、规则开关、扫描设置、排除列表与保留策略。'
+        '配置不包含隔离区文件、清理历史、扫描结果或在线规则目录。',
+      ),
+      trailing: _busy
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                key: const ValueKey('settings-config-export'),
+                onPressed: _blocked ? null : _export,
+                icon: const Icon(Icons.download_rounded, size: 17),
+                label: Text(context.t('导出配置')),
+              ),
+              OutlinedButton.icon(
+                key: const ValueKey('settings-config-import'),
+                onPressed: _blocked ? null : _import,
+                icon: const Icon(Icons.upload_rounded, size: 17),
+                label: Text(context.t('导入配置')),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            context.t(
+              '导入会替换当前配置；保留策略以关闭状态导入，不会立即释放隔离区文件。'
+              '排除目录的路径必须在本机存在才会生效。',
+            ),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            context.t('导出文件包含排除目录的绝对路径，请妥善保管。'),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          const Divider(height: 24),
+          ListTile(
+            key: const ValueKey('settings-config-reset'),
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(
+              Icons.settings_backup_restore_rounded,
+              color: scheme.error,
+            ),
+            title: Text(context.t('恢复默认配置')),
+            subtitle: Text(context.t('清除偏好设置与排除列表，并关闭自动保留策略；不会删除隔离区文件。')),
+            trailing: TextButton(
+              onPressed: _blocked ? null : _reset,
+              child: Text(context.t('恢复默认')),
+            ),
+            onTap: _blocked ? null : _reset,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ImportSummaryLine extends StatelessWidget {
+  const _ImportSummaryLine({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: scheme.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(text, style: Theme.of(context).textTheme.bodySmall),
           ),
         ],
       ),

@@ -16,6 +16,19 @@ class _FakeSystemShell implements SystemShell {
       r'C:\Users\Alice\Downloads';
 
   @override
+  Future<String?> pickJsonFile({
+    String? initialDirectory,
+    String? title,
+  }) async => null;
+
+  @override
+  Future<String?> saveJsonFile({
+    required String suggestedName,
+    String? initialDirectory,
+    String? title,
+  }) async => null;
+
+  @override
   Future<DiskSpaceSnapshot> queryDiskSpace(String path) async =>
       const DiskSpaceSnapshot(freeBytes: 1000000, totalBytes: 2000000);
 

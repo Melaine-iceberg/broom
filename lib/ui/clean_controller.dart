@@ -859,6 +859,25 @@ class CleanController extends ChangeNotifier {
     }
   }
 
+  /// Replaces the exclusion list with an imported configuration.
+  ///
+  /// This also recovers from a corrupted exclusions file, matching the reset
+  /// path: validation and the write happen before in-memory state changes.
+  Future<String?> replaceExclusions(List<String> paths) async {
+    try {
+      await exclusions.replaceAll(paths);
+      _exclusionsReady = true;
+      _exclusionError = null;
+      await _refreshRuleExclusionScopes(notify: false);
+      _notify();
+      return null;
+    } on ExclusionException catch (error) {
+      return error.message;
+    } catch (error) {
+      return trf('无法导入排除列表：{error}', {'error': error});
+    }
+  }
+
   Future<void> refreshRuleExclusionScopes() =>
       _refreshRuleExclusionScopes(notify: true);
 

@@ -5,8 +5,7 @@ import 'package:path/path.dart' as p;
 
 import '../models/quarantine_policy_models.dart';
 import '../safety/path_guard.dart';
-
-const _schemaVersion = 1;
+import 'config_schema.dart';
 
 class QuarantinePolicyException implements Exception {
   const QuarantinePolicyException(this.message);
@@ -40,27 +39,7 @@ class QuarantinePolicyStore {
       if (decoded is! Map<String, dynamic>) {
         throw const FormatException('保留策略格式无效');
       }
-      final version = decoded['schemaVersion'];
-      if (version != _schemaVersion) {
-        throw FormatException('不支持的保留策略版本：$version');
-      }
-
-      final enabled = decoded['enabled'];
-      final retentionDays = decoded['retentionDays'];
-      final maxBytes = decoded['maxBytes'];
-      if (enabled is! bool || retentionDays is! int || maxBytes is! int) {
-        throw const FormatException('保留策略缺少有效参数');
-      }
-
-      final policy = QuarantineRetentionPolicy(
-        enabled: enabled,
-        retentionDays: retentionDays,
-        maxBytes: maxBytes,
-      );
-      if (!policy.isValid) {
-        throw const FormatException('保留策略参数超出允许范围');
-      }
-      return policy;
+      return decodeRetentionDocument(decoded);
     } on FormatException catch (error) {
       throw QuarantinePolicyException('保留策略数据无效：${error.message}');
     } on FileSystemException catch (error) {
@@ -77,12 +56,7 @@ class QuarantinePolicyStore {
       file.parent.createSync(recursive: true);
       final temp = File('$filePath.tmp');
       temp.writeAsStringSync(
-        jsonEncode({
-          'schemaVersion': _schemaVersion,
-          'enabled': policy.enabled,
-          'retentionDays': policy.retentionDays,
-          'maxBytes': policy.maxBytes,
-        }),
+        jsonEncode(encodeRetentionDocument(policy)),
         flush: true,
       );
       temp.renameSync(PathGuard.normalize(filePath));

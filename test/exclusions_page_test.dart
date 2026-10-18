@@ -48,6 +48,19 @@ class _PickerShell implements SystemShell {
   Future<String?> pickFolder({String? initialDirectory}) async => path;
 
   @override
+  Future<String?> pickJsonFile({
+    String? initialDirectory,
+    String? title,
+  }) async => null;
+
+  @override
+  Future<String?> saveJsonFile({
+    required String suggestedName,
+    String? initialDirectory,
+    String? title,
+  }) async => null;
+
+  @override
   Future<DiskSpaceSnapshot> queryDiskSpace(String path) async =>
       const DiskSpaceSnapshot(freeBytes: 0, totalBytes: 0);
 

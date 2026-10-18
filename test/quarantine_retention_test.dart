@@ -313,4 +313,29 @@ void main() {
       expect((await store.load()).enabled, isFalse);
     },
   );
+
+  test('replacing a policy never releases files immediately', () async {
+    final quarantine = _FakeRetentionQuarantine([
+      _RetentionSession(
+        id: 'old',
+        createdAt: now.subtract(const Duration(days: 60)),
+        bytes: 2 * mib,
+      ),
+    ]);
+    final store = createStore();
+    final retention = QuarantineRetentionService(
+      quarantine: quarantine,
+      store: store,
+      clock: () => now,
+    );
+    await retention.ensureInitialized();
+
+    await retention.replacePolicy(enabledPolicy);
+
+    expect(retention.policy, enabledPolicy);
+    expect(retention.loadError, isNull);
+    expect(retention.lastReport, isNull);
+    expect(quarantine.purged, isEmpty);
+    expect((await store.load()).enabled, isTrue);
+  });
 }

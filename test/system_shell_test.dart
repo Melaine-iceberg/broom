@@ -150,6 +150,54 @@ void main() {
     },
   );
 
+  test('pickJsonFile forwards options and maps cancellation', () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return '';
+    });
+
+    final cancelled = await shell.pickJsonFile(
+      initialDirectory: r'C:\Users\Alice\Downloads',
+      title: '导入 Broom 配置',
+    );
+
+    expect(cancelled, isNull);
+    expect(calls.single.method, 'pickJsonFile');
+    expect(calls.single.arguments, <String, Object>{
+      'initialDirectory': r'C:\Users\Alice\Downloads',
+      'title': '导入 Broom 配置',
+    });
+
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      return r'C:\Users\Alice\broom-config.json';
+    });
+    expect(await shell.pickJsonFile(), r'C:\Users\Alice\broom-config.json');
+  });
+
+  test(
+    'saveJsonFile forwards the suggested name and returns the path',
+    () async {
+      MethodCall? received;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        received = call;
+        return r'C:\Users\Alice\broom-config-2026-10-18.json';
+      });
+
+      final path = await shell.saveJsonFile(
+        suggestedName: 'broom-config-2026-10-18.json',
+        title: '导出 Broom 配置',
+      );
+
+      expect(path, r'C:\Users\Alice\broom-config-2026-10-18.json');
+      expect(received?.method, 'saveJsonFile');
+      expect(received?.arguments, <String, Object>{
+        'suggestedName': 'broom-config-2026-10-18.json',
+        'title': '导出 Broom 配置',
+      });
+    },
+  );
+
   test('revealPath forwards the path', () async {
     MethodCall? received;
     messenger.setMockMethodCallHandler(channel, (call) async {
@@ -182,6 +230,14 @@ void main() {
     );
     await expectLater(
       unsupported.pickFolder(),
+      throwsA(isA<SystemShellException>()),
+    );
+    await expectLater(
+      unsupported.pickJsonFile(),
+      throwsA(isA<SystemShellException>()),
+    );
+    await expectLater(
+      unsupported.saveJsonFile(suggestedName: 'broom-config.json'),
       throwsA(isA<SystemShellException>()),
     );
     await expectLater(

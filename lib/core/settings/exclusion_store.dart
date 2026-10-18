@@ -5,8 +5,7 @@ import 'package:path/path.dart' as p;
 
 import '../safety/path_exclusions.dart';
 import '../safety/path_guard.dart';
-
-const _schemaVersion = 1;
+import 'config_schema.dart';
 
 class ExclusionException implements Exception {
   const ExclusionException(this.message);
@@ -95,6 +94,33 @@ class ExclusionStore implements PathExclusionSource {
     _loadError = null;
   }
 
+  /// Replaces all exclusions, including when the current file is corrupted.
+  ///
+  /// Unlike [add], imported paths do not need to exist on this machine: a
+  /// configuration may be restored before an external drive is connected.
+  /// Relative paths, volume roots, and overlapping folders are still rejected
+  /// so a bad import cannot silently widen an exclusion.
+  Future<void> replaceAll(Iterable<String> rawPaths) async {
+    final normalized = <String>[];
+    final keys = <String>{};
+    for (final rawPath in rawPaths) {
+      final path = _normalizeAbsolute(rawPath);
+      if (!keys.add(_key(path))) continue;
+      if (normalized.any(
+        (existing) => PathExclusions.overlaps(existing, path),
+      )) {
+        throw ExclusionException('导入的排除项互相重叠，请先整理后重试：$path');
+      }
+      normalized.add(path);
+    }
+
+    final next = PathExclusions(normalized);
+    await _save(next);
+    _exclusions = next;
+    _loaded = true;
+    _loadError = null;
+  }
+
   Future<void> _load() async {
     try {
       final file = File(filePath);
@@ -109,24 +135,7 @@ class ExclusionStore implements PathExclusionSource {
       if (value is! Map<String, dynamic>) {
         throw const FormatException('排除列表格式无效');
       }
-      final version = value['schemaVersion'];
-      if (version != _schemaVersion) {
-        throw FormatException('不支持的排除列表版本：$version');
-      }
-      final rawPaths = value['paths'];
-      if (rawPaths is! List) {
-        throw const FormatException('排除列表缺少路径数据');
-      }
-
-      final paths = <String>[];
-      for (final raw in rawPaths) {
-        if (raw is! String || raw.trim().isEmpty) {
-          throw const FormatException('排除列表包含无效路径');
-        }
-        paths.add(_normalizeAbsolute(raw));
-      }
-
-      _exclusions = PathExclusions(paths);
+      _exclusions = PathExclusions(decodeExclusionsDocument(value));
       _loaded = true;
       _loadError = null;
     } on FormatException catch (error) {
@@ -147,10 +156,7 @@ class ExclusionStore implements PathExclusionSource {
       file.parent.createSync(recursive: true);
       final temp = File('$filePath.tmp');
       temp.writeAsStringSync(
-        jsonEncode({
-          'schemaVersion': _schemaVersion,
-          'paths': exclusions.paths,
-        }),
+        jsonEncode(encodeExclusionsDocument(exclusions.paths)),
         flush: true,
       );
       temp.renameSync(filePath);

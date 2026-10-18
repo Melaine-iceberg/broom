@@ -1,13 +1,18 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:broom/app.dart';
+import 'package:broom/core/clean/quarantine_retention_service.dart';
 import 'package:broom/core/models/app_settings.dart';
 import 'package:broom/core/models/cleaner_rule.dart';
+import 'package:broom/core/models/quarantine_policy_models.dart';
 import 'package:broom/core/platform/cleaner_platform.dart';
 import 'package:broom/core/rules/rule_catalog_store.dart';
 import 'package:broom/core/rules/rule_update_service.dart';
 import 'package:broom/core/safety/path_guard.dart';
+import 'package:broom/core/settings/config_bundle.dart';
 import 'package:broom/core/settings/exclusion_store.dart';
+import 'package:broom/core/settings/quarantine_policy_store.dart';
 import 'package:broom/core/settings/settings_store.dart';
 import 'package:broom/core/shell/system_shell.dart';
 import 'package:broom/ui/clean_controller.dart';
@@ -45,11 +50,31 @@ class _SettingsPlatform implements CleanerPlatform {
 }
 
 class _FakeSystemShell implements SystemShell {
+  String? importPath;
+  String? exportPath;
+  String? lastSuggestedName;
+
   @override
   Future<void> emptyRecycleBin() async {}
 
   @override
   Future<String?> pickFolder({String? initialDirectory}) async => null;
+
+  @override
+  Future<String?> pickJsonFile({
+    String? initialDirectory,
+    String? title,
+  }) async => importPath;
+
+  @override
+  Future<String?> saveJsonFile({
+    required String suggestedName,
+    String? initialDirectory,
+    String? title,
+  }) async {
+    lastSuggestedName = suggestedName;
+    return exportPath;
+  }
 
   @override
   Future<DiskSpaceSnapshot> queryDiskSpace(String path) async =>
@@ -88,9 +113,22 @@ void main() {
     }
   });
 
+  Future<QuarantineRetentionService> createRetention() async {
+    final retention = QuarantineRetentionService(
+      quarantine: FakeQuarantineService(),
+      store: QuarantinePolicyStore(
+        filePath: p.windows.join(temp.path, 'quarantine_policy.json'),
+      ),
+    );
+    await retention.ensureInitialized();
+    return retention;
+  }
+
   Future<(SettingsController, CleanController)> pumpApp(
     WidgetTester tester, {
     RuleUpdateController? ruleUpdates,
+    _FakeSystemShell? shell,
+    QuarantineRetentionService? retention,
   }) async {
     tester.view.physicalSize = const Size(1200, 1800);
     tester.view.devicePixelRatio = 1;
@@ -118,7 +156,8 @@ void main() {
       BroomApp(
         controller: controller,
         settingsController: settings,
-        systemShell: _FakeSystemShell(),
+        systemShell: shell ?? _FakeSystemShell(),
+        quarantineRetention: retention,
         ruleUpdates: ruleUpdates,
       ),
     );
@@ -256,5 +295,136 @@ void main() {
 
     expect(find.text('排除列表'), findsWidgets);
     expect(find.text('尚未添加排除项'), findsOneWidget);
+  });
+
+  testWidgets('exports configuration without quarantine data', (tester) async {
+    final shell = _FakeSystemShell();
+    final exportPath = p.windows.join(temp.path, 'exported-config.json');
+    shell.exportPath = exportPath;
+    final retention = await createRetention();
+    final (settings, controller) = await pumpApp(
+      tester,
+      shell: shell,
+      retention: retention,
+    );
+
+    await settings.setTheme(AppThemePreference.dark);
+    await controller.replaceExclusions([r'C:\Temp\Keep']);
+    await retention.replacePolicy(
+      const QuarantineRetentionPolicy(
+        enabled: false,
+        retentionDays: 45,
+        maxBytes: 2 * 1024 * 1024,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final export = find.byKey(const ValueKey('settings-config-export'));
+    await tester.ensureVisible(export);
+    await tester.tap(export);
+    await tester.pumpAndSettle();
+
+    expect(shell.lastSuggestedName, startsWith('broom-config-'));
+    expect(shell.lastSuggestedName, endsWith('.json'));
+    expect(File(exportPath).existsSync(), isTrue);
+    final raw =
+        jsonDecode(File(exportPath).readAsStringSync()) as Map<String, dynamic>;
+    expect(raw['kind'], 'broom-config');
+    expect(raw.keys, isNot(contains('quarantine')));
+    expect((raw['settings'] as Map<String, dynamic>)['theme'], 'dark');
+    expect((raw['exclusions'] as Map<String, dynamic>)['paths'], [
+      r'C:\Temp\Keep',
+    ]);
+    expect(
+      (raw['quarantinePolicy'] as Map<String, dynamic>)['retentionDays'],
+      45,
+    );
+    expect(find.byType(SnackBar), findsOneWidget);
+  });
+
+  testWidgets('imports configuration but keeps retention off', (tester) async {
+    final shell = _FakeSystemShell();
+    final importPath = p.windows.join(temp.path, 'import-config.json');
+    shell.importPath = importPath;
+    final imported = ConfigBundle(
+      settings: const AppSettings(
+        theme: AppThemePreference.dark,
+        language: AppLanguagePreference.en,
+        disabledRuleIds: {'test.cache'},
+        scanParallelism: 1,
+      ),
+      exclusions: const [r'C:\Temp\Imported'],
+      retention: const QuarantineRetentionPolicy(
+        enabled: true,
+        retentionDays: 7,
+        maxBytes: 1024 * 1024,
+      ),
+    );
+    File(importPath).writeAsStringSync(ConfigBundleCodec.encode(imported));
+    final retention = await createRetention();
+    final (settings, controller) = await pumpApp(
+      tester,
+      shell: shell,
+      retention: retention,
+    );
+
+    final import = find.byKey(const ValueKey('settings-config-import'));
+    await tester.ensureVisible(import);
+    await tester.tap(import);
+    await tester.pumpAndSettle();
+
+    expect(find.text('导入配置？'), findsOneWidget);
+    expect(find.textContaining('保留策略已开启'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('settings-config-confirm-import')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(settings.settings.theme, AppThemePreference.dark);
+    expect(settings.settings.language, AppLanguagePreference.en);
+    expect(settings.settings.isRuleEnabled('test.cache'), isFalse);
+    expect(settingsStore.load().theme, AppThemePreference.dark);
+    expect(controller.exclusions.paths, [r'C:\Temp\Imported']);
+    expect(retention.policy?.enabled, isFalse);
+    expect(retention.policy?.retentionDays, 7);
+    final storedPolicy = await QuarantinePolicyStore(
+      filePath: p.windows.join(temp.path, 'quarantine_policy.json'),
+    ).load();
+    expect(storedPolicy.enabled, isFalse);
+    expect(find.byType(SnackBar), findsOneWidget);
+  });
+
+  testWidgets('restores defaults and clears exclusions', (tester) async {
+    final retention = await createRetention();
+    final (settings, controller) = await pumpApp(tester, retention: retention);
+
+    await settings.setTheme(AppThemePreference.dark);
+    await settings.setRuleEnabled('test.cache', false);
+    await controller.replaceExclusions([r'C:\Temp\Keep']);
+    await retention.replacePolicy(
+      const QuarantineRetentionPolicy(
+        enabled: false,
+        retentionDays: 45,
+        maxBytes: 2 * 1024 * 1024,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final reset = find.byKey(const ValueKey('settings-config-reset'));
+    await tester.ensureVisible(reset);
+    await tester.tap(reset);
+    await tester.pumpAndSettle();
+
+    expect(find.text('恢复默认配置？'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('settings-config-confirm-reset')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(settingsStore.load(), AppSettings.defaults);
+    expect(controller.exclusions.paths, isEmpty);
+    expect(retention.policy?.enabled, isFalse);
+    expect(retention.policy?.retentionDays, 30);
+    expect(find.byType(SnackBar), findsOneWidget);
   });
 }

@@ -150,6 +150,31 @@ class SettingsController extends ChangeNotifier {
     return _persist(_settings.copyWith(ruleUpdateUrl: trimmed));
   }
 
+  /// Restores every preference to its default while keeping the current
+  /// onboarding state, so a returning user does not see the guide again.
+  Future<String?> restoreDefaults() async {
+    final next = AppSettings.defaults.copyWith(
+      onboardingCompleted: _settings.onboardingCompleted,
+    );
+    return _replaceAndClearErrors(next);
+  }
+
+  /// Applies an imported configuration. The onboarding flag is kept from the
+  /// current session because importing a profile is not a first launch.
+  Future<String?> importSettings(AppSettings imported) {
+    return _replaceAndClearErrors(
+      imported.copyWith(onboardingCompleted: _settings.onboardingCompleted),
+    );
+  }
+
+  Future<String?> _replaceAndClearErrors(AppSettings next) async {
+    final error = await _persist(next);
+    if (error != null) return error;
+    _loadError = null;
+    _notify();
+    return null;
+  }
+
   void clearErrors() {
     if (_loadError == null && _saveError == null) return;
     _loadError = null;
