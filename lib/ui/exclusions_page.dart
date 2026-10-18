@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/shell/system_shell.dart';
+import '../l10n/broom_strings.dart';
 import 'clean_controller.dart';
 
 class ExclusionsPage extends StatefulWidget {
@@ -33,7 +34,7 @@ class _ExclusionsPageState extends State<ExclusionsPage> {
       if (error != null) {
         _showMessage(error, isError: true);
       } else {
-        _showMessage('已排除：$path');
+        _showMessage(context.tf('已排除：{path}', {'path': path}));
       }
     } on SystemShellException catch (error) {
       if (mounted) _showMessage(error.message, isError: true);
@@ -48,7 +49,7 @@ class _ExclusionsPageState extends State<ExclusionsPage> {
     try {
       final error = await controller.removeExclusion(path);
       if (!mounted) return;
-      _showMessage(error ?? '已移除排除项', isError: error != null);
+      _showMessage(error ?? context.t('已移除排除项'), isError: error != null);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -59,19 +60,21 @@ class _ExclusionsPageState extends State<ExclusionsPage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         icon: const Icon(Icons.restart_alt_rounded, size: 30),
-        title: const Text('重置排除列表？'),
-        content: const Text(
-          '保存的排除项会被清空，文件夹本身不会受到影响。'
-          '之后这些目录会重新参与扫描。',
+        title: Text(context.t('重置排除列表？')),
+        content: Text(
+          context.t(
+            '保存的排除项会被清空，文件夹本身不会受到影响。'
+            '之后这些目录会重新参与扫描。',
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
+            child: Text(context.t('取消')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('重置'),
+            child: Text(context.t('重置')),
           ),
         ],
       ),
@@ -82,7 +85,7 @@ class _ExclusionsPageState extends State<ExclusionsPage> {
     try {
       final error = await controller.resetExclusions();
       if (!mounted) return;
-      _showMessage(error ?? '排除列表已重置', isError: error != null);
+      _showMessage(error ?? context.t('排除列表已重置'), isError: error != null);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -118,16 +121,18 @@ class _ExclusionsPageState extends State<ExclusionsPage> {
             leading: IconButton(
               onPressed: () => Navigator.of(context).pop(),
               icon: const Icon(Icons.arrow_back_rounded),
-              tooltip: '返回',
+              tooltip: context.t('返回'),
             ),
             toolbarHeight: 68,
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('排除列表'),
+                Text(context.t('排除列表')),
                 const SizedBox(height: 1),
                 Text(
-                  paths.isEmpty ? '没有排除项' : '${paths.length} 个目录不参与扫描',
+                  paths.isEmpty
+                      ? context.t('没有排除项')
+                      : context.tf('{count} 个目录不参与扫描', {'count': paths.length}),
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -154,7 +159,10 @@ class _ExclusionsPageState extends State<ExclusionsPage> {
                     const SizedBox(height: 18),
                     Row(
                       children: [
-                        Text('排除项', style: theme.textTheme.titleSmall),
+                        Text(
+                          context.t('排除项'),
+                          style: theme.textTheme.titleSmall,
+                        ),
                         const SizedBox(width: 8),
                         Text(
                           '${paths.length}',
@@ -177,7 +185,7 @@ class _ExclusionsPageState extends State<ExclusionsPage> {
                                   ),
                                 )
                               : const Icon(Icons.add_rounded, size: 18),
-                          label: const Text('添加文件夹'),
+                          label: Text(context.t('添加文件夹')),
                         ),
                       ],
                     ),
@@ -224,7 +232,7 @@ class _ExclusionsPageState extends State<ExclusionsPage> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      '排除只影响 Broom 的扫描、清理与撤销校验，不会移动或删除任何文件。',
+                      context.t('排除只影响 Broom 的扫描、清理与撤销校验，不会移动或删除任何文件。'),
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),
@@ -262,8 +270,10 @@ class _InfoCard extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              '排除优先于所有 Safe 规则。被排除目录及其子目录不会出现在扫描结果中，'
-              '清理与撤销也会再次校验。规则根目录位于排除项之下时，该规则不会参与扫描。',
+              context.t(
+                '排除优先于所有 Safe 规则。被排除目录及其子目录不会出现在扫描结果中，'
+                '清理与撤销也会再次校验。规则根目录位于排除项之下时，该规则不会参与扫描。',
+              ),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onSurfaceVariant,
                 height: 1.5,
@@ -298,7 +308,9 @@ class _LoadErrorBanner extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              '$message\n为避免清理被排除的目录，扫描已暂停。请重置排除列表后重试。',
+              context.tf('{message}\n为避免清理被排除的目录，扫描已暂停。请重置排除列表后重试。', {
+                'message': message,
+              }),
               style: Theme.of(context).textTheme.bodySmall
                   ?.copyWith(color: scheme.onErrorContainer, height: 1.45),
             ),
@@ -307,7 +319,7 @@ class _LoadErrorBanner extends StatelessWidget {
           TextButton(
             key: const ValueKey('reset-exclusions'),
             onPressed: onReset,
-            child: const Text('重置'),
+            child: Text(context.t('重置')),
           ),
         ],
       ),
@@ -340,12 +352,14 @@ class _EmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              hasError ? '排除列表无法读取' : '尚未添加排除项',
+              hasError ? context.t('排除列表无法读取') : context.t('尚未添加排除项'),
               style: theme.textTheme.titleSmall,
             ),
             const SizedBox(height: 5),
             Text(
-              hasError ? '重置后可以重新添加排除目录。' : '选择一个不希望 Broom 触碰的文件夹。',
+              hasError
+                  ? context.t('重置后可以重新添加排除目录。')
+                  : context.t('选择一个不希望 Broom 触碰的文件夹。'),
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onSurfaceVariant,
@@ -356,7 +370,7 @@ class _EmptyState extends StatelessWidget {
               OutlinedButton.icon(
                 onPressed: onReset,
                 icon: const Icon(Icons.restart_alt_rounded, size: 17),
-                label: const Text('重置排除列表'),
+                label: Text(context.t('重置排除列表')),
               ),
             ],
           ],
@@ -409,7 +423,7 @@ class _ExclusionRow extends StatelessWidget {
           const SizedBox(width: 8),
           IconButton(
             onPressed: onRemove,
-            tooltip: '移除排除项',
+            tooltip: context.t('移除排除项'),
             icon: const Icon(Icons.close_rounded, size: 18),
             visualDensity: VisualDensity.compact,
           ),

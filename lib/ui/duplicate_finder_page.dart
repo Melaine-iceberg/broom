@@ -4,6 +4,7 @@ import '../core/analysis/analysis_service.dart';
 import '../core/models/analysis_models.dart';
 import '../core/models/cleaner_rule.dart';
 import '../core/shell/system_shell.dart';
+import '../l10n/broom_strings.dart';
 import 'analysis_controllers.dart';
 import 'analysis_widgets.dart';
 import 'format.dart';
@@ -66,16 +67,16 @@ class _DuplicateFinderPageState extends State<DuplicateFinderPage> {
         leading: IconButton(
           onPressed: () => Navigator.of(context).pop(),
           icon: const Icon(Icons.arrow_back_rounded),
-          tooltip: '返回',
+          tooltip: context.t('返回'),
         ),
         toolbarHeight: 68,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('重复文件'),
+            Text(context.t('重复文件')),
             const SizedBox(height: 1),
             Text(
-              '按内容比对 · 手动决定保留哪一份',
+              context.t('按内容比对 · 手动决定保留哪一份'),
               style: theme.textTheme.labelSmall?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
@@ -117,10 +118,11 @@ class _DuplicateFinderPageState extends State<DuplicateFinderPage> {
                     ],
                     _ConfigPanel(controller: _controller),
                     const SizedBox(height: 10),
-                    const ReadOnlyHint(
-                      message:
-                          'Info 级只读分析：Broom 只读取文件内容进行比对，不会删除、移动或修改任何文件。'
-                          '是否保留重复项由你自行决定，分析结果也不会自动勾选。',
+                    ReadOnlyHint(
+                      message: context.t(
+                        'Info 级只读分析：Broom 只读取文件内容进行比对，不会删除、移动或修改任何文件。'
+                        '是否保留重复项由你自行决定，分析结果也不会自动勾选。',
+                      ),
                     ),
                     const SizedBox(height: 14),
                     Expanded(child: _buildContent(context)),
@@ -155,26 +157,26 @@ class _DuplicateFinderPageState extends State<DuplicateFinderPage> {
           constraints: const BoxConstraints(maxWidth: 620),
           child: AnalysisProgressCard(
             icon: Icons.content_copy_rounded,
-            title: comparing ? '正在核对文件内容' : '正在遍历文件夹',
+            title: comparing ? context.t('正在核对文件内容') : context.t('正在遍历文件夹'),
             description: comparing
-                ? '对大小相同的候选文件做部分指纹与完整哈希比对。'
-                : '只读取文件信息，不会修改任何文件。',
+                ? context.t('对大小相同的候选文件做部分指纹与完整哈希比对。')
+                : context.t('只读取文件信息，不会修改任何文件。'),
             progress: progress?.fraction,
             stats: [
               AnalysisProgressStat(
-                label: '已检查文件',
+                label: context.t('已检查文件'),
                 value: formatCount(progress?.scannedFiles ?? 0),
               ),
               AnalysisProgressStat(
-                label: '已读取',
+                label: context.t('已读取'),
                 value: formatBytes(progress?.scannedBytes ?? 0),
               ),
               AnalysisProgressStat(
-                label: comparing ? '已比对' : '当前阶段',
+                label: comparing ? context.t('已比对') : context.t('当前阶段'),
                 value: comparing
                     ? '${formatCount(progress!.processedFiles)} / '
                           '${formatCount(progress.totalFiles)}'
-                    : '遍历中',
+                    : context.t('遍历中'),
               ),
             ],
             currentPath: progress?.currentPath,
@@ -195,12 +197,14 @@ class _DuplicateFinderPageState extends State<DuplicateFinderPage> {
       children: [
         if (report.errorCount > 0) ...[
           AnalysisBanner(
-            message: '有 ${formatCount(report.errorCount)} 个文件或目录无法读取，已跳过。',
+            message: context.tf('有 {count} 个文件或目录无法读取，已跳过。', {
+              'count': formatCount(report.errorCount),
+            }),
           ),
           const SizedBox(height: 10),
         ],
         if (report.truncated) ...[
-          const AnalysisBanner(message: '已达到单次分析上限（200,000 个文件），结果可能不完整。'),
+          AnalysisBanner(message: context.t('已达到单次分析上限（200,000 个文件），结果可能不完整。')),
           const SizedBox(height: 10),
         ],
         _DuplicateSummary(report: report),
@@ -253,7 +257,7 @@ class _ConfigPanel extends StatelessWidget {
           child: Row(
             children: [
               Text(
-                '最小文件大小',
+                context.t('最小文件大小'),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
@@ -283,7 +287,9 @@ class _ConfigPanel extends StatelessWidget {
                   report == null ? Icons.search_rounded : Icons.refresh_rounded,
                   size: 18,
                 ),
-                label: Text(report == null ? '开始分析' : '重新分析'),
+                label: Text(
+                  report == null ? context.t('开始分析') : context.t('重新分析'),
+                ),
               ),
             ],
           ),
@@ -317,19 +323,19 @@ class _DuplicateSummary extends StatelessWidget {
           Row(
             children: [
               _SummaryStat(
-                label: '重复组',
+                label: context.t('重复组'),
                 value: formatCount(report.groupCount),
                 emphasized: false,
               ),
               _divider(scheme),
               _SummaryStat(
-                label: '可释放空间',
+                label: context.t('可释放空间'),
                 value: formatBytes(report.reclaimableBytes),
                 emphasized: true,
               ),
               _divider(scheme),
               _SummaryStat(
-                label: '冗余文件',
+                label: context.t('冗余文件'),
                 value: formatCount(report.redundantFileCount),
                 emphasized: false,
               ),
@@ -337,9 +343,11 @@ class _DuplicateSummary extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            '已检查 ${formatCount(report.scannedFiles)} 个文件'
-            '（${formatBytes(report.scannedBytes)}），'
-            '找到 ${formatCount(report.duplicateFileCount)} 个内容相同的文件。',
+            context.tf('已检查 {scanned} 个文件（{bytes}），找到 {duplicates} 个内容相同的文件。', {
+              'scanned': formatCount(report.scannedFiles),
+              'bytes': formatBytes(report.scannedBytes),
+              'duplicates': formatCount(report.duplicateFileCount),
+            }),
             textAlign: TextAlign.center,
             style: theme.textTheme.labelSmall?.copyWith(
               color: scheme.onSurfaceVariant,
@@ -447,15 +455,19 @@ class _DuplicateGroupCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${group.files.length} 个相同文件',
+                        context.tf('{count} 个相同文件', {
+                          'count': group.files.length,
+                        }),
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '每个 ${formatBytes(group.size)} · '
-                        '合计 ${formatBytes(group.totalBytes)}',
+                        context.tf('每个 {size} · 合计 {total}', {
+                          'size': formatBytes(group.size),
+                          'total': formatBytes(group.totalBytes),
+                        }),
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),
@@ -474,7 +486,9 @@ class _DuplicateGroupCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    '可释放 ${formatBytes(group.wastedBytes)}',
+                    context.tf('可释放 {bytes}', {
+                      'bytes': formatBytes(group.wastedBytes),
+                    }),
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: scheme.onPrimaryContainer,
                       fontWeight: FontWeight.w600,
@@ -496,7 +510,9 @@ class _DuplicateGroupCard extends StatelessWidget {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  '还有 ${formatCount(hidden)} 个相同文件未显示。',
+                  context.tf('还有 {count} 个相同文件未显示。', {
+                    'count': formatCount(hidden),
+                  }),
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -568,7 +584,7 @@ class _DuplicateFileRow extends StatelessWidget {
             onPressed: () => onReveal(file.path),
             icon: const Icon(Icons.folder_open_rounded, size: 17),
             visualDensity: VisualDensity.compact,
-            tooltip: '在资源管理器中显示',
+            tooltip: context.t('在资源管理器中显示'),
           ),
         ],
       ),
@@ -609,12 +625,13 @@ class _NoDuplicates extends StatelessWidget {
                   color: scheme.primary,
                 ),
                 const SizedBox(height: 14),
-                Text('没有发现重复文件', style: theme.textTheme.titleMedium),
+                Text(context.t('没有发现重复文件'), style: theme.textTheme.titleMedium),
                 const SizedBox(height: 6),
                 Text(
-                  '已检查 ${formatCount(report.scannedFiles)} 个文件'
-                  '（${formatBytes(report.scannedBytes)}），'
-                  '所选目录中没有内容完全相同的文件。',
+                  context.tf('已检查 {scanned} 个文件（{bytes}），所选目录中没有内容完全相同的文件。', {
+                    'scanned': formatCount(report.scannedFiles),
+                    'bytes': formatBytes(report.scannedBytes),
+                  }),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
@@ -660,7 +677,7 @@ class _IdleState extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 18),
-              Text('找出内容相同的文件', style: theme.textTheme.titleLarge),
+              Text(context.t('找出内容相同的文件'), style: theme.textTheme.titleLarge),
               const SizedBox(height: 7),
               Text(
                 '选择一个文件夹开始分析。Broom 会先按文件大小分组，'

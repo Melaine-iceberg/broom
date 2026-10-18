@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/models/system_models.dart';
+import '../l10n/broom_strings.dart';
 import 'format.dart';
 
 Future<bool> showSystemCacheConfirmDialog(
@@ -44,26 +45,31 @@ class _SystemCacheConfirmDialogState extends State<SystemCacheConfirmDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final strings = context.strings;
     final serviceLabels = widget.services
-        .map((service) => service.label)
-        .join('、');
+        .map(strings.serviceLabel)
+        .join(strings.t('、'));
 
     return AlertDialog(
       icon: Icon(Icons.delete_forever_rounded, size: 30, color: scheme.error),
-      title: const Text('永久删除系统缓存？'),
+      title: Text(context.t('永久删除系统缓存？')),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '将永久删除 ${formatCount(widget.fileCount)} 个文件'
-              '（${formatBytes(widget.bytes)}）。',
+              context.tf('将永久删除 {count} 个文件（{bytes}）。', {
+                'count': formatCount(widget.fileCount),
+                'bytes': formatBytes(widget.bytes),
+              }),
             ),
             const SizedBox(height: 10),
             Text(
-              '这些缓存不会进入 Broom 隔离区，删除后无法撤销。'
-              'Windows 会在需要时重新下载更新或共享内容。',
+              context.t(
+                '这些缓存不会进入 Broom 隔离区，删除后无法撤销。'
+                'Windows 会在需要时重新下载更新或共享内容。',
+              ),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onSurfaceVariant,
                 height: 1.5,
@@ -72,7 +78,9 @@ class _SystemCacheConfirmDialogState extends State<SystemCacheConfirmDialog> {
             if (widget.services.isNotEmpty) ...[
               const SizedBox(height: 10),
               Text(
-                '清理期间将临时停止 $serviceLabels，完成或中止后自动恢复。',
+                context.tf('清理期间将临时停止 {services}，完成或中止后自动恢复。', {
+                  'services': serviceLabels,
+                }),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: scheme.onSurfaceVariant,
                   height: 1.5,
@@ -81,7 +89,7 @@ class _SystemCacheConfirmDialogState extends State<SystemCacheConfirmDialog> {
             ],
             const SizedBox(height: 8),
             Text(
-              '不会删除 Windows 更新历史、系统设置或 Windows.old。',
+              context.t('不会删除 Windows 更新历史、系统设置或 Windows.old。'),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onSurfaceVariant,
                 height: 1.5,
@@ -96,7 +104,7 @@ class _SystemCacheConfirmDialogState extends State<SystemCacheConfirmDialog> {
               contentPadding: EdgeInsets.zero,
               visualDensity: VisualDensity.compact,
               title: Text(
-                '我明白系统缓存将被永久删除，且无法撤销',
+                context.t('我明白系统缓存将被永久删除，且无法撤销'),
                 style: theme.textTheme.bodySmall,
               ),
             ),
@@ -106,7 +114,7 @@ class _SystemCacheConfirmDialogState extends State<SystemCacheConfirmDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('取消'),
+          child: Text(context.t('取消')),
         ),
         FilledButton(
           onPressed: _acknowledged
@@ -117,7 +125,7 @@ class _SystemCacheConfirmDialogState extends State<SystemCacheConfirmDialog> {
             foregroundColor: scheme.onError,
             disabledBackgroundColor: scheme.error.withValues(alpha: 0.12),
           ),
-          child: const Text('永久删除'),
+          child: Text(context.t('永久删除')),
         ),
       ],
     );

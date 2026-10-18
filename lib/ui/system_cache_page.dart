@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../core/models/clean_models.dart';
 import '../core/models/cleaner_rule.dart';
 import '../core/models/system_models.dart';
+import '../l10n/broom_strings.dart';
 import '../platform/window_chrome.dart';
 import 'analysis_widgets.dart';
 import 'format.dart';
@@ -33,7 +34,7 @@ class _SystemCachePageState extends State<SystemCachePage> {
     final launched = await controller.relaunchElevated();
     if (!launched || !mounted) return;
     ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('已启动管理员窗口，正在切换…')));
+        .showSnackBar(SnackBar(content: Text(context.t('已启动管理员窗口，正在切换…'))));
     await Future<void>.delayed(const Duration(milliseconds: 600));
     if (!mounted) return;
     await WindowChrome.instance.close();
@@ -65,16 +66,16 @@ class _SystemCachePageState extends State<SystemCachePage> {
             leading: IconButton(
               onPressed: () => Navigator.of(context).pop(),
               icon: const Icon(Icons.arrow_back_rounded),
-              tooltip: '返回',
+              tooltip: context.t('返回'),
             ),
             toolbarHeight: 68,
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('系统级缓存'),
+                Text(context.t('系统级缓存')),
                 const SizedBox(height: 1),
                 Text(
-                  'Windows 更新与传递优化 · 需管理员权限',
+                  context.t('Windows 更新与传递优化 · 需管理员权限'),
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -144,7 +145,7 @@ class _AccessLoading extends StatelessWidget {
           const CircularProgressIndicator(strokeWidth: 3),
           const SizedBox(height: 16),
           Text(
-            '正在检查管理员权限…',
+            context.t('正在检查管理员权限…'),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
@@ -216,14 +217,16 @@ class _AdminGate extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                '需要管理员权限',
+                context.t('需要管理员权限'),
                 style: theme.textTheme.titleLarge,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 6),
               Text(
-                'Windows 更新缓存位于系统目录中。Broom 会通过 Windows UAC '
-                '以管理员身份重新启动，只在新的管理员窗口中进行扫描和清理。',
+                context.t(
+                  'Windows 更新缓存位于系统目录中。Broom 会通过 Windows UAC '
+                  '以管理员身份重新启动，只在新的管理员窗口中进行扫描和清理。',
+                ),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: scheme.onSurfaceVariant,
                   height: 1.55,
@@ -232,7 +235,7 @@ class _AdminGate extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Text(
-                '重启后不会自动扫描或删除任何内容。',
+                context.t('重启后不会自动扫描或删除任何内容。'),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
@@ -265,7 +268,7 @@ class _AdminGate extends StatelessWidget {
                         ? null
                         : () => controller.checkAccess(),
                     icon: const Icon(Icons.refresh_rounded, size: 17),
-                    label: const Text('重新检测'),
+                    label: Text(context.t('重新检测')),
                   ),
                   FilledButton.icon(
                     onPressed: controller.relaunching ? null : onElevate,
@@ -277,7 +280,9 @@ class _AdminGate extends StatelessWidget {
                           )
                         : const Icon(Icons.verified_user_outlined, size: 19),
                     label: Text(
-                      controller.relaunching ? '正在请求授权…' : '以管理员身份重新启动',
+                      controller.relaunching
+                          ? context.t('正在请求授权…')
+                          : context.t('以管理员身份重新启动'),
                     ),
                   ),
                 ],
@@ -319,7 +324,7 @@ class _AdminChip extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           Text(
-            '管理员',
+            context.t('管理员'),
             style: theme.textTheme.labelSmall?.copyWith(
               color: scheme.onPrimaryContainer,
               fontWeight: FontWeight.w700,
@@ -357,9 +362,11 @@ class _ReviewWarning extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              '系统级缓存属于 Review 级操作：被清理的缓存会永久删除，'
-              '不会进入 Broom 隔离区，也没有撤销入口。'
-              '如有正在下载或安装的 Windows 更新，建议完成后再清理。',
+              context.t(
+                '系统级缓存属于 Review 级操作：被清理的缓存会永久删除，'
+                '不会进入 Broom 隔离区，也没有撤销入口。'
+                '如有正在下载或安装的 Windows 更新，建议完成后再清理。',
+              ),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onTertiaryContainer,
                 height: 1.55,
@@ -400,7 +407,7 @@ class _RuleOverview extends StatelessWidget {
                 color: scheme.primary,
               ),
               const SizedBox(width: 8),
-              Text('可清理的系统缓存', style: theme.textTheme.titleSmall),
+              Text(context.t('可清理的系统缓存'), style: theme.textTheme.titleSmall),
             ],
           ),
           const SizedBox(height: 6),
@@ -421,14 +428,14 @@ class _RuleOverview extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          rule.title,
+                          context.strings.systemRuleTitle(rule),
                           style: theme.textTheme.bodySmall?.copyWith(
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          rule.description,
+                          context.strings.systemRuleDescription(rule),
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                             height: 1.45,
@@ -474,14 +481,16 @@ class _BoundaryNote extends StatelessWidget {
                 color: scheme.primary,
               ),
               const SizedBox(width: 8),
-              Text('Broom 的处理边界', style: theme.textTheme.titleSmall),
+              Text(context.t('Broom 的处理边界'), style: theme.textTheme.titleSmall),
             ],
           ),
           const SizedBox(height: 8),
           Text(
-            'Broom 只使用 Windows 原生 API 定位缓存目录，不接受任意路径输入，'
-            '并且只删除这些目录内的普通文件。更新历史、系统设置、'
-            'Windows.old 与用户文档不在处理范围内。',
+            context.t(
+              'Broom 只使用 Windows 原生 API 定位缓存目录，不接受任意路径输入，'
+              '并且只删除这些目录内的普通文件。更新历史、系统设置、'
+              'Windows.old 与用户文档不在处理范围内。',
+            ),
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
               height: 1.6,
@@ -553,11 +562,16 @@ class _IdleView extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('系统级缓存', style: theme.textTheme.titleMedium),
+                        Text(
+                          context.t('系统级缓存'),
+                          style: theme.textTheme.titleMedium,
+                        ),
                         const SizedBox(height: 2),
                         Text(
-                          '扫描 Windows 更新与传递优化的下载缓存，'
-                          '确认后永久删除以释放磁盘空间。',
+                          context.t(
+                            '扫描 Windows 更新与传递优化的下载缓存，'
+                            '确认后永久删除以释放磁盘空间。',
+                          ),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                             height: 1.45,
@@ -577,7 +591,7 @@ class _IdleView extends StatelessWidget {
               FilledButton.icon(
                 onPressed: controller.isBusy ? null : onScan,
                 icon: const Icon(Icons.search_rounded, size: 19),
-                label: const Text('扫描系统缓存'),
+                label: Text(context.t('扫描系统缓存')),
               ),
             ],
           ),
@@ -659,7 +673,7 @@ class _SystemRuleCard extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            rule.title,
+                            context.strings.systemRuleTitle(rule),
                             style: theme.textTheme.titleSmall?.copyWith(
                               fontWeight: FontWeight.w600,
                             ),
@@ -679,9 +693,12 @@ class _SystemRuleCard extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       result == null
-                          ? rule.description
-                          : '${formatCount(result!.items.length)} 个文件 · '
-                                '${rule.description}',
+                          ? context.strings.systemRuleDescription(rule)
+                          : context.tf('{count} 个文件 · {description}', {
+                              'count': formatCount(result!.items.length),
+                              'description': context.strings
+                                  .systemRuleDescription(rule),
+                            }),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
@@ -695,7 +712,8 @@ class _SystemRuleCard extends StatelessWidget {
                           ? result!.roots.join(' · ')
                           : rule.displayPath,
                     ),
-                    if (rule.note case final note?) ...[
+                    if (context.strings.systemRuleNote(rule)
+                        case final note?) ...[
                       const SizedBox(height: 5),
                       Text(
                         note,
@@ -765,26 +783,35 @@ class _ScanningView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progress = controller.scanProgress;
+    final ruleId = progress?.ruleId;
+    final scanningRule = ruleId == null
+        ? null
+        : controller.platform.rules
+              .where((rule) => rule.id == ruleId)
+              .firstOrNull;
+    final scanningTitle = scanningRule == null
+        ? null
+        : context.strings.systemRuleTitle(scanningRule);
     return ListView(
       padding: const EdgeInsets.fromLTRB(28, 8, 28, 28),
       children: [
         AnalysisProgressCard(
           icon: Icons.admin_panel_settings_outlined,
-          title: '正在扫描系统缓存',
-          description: controller.scanningRuleTitle == null
-              ? '正在准备系统缓存目录…'
-              : '正在读取 ${controller.scanningRuleTitle}…',
+          title: context.t('正在扫描系统缓存'),
+          description: scanningTitle == null
+              ? context.t('正在准备系统缓存目录…')
+              : context.tf('正在读取 {name}…', {'name': scanningTitle}),
           stats: [
             AnalysisProgressStat(
-              label: '已检查文件',
+              label: context.t('已检查文件'),
               value: formatCount(progress?.scannedFiles ?? 0),
             ),
             AnalysisProgressStat(
-              label: '发现文件',
+              label: context.t('发现文件'),
               value: formatCount(progress?.foundFiles ?? 0),
             ),
             AnalysisProgressStat(
-              label: '已找到',
+              label: context.t('已找到'),
               value: formatBytes(progress?.foundBytes ?? 0),
             ),
           ],
@@ -846,12 +873,16 @@ class _PreviewView extends StatelessWidget {
               ],
               if (controller.scanDirectoryErrors > 0) ...[
                 AnalysisBanner(
-                  message: '有 ${controller.scanDirectoryErrors} 个目录无法读取，已自动跳过。',
+                  message: context.tf('有 {count} 个目录无法读取，已自动跳过。', {
+                    'count': controller.scanDirectoryErrors,
+                  }),
                 ),
                 const SizedBox(height: 12),
               ],
               if (controller.scanTruncated) ...[
-                const AnalysisBanner(message: '文件数量超过单次扫描上限，预览与清理仅包含已找到的部分。'),
+                AnalysisBanner(
+                  message: context.t('文件数量超过单次扫描上限，预览与清理仅包含已找到的部分。'),
+                ),
                 const SizedBox(height: 12),
               ],
               const _ReviewWarning(),
@@ -874,14 +905,22 @@ class _PreviewView extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('扫描结果', style: theme.textTheme.titleLarge),
+                              Text(
+                                context.t('扫描结果'),
+                                style: theme.textTheme.titleLarge,
+                              ),
                               const SizedBox(height: 2),
                               Text(
                                 controller.results.isEmpty
-                                    ? '没有发现可清理的系统缓存'
-                                    : '发现 ${formatCount(totalItems)} 个文件 · '
-                                          '${formatBytes(totalBytes)}。'
-                                          '默认不勾选，请选择要永久删除的内容。',
+                                    ? context.t('没有发现可清理的系统缓存')
+                                    : context.tf(
+                                        '发现 {count} 个文件 · {bytes}。'
+                                        '默认不勾选，请选择要永久删除的内容。',
+                                        {
+                                          'count': formatCount(totalItems),
+                                          'bytes': formatBytes(totalBytes),
+                                        },
+                                      ),
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: scheme.onSurfaceVariant,
                                 ),
@@ -893,7 +932,7 @@ class _PreviewView extends StatelessWidget {
                         OutlinedButton.icon(
                           onPressed: controller.scan,
                           icon: const Icon(Icons.refresh_rounded, size: 17),
-                          label: const Text('重新扫描'),
+                          label: Text(context.t('重新扫描')),
                         ),
                       ],
                     ),
@@ -911,7 +950,7 @@ class _PreviewView extends StatelessWidget {
                               ),
                               const SizedBox(height: 10),
                               Text(
-                                '系统缓存看起来很干净',
+                                context.t('系统缓存看起来很干净'),
                                 style: theme.textTheme.titleSmall,
                               ),
                             ],
@@ -983,14 +1022,18 @@ class _ActionBar extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '已选择 ${formatCount(controller.selectedCount)} 项',
+                  context.tf('已选择 {count} 项', {
+                    'count': formatCount(controller.selectedCount),
+                  }),
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 1),
                 Text(
-                  '将永久删除 ${formatBytes(controller.selectedBytes)}',
+                  context.tf('将永久删除 {bytes}', {
+                    'bytes': formatBytes(controller.selectedBytes),
+                  }),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -1002,7 +1045,7 @@ class _ActionBar extends StatelessWidget {
             onPressed: allSelected
                 ? controller.clearRuleSelection
                 : controller.selectAllRules,
-            child: Text(allSelected ? '取消全选' : '全选'),
+            child: Text(allSelected ? context.t('取消全选') : context.t('全选')),
           ),
           const SizedBox(width: 8),
           FilledButton.icon(
@@ -1013,7 +1056,11 @@ class _ActionBar extends StatelessWidget {
               disabledBackgroundColor: scheme.error.withValues(alpha: 0.12),
             ),
             icon: const Icon(Icons.delete_forever_rounded, size: 18),
-            label: Text('永久删除 ${formatCount(controller.selectedCount)} 项'),
+            label: Text(
+              context.tf('永久删除 {count} 项', {
+                'count': formatCount(controller.selectedCount),
+              }),
+            ),
           ),
         ],
       ),
@@ -1035,17 +1082,18 @@ class _CleaningView extends StatelessWidget {
     final total = progress?.total ?? 0;
     final processed = progress?.processed ?? 0;
     final stageLabel = switch (stage) {
-      SystemCleanStage.stoppingServices => '正在临时停止 Windows 服务…',
-      SystemCleanStage.restartingServices => '正在恢复 Windows 服务…',
-      SystemCleanStage.deleting => '正在永久删除系统缓存…',
-      null => '正在清理系统缓存…',
+      SystemCleanStage.stoppingServices => context.t('正在临时停止 Windows 服务…'),
+      SystemCleanStage.restartingServices => context.t('正在恢复 Windows 服务…'),
+      SystemCleanStage.deleting => context.t('正在永久删除系统缓存…'),
+      null => context.t('正在清理系统缓存…'),
     };
     final description = switch (stage) {
-      SystemCleanStage.stoppingServices =>
+      SystemCleanStage.stoppingServices => context.t(
         '停止 Windows Update、BITS 或传递优化服务，避免缓存文件被占用。',
-      SystemCleanStage.restartingServices => '删除已完成，正在把刚才停止的服务恢复运行。',
-      SystemCleanStage.deleting => '删除的系统缓存不会进入隔离区，也无法撤销。',
-      null => '请稍候…',
+      ),
+      SystemCleanStage.restartingServices => context.t('删除已完成，正在把刚才停止的服务恢复运行。'),
+      SystemCleanStage.deleting => context.t('删除的系统缓存不会进入隔离区，也无法撤销。'),
+      null => context.t('请稍候…'),
     };
 
     return ListView(
@@ -1053,19 +1101,24 @@ class _CleaningView extends StatelessWidget {
       children: [
         AnalysisProgressCard(
           icon: Icons.delete_forever_rounded,
-          title: controller.cleanCancelRequested ? '正在停止清理…' : stageLabel,
+          title: controller.cleanCancelRequested
+              ? context.t('正在停止清理…')
+              : stageLabel,
           description: description,
           progress: stage == SystemCleanStage.deleting && total > 0
               ? processed / total
               : null,
           stats: [
-            AnalysisProgressStat(label: '已处理', value: '$processed / $total'),
             AnalysisProgressStat(
-              label: '已删除文件',
+              label: context.t('已处理'),
+              value: '$processed / $total',
+            ),
+            AnalysisProgressStat(
+              label: context.t('已删除文件'),
               value: formatCount(progress?.deleted ?? 0),
             ),
             AnalysisProgressStat(
-              label: '已释放',
+              label: context.t('已释放'),
               value: formatBytes(progress?.deletedBytes ?? 0),
             ),
           ],
@@ -1094,8 +1147,10 @@ class _CleaningView extends StatelessWidget {
               const SizedBox(width: 9),
               Expanded(
                 child: Text(
-                  '请保持此窗口打开，直到服务恢复完成。'
-                  '即使中止清理，Broom 也会尝试重新启动刚才停止的服务。',
+                  context.t(
+                    '请保持此窗口打开，直到服务恢复完成。'
+                    '即使中止清理，Broom 也会尝试重新启动刚才停止的服务。',
+                  ),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onTertiaryContainer,
                     height: 1.5,
@@ -1123,10 +1178,10 @@ class _DoneView extends StatelessWidget {
     if (report == null) return const SizedBox.shrink();
 
     final title = report.cancelled
-        ? '清理已停止'
+        ? context.t('清理已停止')
         : report.deletedCount == 0
-        ? '没有文件被删除'
-        : '清理完成';
+        ? context.t('没有文件被删除')
+        : context.t('清理完成');
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(28, 8, 28, 28),
@@ -1173,8 +1228,8 @@ class _DoneView extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 report.cancelled
-                    ? '已停止继续删除，相关 Windows 服务已尝试恢复运行。'
-                    : '系统缓存已永久删除，不会进入隔离区。',
+                    ? context.t('已停止继续删除，相关 Windows 服务已尝试恢复运行。')
+                    : context.t('系统缓存已永久删除，不会进入隔离区。'),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: scheme.onSurfaceVariant,
@@ -1191,7 +1246,7 @@ class _DoneView extends StatelessWidget {
                   children: [
                     Expanded(
                       child: _DoneStat(
-                        label: '已释放',
+                        label: context.t('已释放'),
                         value: formatBytes(report.deletedBytes),
                       ),
                     ),
@@ -1202,8 +1257,10 @@ class _DoneView extends StatelessWidget {
                     ),
                     Expanded(
                       child: _DoneStat(
-                        label: '永久删除',
-                        value: '${formatCount(report.deletedCount)} 个文件',
+                        label: context.t('永久删除'),
+                        value: context.tf('{count} 个文件', {
+                          'count': formatCount(report.deletedCount),
+                        }),
                       ),
                     ),
                   ],
@@ -1213,8 +1270,10 @@ class _DoneView extends StatelessWidget {
                 const SizedBox(height: 14),
                 _IssuePanel(
                   icon: Icons.warning_amber_rounded,
-                  title: '${report.failureCount} 个文件未能删除',
-                  body: '通常是因为文件正被系统占用。可以关闭相关窗口或稍后重试。',
+                  title: context.tf('{count} 个文件未能删除', {
+                    'count': report.failureCount,
+                  }),
+                  body: context.t('通常是因为文件正被系统占用。可以关闭相关窗口或稍后重试。'),
                   failures: report.failures,
                   isServiceIssue: false,
                 ),
@@ -1223,11 +1282,14 @@ class _DoneView extends StatelessWidget {
                 const SizedBox(height: 14),
                 _IssuePanel(
                   icon: Icons.sync_problem_rounded,
-                  title: '部分 Windows 服务未能恢复',
-                  body: '请手动启动对应服务，或重启 Windows 以恢复。问题详情：',
+                  title: context.t('部分 Windows 服务未能恢复'),
+                  body: context.t('请手动启动对应服务，或重启 Windows 以恢复。问题详情：'),
                   failures: [
                     for (final issue in report.serviceIssues)
-                      CleanFailure(path: 'Windows 服务', reason: issue),
+                      CleanFailure(
+                        path: context.t('Windows 服务'),
+                        reason: issue,
+                      ),
                   ],
                   isServiceIssue: true,
                 ),
@@ -1241,7 +1303,7 @@ class _DoneView extends StatelessWidget {
                   OutlinedButton.icon(
                     onPressed: controller.scan,
                     icon: const Icon(Icons.refresh_rounded, size: 17),
-                    label: const Text('重新扫描'),
+                    label: Text(context.t('重新扫描')),
                   ),
                   FilledButton.icon(
                     onPressed: () {
@@ -1249,7 +1311,7 @@ class _DoneView extends StatelessWidget {
                       Navigator.of(context).pop();
                     },
                     icon: const Icon(Icons.arrow_back_rounded, size: 18),
-                    label: const Text('返回首页'),
+                    label: Text(context.t('返回首页')),
                   ),
                 ],
               ),
@@ -1317,7 +1379,9 @@ class _IssuePanel extends StatelessWidget {
           for (final failure in failures.take(3)) ...[
             const SizedBox(height: 5),
             Text(
-              '• ${isServiceIssue ? failure.reason : '${fileNameOf(failure.path)}：${failure.reason}'}',
+              isServiceIssue
+                  ? '• ${failure.reason}'
+                  : '• ${fileNameOf(failure.path)}${context.t('：')}${failure.reason}',
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.labelSmall?.copyWith(
@@ -1329,7 +1393,7 @@ class _IssuePanel extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 5),
               child: Text(
-                '还有 ${failures.length - 3} 条未显示…',
+                context.tf('还有 {count} 条未显示…', {'count': failures.length - 3}),
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: scheme.onTertiaryContainer.withValues(alpha: 0.75),
                 ),

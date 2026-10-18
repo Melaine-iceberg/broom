@@ -39,6 +39,9 @@ class _TestPlatform implements CleanerPlatform {
 }
 
 class _RecordingScanService extends ScanService {
+  _RecordingScanService({this.items = const []});
+
+  final List<JunkItem> items;
   List<ScanJob>? jobs;
   List<String>? excludedPaths;
   bool disposed = false;
@@ -51,9 +54,9 @@ class _RecordingScanService extends ScanService {
   }) async {
     this.jobs = jobs;
     this.excludedPaths = excludedPaths;
-    return const ScanResult(
-      items: [],
-      scannedFiles: 0,
+    return ScanResult(
+      items: items,
+      scannedFiles: items.length,
       directoryErrors: 0,
       truncated: false,
       cancelled: false,
@@ -229,4 +232,99 @@ void main() {
       expect(controller.phase, CleanPhase.preview);
     },
   );
+
+  test('supports file-level selection and rule tri-state', () async {
+    final exclusions = createStore();
+    final first = JunkItem(
+      ruleId: 'test.rule',
+      rootPath: rootA.path,
+      path: p.windows.join(rootA.path, 'first.tmp'),
+      size: 10,
+      modified: DateTime(2026, 10, 18),
+    );
+    final second = JunkItem(
+      ruleId: 'test.rule',
+      rootPath: rootA.path,
+      path: p.windows.join(rootA.path, 'second.tmp'),
+      size: 25,
+      modified: DateTime(2026, 10, 18),
+    );
+    final scanner = _RecordingScanService(items: [first, second]);
+    final rule = createRule();
+    final controller = createController(
+      exclusions: exclusions,
+      scanner: scanner,
+      rules: [rule],
+      rootsByRule: {
+        rule.id: [rootA.path],
+      },
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    await controller.scan();
+
+    expect(controller.selectedCount, 2);
+    expect(controller.selectedBytes, 35);
+    expect(controller.ruleSelectionValue(rule.id), isTrue);
+    expect(controller.isItemSelected(first.path), isTrue);
+    expect(controller.allItemsSelected, isTrue);
+
+    controller.toggleItem(first.path);
+
+    expect(controller.selectedCount, 1);
+    expect(controller.selectedBytes, 25);
+    expect(controller.ruleSelectionValue(rule.id), isNull);
+    expect(controller.isRuleSelected(rule.id), isFalse);
+    expect(controller.selectedItems.single.path, second.path);
+
+    controller.toggleRule(rule.id);
+
+    expect(controller.selectedCount, 2);
+    expect(controller.ruleSelectionValue(rule.id), isTrue);
+
+    controller.invertSelection();
+
+    expect(controller.selectedCount, 0);
+    expect(controller.ruleSelectionValue(rule.id), isFalse);
+    expect(controller.selectedItems, isEmpty);
+
+    controller.invertSelection();
+
+    expect(controller.selectedCount, 2);
+    expect(controller.allItemsSelected, isTrue);
+
+    controller.clearRuleSelection();
+
+    expect(controller.selectedCount, 0);
+    expect(controller.hasSelection, isFalse);
+
+    controller.selectAllRules();
+
+    expect(controller.selectedCount, 2);
+    expect(controller.selectedBytesForRule(rule.id), 35);
+  });
+
+  test('skips rules disabled in settings', () async {
+    final exclusions = createStore();
+    final scanner = _RecordingScanService();
+    final rule = createRule();
+    final controller = createController(
+      exclusions: exclusions,
+      scanner: scanner,
+      rules: [rule],
+      rootsByRule: {
+        rule.id: [rootA.path],
+      },
+    );
+    controller.isRuleEnabled = (_) => false;
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    await controller.scan();
+
+    expect(scanner.jobs, isNull);
+    expect(controller.phase, CleanPhase.idle);
+    expect(controller.notice, contains('没有找到'));
+  });
 }

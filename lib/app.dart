@@ -1,17 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:intl/intl.dart';
 
 import 'core/analysis/analysis_service.dart';
 import 'core/clean/quarantine_retention_service.dart';
 import 'core/shell/system_shell.dart';
+import 'l10n/broom_strings.dart';
 import 'ui/clean_controller.dart';
 import 'ui/home_page.dart';
+import 'ui/settings_controller.dart';
 import 'ui/system_cache_controller.dart';
 import 'ui/window_title_bar.dart';
 
-class BroomApp extends StatelessWidget {
+class BroomApp extends StatefulWidget {
   const BroomApp({
     super.key,
     required this.controller,
+    this.settingsController,
     this.systemShell,
     this.systemCacheController,
     this.quarantineRetention,
@@ -22,6 +27,7 @@ class BroomApp extends StatelessWidget {
   });
 
   final CleanController controller;
+  final SettingsController? settingsController;
   final SystemShell? systemShell;
   final SystemCacheController? systemCacheController;
   final QuarantineRetentionService? quarantineRetention;
@@ -31,26 +37,79 @@ class BroomApp extends StatelessWidget {
   final bool startInSystemCache;
 
   @override
+  State<BroomApp> createState() => _BroomAppState();
+}
+
+class _BroomAppState extends State<BroomApp> {
+  late final SettingsController _settings =
+      widget.settingsController ?? SettingsController();
+  late final bool _ownsSettings = widget.settingsController == null;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_ownsSettings) _settings.load();
+    widget.controller.isRuleEnabled = _settings.isRuleEnabled;
+  }
+
+  @override
+  void dispose() {
+    if (_ownsSettings) _settings.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Broom',
-      debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.system,
-      theme: buildBroomTheme(Brightness.light),
-      darkTheme: buildBroomTheme(Brightness.dark),
-      builder: (context, child) =>
-          BroomWindowFrame(child: child ?? const SizedBox.shrink()),
-      home: HomePage(
-        controller: controller,
-        shell: systemShell ?? createSystemShell(),
-        systemCacheController: systemCacheController,
-        quarantineRetention: quarantineRetention,
-        analysisRunnerFactory: analysisRunnerFactory ?? AnalysisService.new,
-        analysisInitialDirectory: analysisInitialDirectory,
-        analysisExcludedPaths: analysisExcludedPaths,
-        startInSystemCache: startInSystemCache,
-      ),
+    return ListenableBuilder(
+      listenable: _settings,
+      builder: (context, _) {
+        return MaterialApp(
+          title: 'Broom',
+          debugShowCheckedModeBanner: false,
+          themeMode: _settings.themeMode,
+          locale: _settings.locale,
+          supportedLocales: BroomStrings.supportedLocales,
+          localizationsDelegates: const [
+            BroomStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          localeListResolutionCallback: _resolveLocale,
+          theme: buildBroomTheme(Brightness.light),
+          darkTheme: buildBroomTheme(Brightness.dark),
+          builder: (context, child) {
+            final strings = BroomStrings.of(context);
+            BroomStrings.instance = strings;
+            Intl.defaultLocale = strings.localeName;
+            return BroomWindowFrame(child: child ?? const SizedBox.shrink());
+          },
+          home: HomePage(
+            controller: widget.controller,
+            settingsController: _settings,
+            shell: widget.systemShell ?? createSystemShell(),
+            systemCacheController: widget.systemCacheController,
+            quarantineRetention: widget.quarantineRetention,
+            analysisRunnerFactory:
+                widget.analysisRunnerFactory ?? AnalysisService.new,
+            analysisInitialDirectory: widget.analysisInitialDirectory,
+            analysisExcludedPaths: widget.analysisExcludedPaths,
+            startInSystemCache: widget.startInSystemCache,
+          ),
+        );
+      },
     );
+  }
+
+  static Locale _resolveLocale(
+    List<Locale>? locales,
+    Iterable<Locale> supported,
+  ) {
+    for (final locale in locales ?? const <Locale>[]) {
+      if (locale.languageCode == 'en') return const Locale('en');
+      if (locale.languageCode == 'zh') return const Locale('zh');
+    }
+    return const Locale('zh');
   }
 }
 
@@ -70,34 +129,54 @@ class UnsupportedApp extends StatelessWidget {
       title: 'Broom',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.system,
+      supportedLocales: BroomStrings.supportedLocales,
+      localizationsDelegates: const [
+        BroomStrings.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: buildBroomTheme(Brightness.light),
       darkTheme: buildBroomTheme(Brightness.dark),
       builder: (context, child) =>
           BroomWindowFrame(child: child ?? const SizedBox.shrink()),
-      home: Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.cleaning_services_rounded, size: 56),
-                const SizedBox(height: 20),
-                Text(
-                  'Broom 暂不支持 $platformName',
-                  style: Theme.of(context).textTheme.titleLarge,
-                  textAlign: TextAlign.center,
+      home: _UnsupportedView(platformName: platformName, reason: reason),
+    );
+  }
+}
+
+class _UnsupportedView extends StatelessWidget {
+  const _UnsupportedView({required this.platformName, required this.reason});
+
+  final String platformName;
+  final String reason;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = BroomStrings.of(context);
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cleaning_services_rounded, size: 56),
+              const SizedBox(height: 20),
+              Text(
+                strings.tf('Broom 暂不支持 {platform}', {'platform': platformName}),
+                style: Theme.of(context).textTheme.titleLarge,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                strings.t(reason),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  reason,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
         ),
       ),

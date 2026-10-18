@@ -7,6 +7,7 @@ import '../core/clean/quarantine_retention_service.dart';
 import '../core/models/clean_models.dart';
 import '../core/models/cleaner_rule.dart';
 import '../core/shell/system_shell.dart';
+import '../l10n/broom_strings.dart';
 import 'analysis_widgets.dart';
 import 'clean_controller.dart';
 import 'duplicate_finder_page.dart';
@@ -16,6 +17,8 @@ import 'large_files_page.dart';
 import 'quarantine_page.dart';
 import 'recycle_bin_page.dart';
 import 'rule_detail_page.dart';
+import 'settings_controller.dart';
+import 'settings_page.dart';
 import 'system_cache_controller.dart';
 import 'system_cache_page.dart';
 
@@ -23,6 +26,7 @@ class HomePage extends StatefulWidget {
   const HomePage({
     super.key,
     required this.controller,
+    required this.settingsController,
     required this.shell,
     required this.analysisRunnerFactory,
     this.systemCacheController,
@@ -33,6 +37,7 @@ class HomePage extends StatefulWidget {
   });
 
   final CleanController controller;
+  final SettingsController settingsController;
   final SystemShell shell;
   final SystemCacheController? systemCacheController;
   final QuarantineRetentionService? quarantineRetention;
@@ -85,6 +90,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> _showUnfinishedPrompt() async {
     final count = controller.unfinishedSessions.length;
     if (count == 0 || !mounted) return;
+    final strings = context.strings;
     final openQuarantine = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -93,19 +99,21 @@ class _HomePageState extends State<HomePage> {
           size: 30,
           color: Theme.of(dialogContext).colorScheme.primary,
         ),
-        title: Text('发现 $count 个未完成的清理会话'),
-        content: const Text(
-          'Broom 上次退出时还有清理没有正常结束，或恢复只完成了一部分。'
-          '已移动的文件仍保存在隔离区，可以继续恢复，也可以确认后永久释放。',
+        title: Text(strings.tf('发现 {count} 个未完成的清理会话', {'count': count})),
+        content: Text(
+          strings.t(
+            'Broom 上次退出时还有清理没有正常结束，或恢复只完成了一部分。'
+            '已移动的文件仍保存在隔离区，可以继续恢复，也可以确认后永久释放。',
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('稍后处理'),
+            child: Text(strings.t('稍后处理')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('查看隔离区'),
+            child: Text(strings.t('查看隔离区')),
           ),
         ],
       ),
@@ -164,6 +172,8 @@ class _HomePageState extends State<HomePage> {
           onOpenDuplicateFinder: _openDuplicateFinder,
           onOpenLargeFiles: _openLargeFiles,
           onOpenExclusions: _openExclusions,
+          onOpenSettings: _openSettings,
+          isRuleEnabled: widget.settingsController.isRuleEnabled,
         );
       case CleanPhase.scanning:
         return _ScanningView(controller: controller);
@@ -187,25 +197,29 @@ class _HomePageState extends State<HomePage> {
     final count = controller.selectedCount;
     if (count == 0) return;
     final bytes = controller.selectedBytes;
+    final strings = context.strings;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
           icon: const Icon(Icons.cleaning_services_rounded, size: 30),
-          title: const Text('移入隔离区？'),
+          title: Text(strings.t('移入隔离区？')),
           content: Text(
-            '将暂存 $count 个文件，共 ${formatBytes(bytes)}。\n\n'
-            '文件会先移动到 Broom 的隔离区，磁盘空间不会立即释放。'
-            '你可以随时恢复，或在隔离区中永久释放。',
+            strings.tf(
+              '将暂存 {count} 个文件，共 {bytes}。\n\n'
+              '文件会先移动到 Broom 的隔离区，磁盘空间不会立即释放。'
+              '你可以随时恢复，或在隔离区中永久释放。',
+              {'count': count, 'bytes': formatBytes(bytes)},
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
+              child: Text(strings.t('取消')),
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: Text('暂存 $count 项'),
+              child: Text(strings.tf('暂存 {count} 项', {'count': count})),
             ),
           ],
         );
@@ -221,7 +235,7 @@ class _HomePageState extends State<HomePage> {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const _BusyDialog(message: '正在恢复文件…'),
+      builder: (_) => _BusyDialog(message: context.t('正在恢复文件…')),
     );
 
     UndoReport? result;
@@ -239,12 +253,12 @@ class _HomePageState extends State<HomePage> {
         context: context,
         builder: (dialogContext) => AlertDialog(
           icon: const Icon(Icons.error_outline_rounded, size: 30),
-          title: const Text('撤销失败'),
+          title: Text(context.t('撤销失败')),
           content: Text('$failure'),
           actions: [
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('知道了'),
+              child: Text(context.t('知道了')),
             ),
           ],
         ),
@@ -326,6 +340,21 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
+
+  Future<void> _openSettings() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SettingsPage(
+          settings: widget.settingsController,
+          cleanController: controller,
+          shell: widget.shell,
+          retention: widget.quarantineRetention,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    await controller.refreshRuleExclusionScopes();
+  }
 }
 
 class _IdleView extends StatelessWidget {
@@ -336,6 +365,8 @@ class _IdleView extends StatelessWidget {
     required this.onOpenDuplicateFinder,
     required this.onOpenLargeFiles,
     required this.onOpenExclusions,
+    required this.onOpenSettings,
+    required this.isRuleEnabled,
     this.onOpenSystemCache,
   });
 
@@ -345,6 +376,8 @@ class _IdleView extends StatelessWidget {
   final VoidCallback onOpenDuplicateFinder;
   final VoidCallback onOpenLargeFiles;
   final VoidCallback onOpenExclusions;
+  final VoidCallback onOpenSettings;
+  final bool Function(String ruleId) isRuleEnabled;
   final VoidCallback? onOpenSystemCache;
 
   @override
@@ -360,7 +393,7 @@ class _IdleView extends StatelessWidget {
           ),
         if (controller.notice case final notice?)
           _InlineBanner(message: notice, onClose: controller.clearNotice),
-        _Hero(controller: controller),
+        _Hero(controller: controller, onOpenSettings: onOpenSettings),
         if (controller.pendingSessions.isNotEmpty) ...[
           const SizedBox(height: 14),
           _QuarantineCard(controller: controller, onOpen: onOpenQuarantine),
@@ -378,6 +411,7 @@ class _IdleView extends StatelessWidget {
           scopes: controller.ruleExclusionScopes,
           exclusionCount: controller.exclusionCount,
           onOpenExclusions: onOpenExclusions,
+          isRuleEnabled: isRuleEnabled,
         ),
         const SizedBox(height: 14),
         const _SafetyNote(),
@@ -387,9 +421,10 @@ class _IdleView extends StatelessWidget {
 }
 
 class _Hero extends StatelessWidget {
-  const _Hero({required this.controller});
+  const _Hero({required this.controller, required this.onOpenSettings});
 
   final CleanController controller;
+  final VoidCallback onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -414,7 +449,10 @@ class _Hero extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final wide = constraints.maxWidth >= 720;
-          final copy = _HeroCopy(controller: controller);
+          final copy = _HeroCopy(
+            controller: controller,
+            onOpenSettings: onOpenSettings,
+          );
           final artwork = const SizedBox(
             width: 236,
             height: 196,
@@ -445,9 +483,10 @@ class _Hero extends StatelessWidget {
 }
 
 class _HeroCopy extends StatelessWidget {
-  const _HeroCopy({required this.controller});
+  const _HeroCopy({required this.controller, required this.onOpenSettings});
 
   final CleanController controller;
+  final VoidCallback onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -458,7 +497,6 @@ class _HeroCopy extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               Icons.monitor_outlined,
@@ -467,18 +505,26 @@ class _HeroCopy extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Text(
-              'WINDOWS · SAFE 级清理',
+              context.t('WINDOWS · SAFE 级清理'),
               style: theme.textTheme.labelSmall?.copyWith(
                 color: scheme.onPrimaryContainer.withValues(alpha: 0.8),
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.8,
               ),
             ),
+            const Spacer(),
+            IconButton(
+              key: const ValueKey('open-settings'),
+              onPressed: onOpenSettings,
+              tooltip: context.t('设置'),
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.settings_outlined, size: 20),
+            ),
           ],
         ),
         const SizedBox(height: 12),
         Text(
-          '把没用的缓存，\n轻轻扫走。',
+          context.t('把没用的缓存，\n轻轻扫走。'),
           style: theme.textTheme.headlineMedium?.copyWith(
             fontSize: 36,
             color: scheme.onSurface,
@@ -486,7 +532,7 @@ class _HeroCopy extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Text(
-          '先扫描预览，再把 Safe 级缓存移入隔离区。\n随时可以撤销，不用担心误删。',
+          context.t('先扫描预览，再把 Safe 级缓存移入隔离区。\n随时可以撤销，不用担心误删。'),
           style: theme.textTheme.bodyMedium?.copyWith(
             color: scheme.onSurfaceVariant,
             height: 1.6,
@@ -496,7 +542,7 @@ class _HeroCopy extends StatelessWidget {
         FilledButton.icon(
           onPressed: controller.isBusy ? null : controller.scan,
           icon: const Icon(Icons.search_rounded, size: 20),
-          label: const Text('开始扫描'),
+          label: Text(context.t('开始扫描')),
         ),
         const SizedBox(height: 12),
         Row(
@@ -510,7 +556,7 @@ class _HeroCopy extends StatelessWidget {
             const SizedBox(width: 6),
             Flexible(
               child: Text(
-                '不会触碰文档、照片、程序和系统文件',
+                context.t('不会触碰文档、照片、程序和系统文件'),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
@@ -554,17 +600,26 @@ class _HeroArtwork extends StatelessWidget {
         Positioned(
           top: 8,
           right: 8,
-          child: _FloatingTag(icon: Icons.folder_open_outlined, label: '临时文件'),
+          child: _FloatingTag(
+            icon: Icons.folder_open_outlined,
+            label: context.t('临时文件'),
+          ),
         ),
         Positioned(
           bottom: 22,
           left: 0,
-          child: _FloatingTag(icon: Icons.public_rounded, label: '浏览器缓存'),
+          child: _FloatingTag(
+            icon: Icons.public_rounded,
+            label: context.t('浏览器缓存'),
+          ),
         ),
         Positioned(
           bottom: 4,
           right: 28,
-          child: _FloatingTag(icon: Icons.restore_rounded, label: '可撤销'),
+          child: _FloatingTag(
+            icon: Icons.restore_rounded,
+            label: context.t('可撤销'),
+          ),
         ),
       ],
     );
@@ -659,17 +714,28 @@ class _QuarantineCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '隔离区暂存了 ${formatBytes(controller.pendingBytes)}',
+                      context.tf('隔离区暂存了 {bytes}', {
+                        'bytes': formatBytes(controller.pendingBytes),
+                      }),
                       style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${formatCount(controller.pendingFileCount)} 个文件 · '
-                      '$sessions 次清理'
-                      '${unfinished > 0 ? '，其中 $unfinished 次未正常结束' : ''}。'
-                      '磁盘空间尚未释放，恢复或永久释放后才会改变。',
+                      context.tf(
+                        '{files} 个文件 · {sessions} 次清理{unfinished}。'
+                        '磁盘空间尚未释放，恢复或永久释放后才会改变。',
+                        {
+                          'files': formatCount(controller.pendingFileCount),
+                          'sessions': sessions,
+                          'unfinished': unfinished > 0
+                              ? context.tf('，其中 {count} 次未正常结束', {
+                                  'count': unfinished,
+                                })
+                              : '',
+                        },
+                      ),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),
@@ -678,7 +744,7 @@ class _QuarantineCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              OutlinedButton(onPressed: onOpen, child: const Text('管理')),
+              OutlinedButton(onPressed: onOpen, child: Text(context.t('管理'))),
             ],
           ),
         ),
@@ -716,10 +782,10 @@ class _ToolsSection extends StatelessWidget {
               color: scheme.primary,
             ),
             const SizedBox(width: 8),
-            Text('分析与审阅', style: theme.textTheme.titleSmall),
+            Text(context.t('分析与审阅'), style: theme.textTheme.titleSmall),
             const Spacer(),
             Text(
-              '按风险等级区分',
+              context.t('按风险等级区分'),
               style: theme.textTheme.labelSmall?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
@@ -747,8 +813,10 @@ class _ToolsSection extends StatelessWidget {
                       key: const ValueKey('tool-system-cache'),
                       icon: Icons.admin_panel_settings_outlined,
                       risk: CleanRisk.review,
-                      title: '系统级缓存',
-                      description: '清理 Windows 更新与传递优化的下载缓存，需要管理员权限。',
+                      title: context.t('系统级缓存'),
+                      description: context.t(
+                        '清理 Windows 更新与传递优化的下载缓存，需要管理员权限。',
+                      ),
                       onTap: onOpenSystemCache!,
                     ),
                   ),
@@ -758,8 +826,8 @@ class _ToolsSection extends StatelessWidget {
                     key: const ValueKey('tool-recycle-bin'),
                     icon: Icons.delete_forever_rounded,
                     risk: CleanRisk.review,
-                    title: '回收站',
-                    description: '查看所有磁盘的回收站占用，确认后可永久清空。',
+                    title: context.t('回收站'),
+                    description: context.t('查看所有磁盘的回收站占用，确认后可永久清空。'),
                     onTap: onOpenRecycleBin,
                   ),
                 ),
@@ -769,8 +837,8 @@ class _ToolsSection extends StatelessWidget {
                     key: const ValueKey('tool-duplicate-files'),
                     icon: Icons.content_copy_rounded,
                     risk: CleanRisk.info,
-                    title: '重复文件',
-                    description: '按内容比对找出相同的文件，结果只读、不自动选择。',
+                    title: context.t('重复文件'),
+                    description: context.t('按内容比对找出相同的文件，结果只读、不自动选择。'),
                     onTap: onOpenDuplicateFinder,
                   ),
                 ),
@@ -780,8 +848,8 @@ class _ToolsSection extends StatelessWidget {
                     key: const ValueKey('tool-large-files'),
                     icon: Icons.sd_storage_rounded,
                     risk: CleanRisk.info,
-                    title: '大文件分析',
-                    description: '按体积从大到小列出文件，帮你定位空间去向。',
+                    title: context.t('大文件分析'),
+                    description: context.t('按体积从大到小列出文件，帮你定位空间去向。'),
                     onTap: onOpenLargeFiles,
                   ),
                 ),
@@ -891,20 +959,23 @@ class _ScopeSection extends StatelessWidget {
     required this.scopes,
     required this.exclusionCount,
     required this.onOpenExclusions,
+    required this.isRuleEnabled,
   });
 
   final List<CleanerRule> rules;
   final Map<String, RuleExclusionScope> scopes;
   final int exclusionCount;
   final VoidCallback onOpenExclusions;
+  final bool Function(String ruleId) isRuleEnabled;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final strings = context.strings;
     final groups = <String, List<CleanerRule>>{};
     for (final rule in rules) {
-      groups.putIfAbsent(rule.category, () => []).add(rule);
+      groups.putIfAbsent(strings.ruleCategory(rule), () => []).add(rule);
     }
 
     return Container(
@@ -927,14 +998,16 @@ class _ScopeSection extends StatelessWidget {
                 color: scheme.primary,
               ),
               const SizedBox(width: 8),
-              Text('本次扫描范围', style: theme.textTheme.titleSmall),
+              Text(context.t('本次扫描范围'), style: theme.textTheme.titleSmall),
               const Spacer(),
               TextButton.icon(
                 key: const ValueKey('open-exclusions'),
                 onPressed: onOpenExclusions,
                 icon: const Icon(Icons.block_rounded, size: 15),
                 label: Text(
-                  exclusionCount == 0 ? '排除列表' : '排除列表 · $exclusionCount',
+                  exclusionCount == 0
+                      ? context.t('排除列表')
+                      : '${context.t('排除列表')} · $exclusionCount',
                 ),
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
@@ -960,7 +1033,7 @@ class _ScopeSection extends StatelessWidget {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      '排除优先于规则：被排除的目录及其子目录不会参与扫描。',
+                      context.t('排除优先于规则：被排除的目录及其子目录不会参与扫描。'),
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),
@@ -1007,10 +1080,16 @@ class _ScopeSection extends StatelessWidget {
                       children: [
                         for (final rule in entry.value)
                           Tooltip(
-                            message: _scopeTooltip(rule, scopes[rule.id]),
+                            message: _scopeTooltip(
+                              strings,
+                              rule,
+                              scopes[rule.id],
+                              isRuleEnabled(rule.id),
+                            ),
                             child: _RuleChip(
                               rule: rule,
                               scope: scopes[rule.id] ?? RuleExclusionScope.none,
+                              enabled: isRuleEnabled(rule.id),
                             ),
                           ),
                       ],
@@ -1024,20 +1103,36 @@ class _ScopeSection extends StatelessWidget {
     );
   }
 
-  String _scopeTooltip(CleanerRule rule, RuleExclusionScope? scope) {
-    return switch (scope) {
-      RuleExclusionScope.all => '${rule.description}\n此规则的所有目录都在排除列表中。',
-      RuleExclusionScope.partial => '${rule.description}\n此规则的部分目录已被排除。',
-      _ => rule.description,
+  String _scopeTooltip(
+    BroomStrings strings,
+    CleanerRule rule,
+    RuleExclusionScope? scope,
+    bool enabled,
+  ) {
+    final description = switch (scope) {
+      RuleExclusionScope.all => strings.tf('{description}\n此规则的所有目录都在排除列表中。', {
+        'description': strings.ruleDescription(rule),
+      }),
+      RuleExclusionScope.partial => strings.tf('{description}\n此规则的部分目录已被排除。', {
+        'description': strings.ruleDescription(rule),
+      }),
+      _ => strings.ruleDescription(rule),
     };
+    if (enabled) return description;
+    return '$description\n${strings.t('此规则已在设置中关闭。')}';
   }
 }
 
 class _RuleChip extends StatelessWidget {
-  const _RuleChip({required this.rule, required this.scope});
+  const _RuleChip({
+    required this.rule,
+    required this.scope,
+    required this.enabled,
+  });
 
   final CleanerRule rule;
   final RuleExclusionScope scope;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -1068,17 +1163,29 @@ class _RuleChip extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            rule.title,
+            context.strings.ruleTitle(rule),
             style: theme.textTheme.labelSmall?.copyWith(
-              color: scheme.onSurface,
+              color: enabled ? scheme.onSurface : scheme.onSurfaceVariant,
             ),
           ),
           if (excluded) ...[
             const SizedBox(width: 6),
             Text(
-              scope == RuleExclusionScope.all ? '已排除' : '部分排除',
+              scope == RuleExclusionScope.all
+                  ? context.t('已排除')
+                  : context.t('部分排除'),
               style: theme.textTheme.labelSmall?.copyWith(
                 color: scheme.onTertiaryContainer,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+          if (!enabled) ...[
+            const SizedBox(width: 6),
+            Text(
+              context.t('已关闭'),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -1111,8 +1218,10 @@ class _SafetyNote extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: Text(
-            '清理前先预览；清理时文件会移动到隔离区，可随时撤销。'
-            '所有扫描都在本机完成，不会上传任何文件。',
+            context.t(
+              '清理前先预览；清理时文件会移动到隔离区，可随时撤销。'
+              '所有扫描都在本机完成，不会上传任何文件。',
+            ),
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
               height: 1.5,
@@ -1176,7 +1285,7 @@ class _InlineBanner extends StatelessWidget {
               onPressed: onClose,
               icon: const Icon(Icons.close_rounded, size: 17),
               visualDensity: VisualDensity.compact,
-              tooltip: '关闭',
+              tooltip: context.t('关闭'),
             ),
         ],
       ),
@@ -1194,6 +1303,15 @@ class _ScanningView extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final progress = controller.scanProgress;
+    final ruleId = progress?.ruleId;
+    final scanningRule = ruleId == null
+        ? null
+        : controller.platform.rules
+              .where((rule) => rule.id == ruleId)
+              .firstOrNull;
+    final scanningTitle = scanningRule == null
+        ? null
+        : context.strings.ruleTitle(scanningRule);
 
     return Center(
       child: SingleChildScrollView(
@@ -1230,13 +1348,13 @@ class _ScanningView extends StatelessWidget {
                 ),
                 const SizedBox(height: 22),
                 Text(
-                  '正在扫描',
+                  context.t('正在扫描'),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.titleLarge,
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  controller.scanningRuleTitle ?? '正在准备扫描目录…',
+                  scanningTitle ?? context.t('正在准备扫描目录…'),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: scheme.onSurfaceVariant,
@@ -1245,7 +1363,10 @@ class _ScanningView extends StatelessWidget {
                 if (progress != null && progress.jobCount > 0) ...[
                   const SizedBox(height: 4),
                   Text(
-                    '第 ${progress.jobIndex + 1} / ${progress.jobCount} 组',
+                    context.tf('第 {current} / {total} 组', {
+                      'current': progress.jobIndex + 1,
+                      'total': progress.jobCount,
+                    }),
                     textAlign: TextAlign.center,
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: scheme.onSurfaceVariant,
@@ -1262,21 +1383,21 @@ class _ScanningView extends StatelessWidget {
                   children: [
                     Expanded(
                       child: _ProgressStat(
-                        label: '已检查',
+                        label: context.t('已检查'),
                         value: formatCount(progress?.scannedFiles ?? 0),
                       ),
                     ),
                     _statDivider(scheme),
                     Expanded(
                       child: _ProgressStat(
-                        label: '发现文件',
+                        label: context.t('发现文件'),
                         value: formatCount(progress?.foundFiles ?? 0),
                       ),
                     ),
                     _statDivider(scheme),
                     Expanded(
                       child: _ProgressStat(
-                        label: '已找到',
+                        label: context.t('已找到'),
                         value: formatBytes(progress?.foundBytes ?? 0),
                       ),
                     ),
@@ -1286,7 +1407,7 @@ class _ScanningView extends StatelessWidget {
                 Center(
                   child: TextButton(
                     onPressed: controller.cancelScan,
-                    child: const Text('取消扫描'),
+                    child: Text(context.t('取消扫描')),
                   ),
                 ),
               ],
@@ -1358,11 +1479,7 @@ class _PreviewView extends StatelessWidget {
       0,
       (total, result) => total + result.totalBytes,
     );
-    final allSelected =
-        controller.results.isNotEmpty &&
-        controller.results.every(
-          (result) => controller.isRuleSelected(result.rule.id),
-        );
+    final allSelected = controller.allItemsSelected;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1375,23 +1492,27 @@ class _PreviewView extends StatelessWidget {
           ),
         if (controller.scanDirectoryErrors > 0)
           _InlineBanner(
-            message: '有 ${controller.scanDirectoryErrors} 个目录无法读取，已自动跳过。',
+            message: context.tf('有 {count} 个目录无法读取，已自动跳过。', {
+              'count': controller.scanDirectoryErrors,
+            }),
           ),
         if (controller.scanTruncated)
-          _InlineBanner(message: '文件数量超过单次扫描上限，预览与清理仅包含已找到的部分。'),
+          _InlineBanner(message: context.t('文件数量超过单次扫描上限，预览与清理仅包含已找到的部分。')),
         Row(
           children: [
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('扫描结果', style: theme.textTheme.titleLarge),
+                  Text(context.t('扫描结果'), style: theme.textTheme.titleLarge),
                   const SizedBox(height: 2),
                   Text(
                     controller.results.isEmpty
-                        ? '没有发现可清理的文件'
-                        : '发现 ${formatCount(totalItems)} 个文件 · '
-                              '${formatBytes(totalBytes)}，请选择要清理的内容。',
+                        ? context.t('没有发现可清理的文件')
+                        : context.tf('发现 {count} 个文件 · {bytes}，请选择要清理的内容。', {
+                            'count': formatCount(totalItems),
+                            'bytes': formatBytes(totalBytes),
+                          }),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
@@ -1403,7 +1524,7 @@ class _PreviewView extends StatelessWidget {
             OutlinedButton.icon(
               onPressed: controller.scan,
               icon: const Icon(Icons.refresh_rounded, size: 17),
-              label: const Text('重新扫描'),
+              label: Text(context.t('重新扫描')),
             ),
           ],
         ),
@@ -1424,10 +1545,13 @@ class _PreviewView extends StatelessWidget {
                         color: scheme.primary,
                       ),
                       const SizedBox(height: 14),
-                      Text('没有发现可清理的内容', style: theme.textTheme.titleMedium),
+                      Text(
+                        context.t('没有发现可清理的内容'),
+                        style: theme.textTheme.titleMedium,
+                      ),
                       const SizedBox(height: 6),
                       Text(
-                        '系统看起来很干净。关闭正在使用的浏览器或开发工具后，可以再扫描一次。',
+                        context.t('系统看起来很干净。关闭正在使用的浏览器或开发工具后，可以再扫描一次。'),
                         textAlign: TextAlign.center,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
@@ -1438,7 +1562,7 @@ class _PreviewView extends StatelessWidget {
                       FilledButton.tonalIcon(
                         onPressed: controller.scan,
                         icon: const Icon(Icons.refresh_rounded, size: 18),
-                        label: const Text('再扫描一次'),
+                        label: Text(context.t('再扫描一次')),
                       ),
                     ],
                   ),
@@ -1451,7 +1575,10 @@ class _PreviewView extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.only(bottom: 6),
               children: [
-                for (final group in _groupResults(controller.results))
+                for (final group in _groupResults(
+                  controller.results,
+                  context.strings,
+                ))
                   _ResultGroup(
                     category: group.category,
                     results: group.results,
@@ -1510,7 +1637,10 @@ class _ResultGroup extends StatelessWidget {
                 Text(category, style: theme.textTheme.titleSmall),
                 const SizedBox(width: 8),
                 Text(
-                  '${formatCount(itemCount)} 个文件 · ${formatBytes(bytes)}',
+                  context.tf('{count} 个文件 · {bytes}', {
+                    'count': formatCount(itemCount),
+                    'bytes': formatBytes(bytes),
+                  }),
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -1536,7 +1666,9 @@ class _RuleResultCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final selected = controller.isRuleSelected(result.rule.id);
+    final bool? selection = controller.ruleSelectionValue(result.rule.id);
+    final selected = selection == true;
+    final selectedCount = controller.selectedCountForRule(result.rule.id);
     final rule = result.rule;
 
     return Padding(
@@ -1548,11 +1680,17 @@ class _RuleResultCard extends StatelessWidget {
                     ? 0.24
                     : 0.3,
               )
+            : selection == null
+            ? scheme.primaryContainer.withValues(
+                alpha: Theme.of(context).brightness == Brightness.dark
+                    ? 0.12
+                    : 0.14,
+              )
             : scheme.surfaceContainerLow,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
-            color: selected
+            color: selection != false
                 ? scheme.primary.withValues(alpha: 0.18)
                 : scheme.outlineVariant.withValues(alpha: 0.5),
           ),
@@ -1565,7 +1703,8 @@ class _RuleResultCard extends StatelessWidget {
             child: Row(
               children: [
                 Checkbox(
-                  value: selected,
+                  value: selection,
+                  tristate: true,
                   onChanged: (_) => controller.toggleRule(rule.id),
                   visualDensity: VisualDensity.compact,
                 ),
@@ -1593,7 +1732,7 @@ class _RuleResultCard extends StatelessWidget {
                         children: [
                           Expanded(
                             child: Text(
-                              rule.title,
+                              context.strings.ruleTitle(rule),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.titleSmall?.copyWith(
@@ -1612,8 +1751,17 @@ class _RuleResultCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        '${formatCount(result.items.length)} 个文件 · '
-                        '${rule.description}',
+                        selection == null
+                            ? context.tf('已选 {selected} / {total} 个文件', {
+                                'selected': formatCount(selectedCount),
+                                'total': formatCount(result.items.length),
+                              })
+                            : context.tf('{count} 个文件 · {description}', {
+                                'count': formatCount(result.items.length),
+                                'description': context.strings.ruleDescription(
+                                  rule,
+                                ),
+                              }),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
@@ -1621,7 +1769,7 @@ class _RuleResultCard extends StatelessWidget {
                           height: 1.45,
                         ),
                       ),
-                      if (rule.note case final note?) ...[
+                      if (context.strings.ruleNote(rule) case final note?) ...[
                         const SizedBox(height: 3),
                         Text(
                           note,
@@ -1643,19 +1791,18 @@ class _RuleResultCard extends StatelessWidget {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => RuleDetailPage(
-                          rule: rule,
-                          items: result.items,
-                          totalBytes: result.totalBytes,
+                          controller: controller,
+                          result: result,
                         ),
                       ),
                     );
                   },
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('查看'),
-                      SizedBox(width: 2),
-                      Icon(Icons.chevron_right_rounded, size: 17),
+                      Text(context.t('查看')),
+                      const SizedBox(width: 2),
+                      const Icon(Icons.chevron_right_rounded, size: 17),
                     ],
                   ),
                 ),
@@ -1700,15 +1847,18 @@ class _CleanActionBar extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '已选择 ${formatCount(controller.selectedCount)} 项',
+                  context.tf('已选择 {count} 项', {
+                    'count': formatCount(controller.selectedCount),
+                  }),
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 1),
                 Text(
-                  '预计暂存 ${formatBytes(controller.selectedBytes)}，'
-                  '释放隔离区后才会回收磁盘空间',
+                  context.tf('预计暂存 {bytes}，释放隔离区后才会回收磁盘空间', {
+                    'bytes': formatBytes(controller.selectedBytes),
+                  }),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -1716,17 +1866,35 @@ class _CleanActionBar extends StatelessWidget {
               ],
             ),
           ),
-          TextButton(
-            onPressed: allSelected
-                ? controller.clearRuleSelection
-                : controller.selectAllRules,
-            child: Text(allSelected ? '取消全选' : '全选'),
-          ),
-          const SizedBox(width: 8),
-          FilledButton.icon(
-            onPressed: controller.selectedCount == 0 ? null : onCleanRequested,
-            icon: const Icon(Icons.cleaning_services_rounded, size: 18),
-            label: Text('清理 ${formatCount(controller.selectedCount)} 项'),
+          Wrap(
+            spacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              TextButton(
+                onPressed: allSelected
+                    ? controller.clearRuleSelection
+                    : controller.selectAllRules,
+                child: Text(allSelected ? context.t('取消全选') : context.t('全选')),
+              ),
+              TextButton(
+                onPressed: controller.hasSelection
+                    ? controller.invertSelection
+                    : null,
+                child: Text(context.t('反选')),
+              ),
+              const SizedBox(width: 4),
+              FilledButton.icon(
+                onPressed: controller.selectedCount == 0
+                    ? null
+                    : onCleanRequested,
+                icon: const Icon(Icons.cleaning_services_rounded, size: 18),
+                label: Text(
+                  context.tf('清理 {count} 项', {
+                    'count': formatCount(controller.selectedCount),
+                  }),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1777,13 +1945,15 @@ class _CleaningView extends StatelessWidget {
                 ),
                 const SizedBox(height: 22),
                 Text(
-                  controller.cleanCancelRequested ? '正在停止清理…' : '正在移入隔离区',
+                  controller.cleanCancelRequested
+                      ? context.t('正在停止清理…')
+                      : context.t('正在移入隔离区'),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.titleLarge,
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '文件会保存在隔离区，完成后可以撤销。',
+                  context.t('文件会保存在隔离区，完成后可以撤销。'),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
@@ -1802,15 +1972,20 @@ class _CleaningView extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      '$processed / $total 项',
+                      context.tf('{processed} / {total} 项', {
+                        'processed': processed,
+                        'total': total,
+                      }),
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),
                     ),
                     const Spacer(),
                     Text(
-                      '已移动 ${formatCount(progress?.moved ?? 0)} 项 · '
-                      '${formatBytes(progress?.movedBytes ?? 0)}',
+                      context.tf('已移动 {count} 项 · {bytes}', {
+                        'count': formatCount(progress?.moved ?? 0),
+                        'bytes': formatBytes(progress?.movedBytes ?? 0),
+                      }),
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),
@@ -1863,7 +2038,9 @@ class _CleaningView extends StatelessWidget {
                         : controller.cancelCleaning,
                     icon: const Icon(Icons.stop_circle_outlined, size: 17),
                     label: Text(
-                      controller.cleanCancelRequested ? '正在停止…' : '停止清理',
+                      controller.cleanCancelRequested
+                          ? context.t('正在停止…')
+                          : context.t('停止清理'),
                     ),
                   ),
                 ),
@@ -1897,10 +2074,10 @@ class _DoneView extends StatelessWidget {
     }
     final noMoves = report.movedCount == 0;
     final title = report.cancelled
-        ? '清理已停止'
+        ? context.t('清理已停止')
         : noMoves
-        ? '没有文件被移动'
-        : '清理完成';
+        ? context.t('没有文件被移动')
+        : context.t('清理完成');
 
     return Center(
       child: SingleChildScrollView(
@@ -1949,11 +2126,13 @@ class _DoneView extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   report.cancelled
-                      ? '已停止清理，已经移动的文件仍保存在隔离区中。'
+                      ? context.t('已停止清理，已经移动的文件仍保存在隔离区中。')
                       : noMoves
-                      ? '没有文件成功移入隔离区，可以稍后重试。'
-                      : '文件已安全移动到隔离区，可随时恢复。'
-                            '释放隔离区后才会回收磁盘空间。',
+                      ? context.t('没有文件成功移入隔离区，可以稍后重试。')
+                      : context.t(
+                          '文件已安全移动到隔离区，可随时恢复。'
+                          '释放隔离区后才会回收磁盘空间。',
+                        ),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
@@ -1972,7 +2151,7 @@ class _DoneView extends StatelessWidget {
                     children: [
                       Expanded(
                         child: _DoneStat(
-                          label: '已暂存',
+                          label: context.t('已暂存'),
                           value: formatBytes(report.movedBytes),
                         ),
                       ),
@@ -1983,8 +2162,10 @@ class _DoneView extends StatelessWidget {
                       ),
                       Expanded(
                         child: _DoneStat(
-                          label: '移入隔离区',
-                          value: '${formatCount(report.movedCount)} 个文件',
+                          label: context.t('移入隔离区'),
+                          value: context.tf('{count} 个文件', {
+                            'count': formatCount(report.movedCount),
+                          }),
                         ),
                       ),
                     ],
@@ -2014,8 +2195,11 @@ class _DoneView extends StatelessWidget {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                '${report.failureCount} 个文件未能清理，'
-                                '可能被程序占用，或已被加入排除列表。',
+                                context.tf(
+                                  '{count} 个文件未能清理，'
+                                  '可能被程序占用，或已被加入排除列表。',
+                                  {'count': report.failureCount},
+                                ),
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: scheme.onTertiaryContainer,
                                 ),
@@ -2040,7 +2224,9 @@ class _DoneView extends StatelessWidget {
                           Padding(
                             padding: const EdgeInsets.only(top: 6),
                             child: Text(
-                              '还有 ${report.failures.length - 3} 条未显示…',
+                              context.tf('还有 {count} 条未显示…', {
+                                'count': report.failures.length - 3,
+                              }),
                               style: theme.textTheme.labelSmall?.copyWith(
                                 color: scheme.onTertiaryContainer.withValues(
                                   alpha: 0.75,
@@ -2062,7 +2248,7 @@ class _DoneView extends StatelessWidget {
                       OutlinedButton.icon(
                         onPressed: onOpenQuarantine,
                         icon: const Icon(Icons.inventory_2_outlined, size: 18),
-                        label: const Text('管理隔离区'),
+                        label: Text(context.t('管理隔离区')),
                       ),
                     if (controller.canUndoLastReport)
                       OutlinedButton.icon(
@@ -2070,12 +2256,12 @@ class _DoneView extends StatelessWidget {
                             ? null
                             : () => onUndo(report.sessionId!),
                         icon: const Icon(Icons.undo_rounded, size: 18),
-                        label: const Text('撤销本次清理'),
+                        label: Text(context.t('撤销本次清理')),
                       ),
                     FilledButton.icon(
                       onPressed: controller.returnHome,
                       icon: const Icon(Icons.home_outlined, size: 18),
-                      label: const Text('返回首页'),
+                      label: Text(context.t('返回首页')),
                     ),
                   ],
                 ),
@@ -2187,7 +2373,10 @@ class _UndoResultDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final title = report.sessionRemoved ? '撤销完成' : '部分文件已恢复';
+    final strings = context.strings;
+    final title = report.sessionRemoved
+        ? strings.t('撤销完成')
+        : strings.t('部分文件已恢复');
 
     return AlertDialog(
       icon: Icon(
@@ -2203,33 +2392,41 @@ class _UndoResultDialog extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '已恢复 ${report.restoredCount} 个文件'
-            '（${formatBytes(report.restoredBytes)}）。',
+            strings.tf('已恢复 {count} 个文件（{bytes}）。', {
+              'count': report.restoredCount,
+              'bytes': formatBytes(report.restoredBytes),
+            }),
           ),
           if (report.conflictCount > 0) ...[
             const SizedBox(height: 8),
             Text(
-              '${report.conflictCount} 个文件的原位置已有新文件，已跳过。'
-              '可在隔离区重新恢复并选择保留两者或覆盖。',
+              strings.tf(
+                '{count} 个文件的原位置已有新文件，已跳过。'
+                '可在隔离区重新恢复并选择保留两者或覆盖。',
+                {'count': report.conflictCount},
+              ),
             ),
           ],
           if (report.integrityFailureCount > 0) ...[
             const SizedBox(height: 8),
             Text(
-              '${report.integrityFailureCount} 个文件未通过完整性校验，'
-              '已跳过恢复，仍保留在隔离区。',
+              strings.tf('{count} 个文件未通过完整性校验，已跳过恢复，仍保留在隔离区。', {
+                'count': report.integrityFailureCount,
+              }),
             ),
           ],
           if (report.failureCount > report.integrityFailureCount) ...[
             const SizedBox(height: 8),
             Text(
-              '${report.failureCount - report.integrityFailureCount} 个文件恢复失败。',
+              strings.tf('{count} 个文件恢复失败。', {
+                'count': report.failureCount - report.integrityFailureCount,
+              }),
             ),
           ],
           if (!report.sessionRemoved) ...[
             const SizedBox(height: 10),
             Text(
-              '未能恢复的文件仍保留在隔离区中。',
+              strings.t('未能恢复的文件仍保留在隔离区中。'),
               style: Theme.of(context).textTheme.bodySmall
                   ?.copyWith(color: scheme.onSurfaceVariant),
             ),
@@ -2239,7 +2436,7 @@ class _UndoResultDialog extends StatelessWidget {
       actions: [
         FilledButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('知道了'),
+          child: Text(strings.t('知道了')),
         ),
       ],
     );
@@ -2248,10 +2445,11 @@ class _UndoResultDialog extends StatelessWidget {
 
 List<({String category, List<RuleResult> results})> _groupResults(
   List<RuleResult> results,
+  BroomStrings strings,
 ) {
   final groups = <String, List<RuleResult>>{};
   for (final result in results) {
-    groups.putIfAbsent(result.rule.category, () => []).add(result);
+    groups.putIfAbsent(strings.ruleCategory(result.rule), () => []).add(result);
   }
   return [
     for (final entry in groups.entries)
@@ -2260,8 +2458,13 @@ List<({String category, List<RuleResult> results})> _groupResults(
 }
 
 IconData _categoryIcon(String category) {
-  if (category.contains('浏览器')) return Icons.public_rounded;
-  if (category.contains('开发')) return Icons.code_rounded;
+  final lower = category.toLowerCase();
+  if (category.contains('浏览器') || lower.contains('browser')) {
+    return Icons.public_rounded;
+  }
+  if (category.contains('开发') || lower.contains('developer')) {
+    return Icons.code_rounded;
+  }
   return Icons.memory_rounded;
 }
 

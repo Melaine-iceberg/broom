@@ -4,6 +4,7 @@ import '../core/clean/system_cache_cleaner.dart';
 import '../core/models/scan_models.dart';
 import '../core/models/system_models.dart';
 import '../core/platform/system_access.dart';
+import '../l10n/broom_strings.dart';
 import '../core/platform/system_cache_platform.dart';
 import '../core/scan/scan_service.dart';
 
@@ -77,15 +78,6 @@ class SystemCacheController extends ChangeNotifier {
       _phase == SystemCachePhase.scanning ||
       _phase == SystemCachePhase.cleaning;
 
-  String? get scanningRuleTitle {
-    final ruleId = _scanProgress?.ruleId;
-    if (ruleId == null) return null;
-    for (final rule in platform.rules) {
-      if (rule.id == ruleId) return rule.title;
-    }
-    return null;
-  }
-
   bool isRuleSelected(String ruleId) => _selectedRuleIds.contains(ruleId);
 
   List<SystemRuleResult> get selectedResults => [
@@ -138,11 +130,11 @@ class SystemCacheController extends ChangeNotifier {
     try {
       final launched = await access.relaunchElevated();
       if (!launched) {
-        _notice = '已取消管理员授权，未做任何更改。';
+        _notice = tr('已取消管理员授权，未做任何更改。');
       }
       return launched;
     } catch (error) {
-      _error = '无法以管理员身份重新启动：$error';
+      _error = trf('无法以管理员身份重新启动：{error}', {'error': error});
       return false;
     } finally {
       _relaunching = false;
@@ -159,7 +151,7 @@ class SystemCacheController extends ChangeNotifier {
       await checkAccess();
     }
     if (!_isElevated) {
-      _notice = _accessError ?? '系统级缓存清理需要管理员权限。';
+      _notice = _accessError ?? tr('系统级缓存清理需要管理员权限。');
       _notify();
       return;
     }
@@ -196,7 +188,7 @@ class SystemCacheController extends ChangeNotifier {
       }
       if (jobs.isEmpty) {
         _phase = SystemCachePhase.idle;
-        _notice = '没有找到可扫描的系统缓存目录。';
+        _notice = tr('没有找到可扫描的系统缓存目录。');
         _notify();
         return;
       }
@@ -212,7 +204,7 @@ class SystemCacheController extends ChangeNotifier {
 
       if (result.cancelled) {
         _phase = SystemCachePhase.idle;
-        _notice = '扫描已取消。';
+        _notice = tr('扫描已取消。');
         _notify();
         return;
       }
@@ -223,12 +215,12 @@ class SystemCacheController extends ChangeNotifier {
       _selectedRuleIds = <String>{};
       _phase = SystemCachePhase.preview;
       if (_results.isEmpty) {
-        _notice = '没有发现可清理的系统缓存。';
+        _notice = tr('没有发现可清理的系统缓存。');
       }
       _notify();
     } catch (error) {
       _phase = SystemCachePhase.idle;
-      _error = '扫描失败：$error';
+      _error = trf('扫描失败：{error}', {'error': error});
       _notify();
     } finally {
       _scanService = null;
@@ -308,7 +300,7 @@ class SystemCacheController extends ChangeNotifier {
       _phase = SystemCachePhase.preview;
       _cleanProgress = null;
       _cleanStage = null;
-      _error = '清理失败：$error';
+      _error = trf('清理失败：{error}', {'error': error});
       _notify();
     }
   }

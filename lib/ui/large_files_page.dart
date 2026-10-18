@@ -4,6 +4,7 @@ import '../core/analysis/analysis_service.dart';
 import '../core/models/analysis_models.dart';
 import '../core/models/cleaner_rule.dart';
 import '../core/shell/system_shell.dart';
+import '../l10n/broom_strings.dart';
 import 'analysis_controllers.dart';
 import 'analysis_widgets.dart';
 import 'format.dart';
@@ -66,16 +67,16 @@ class _LargeFilesPageState extends State<LargeFilesPage> {
         leading: IconButton(
           onPressed: () => Navigator.of(context).pop(),
           icon: const Icon(Icons.arrow_back_rounded),
-          tooltip: '返回',
+          tooltip: context.t('返回'),
         ),
         toolbarHeight: 68,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('大文件分析'),
+            Text(context.t('大文件分析')),
             const SizedBox(height: 1),
             Text(
-              '按体积排序 · 找出最占空间的文件',
+              context.t('按体积排序 · 找出最占空间的文件'),
               style: theme.textTheme.labelSmall?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
@@ -117,10 +118,11 @@ class _LargeFilesPageState extends State<LargeFilesPage> {
                     ],
                     _ConfigPanel(controller: _controller),
                     const SizedBox(height: 10),
-                    const ReadOnlyHint(
-                      message:
-                          'Info 级只读分析：Broom 只读取文件的大小与位置，不会删除、移动或修改任何文件。'
-                          '如需清理，请先在文件资源管理器中确认文件用途。',
+                    ReadOnlyHint(
+                      message: context.t(
+                        'Info 级只读分析：Broom 只读取文件的大小与位置，不会删除、移动或修改任何文件。'
+                        '如需清理，请先在文件资源管理器中确认文件用途。',
+                      ),
                     ),
                     const SizedBox(height: 14),
                     Expanded(child: _buildContent(context)),
@@ -154,20 +156,20 @@ class _LargeFilesPageState extends State<LargeFilesPage> {
           constraints: const BoxConstraints(maxWidth: 620),
           child: AnalysisProgressCard(
             icon: Icons.sd_storage_rounded,
-            title: '正在扫描大文件',
-            description: '遍历目录并记录超过大小阈值的文件。',
+            title: context.t('正在扫描大文件'),
+            description: context.t('遍历目录并记录超过大小阈值的文件。'),
             progress: null,
             stats: [
               AnalysisProgressStat(
-                label: '已检查文件',
+                label: context.t('已检查文件'),
                 value: formatCount(progress?.scannedFiles ?? 0),
               ),
               AnalysisProgressStat(
-                label: '已读取',
+                label: context.t('已读取'),
                 value: formatBytes(progress?.scannedBytes ?? 0),
               ),
               AnalysisProgressStat(
-                label: '匹配大文件',
+                label: context.t('匹配大文件'),
                 value: formatCount(progress?.matchedFiles ?? 0),
               ),
             ],
@@ -189,19 +191,22 @@ class _LargeFilesPageState extends State<LargeFilesPage> {
       children: [
         if (report.errorCount > 0) ...[
           AnalysisBanner(
-            message: '有 ${formatCount(report.errorCount)} 个文件或目录无法读取，已跳过。',
+            message: context.tf('有 {count} 个文件或目录无法读取，已跳过。', {
+              'count': formatCount(report.errorCount),
+            }),
           ),
           const SizedBox(height: 10),
         ],
         if (report.truncated) ...[
-          const AnalysisBanner(message: '已达到单次分析上限（200,000 个文件），结果可能不完整。'),
+          AnalysisBanner(message: context.t('已达到单次分析上限（200,000 个文件），结果可能不完整。')),
           const SizedBox(height: 10),
         ],
         if (report.resultsCapped) ...[
           AnalysisBanner(
-            message:
-                '共找到 ${formatCount(report.matchedCount)} 个匹配文件，'
-                '列表中只显示体积最大的 ${formatCount(report.files.length)} 个。',
+            message: context.tf('共找到 {matched} 个匹配文件，列表中只显示体积最大的 {shown} 个。', {
+              'matched': formatCount(report.matchedCount),
+              'shown': formatCount(report.files.length),
+            }),
           ),
           const SizedBox(height: 10),
         ],
@@ -263,7 +268,7 @@ class _ConfigPanel extends StatelessWidget {
           child: Row(
             children: [
               Text(
-                '最小文件大小',
+                context.t('最小文件大小'),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
@@ -293,7 +298,9 @@ class _ConfigPanel extends StatelessWidget {
                   report == null ? Icons.search_rounded : Icons.refresh_rounded,
                   size: 18,
                 ),
-                label: Text(report == null ? '开始分析' : '重新分析'),
+                label: Text(
+                  report == null ? context.t('开始分析') : context.t('重新分析'),
+                ),
               ),
             ],
           ),
@@ -327,26 +334,28 @@ class _LargeFileSummary extends StatelessWidget {
           Row(
             children: [
               _SummaryStat(
-                label: '匹配文件',
+                label: context.t('匹配文件'),
                 value: formatCount(report.matchedCount),
               ),
               _divider(scheme),
               _SummaryStat(
-                label: '合计体积',
+                label: context.t('合计体积'),
                 value: formatBytes(report.matchedBytes),
                 emphasized: true,
               ),
               _divider(scheme),
               _SummaryStat(
-                label: '已检查',
+                label: context.t('已检查'),
                 value: formatCount(report.scannedFiles),
               ),
             ],
           ),
           const SizedBox(height: 10),
           Text(
-            '在 ${formatBytes(report.scannedBytes)} 的已读数据中，'
-            '找到 ${formatCount(report.matchedCount)} 个超过阈值的大文件。',
+            context.tf('在 {bytes} 的已读数据中，找到 {count} 个超过阈值的大文件。', {
+              'bytes': formatBytes(report.scannedBytes),
+              'count': formatCount(report.matchedCount),
+            }),
             textAlign: TextAlign.center,
             style: theme.textTheme.labelSmall?.copyWith(
               color: scheme.onSurfaceVariant,
@@ -502,7 +511,7 @@ class _LargeFileRow extends StatelessWidget {
             onPressed: () => onReveal(file.path),
             icon: const Icon(Icons.folder_open_rounded, size: 17),
             visualDensity: VisualDensity.compact,
-            tooltip: '在资源管理器中显示',
+            tooltip: context.t('在资源管理器中显示'),
           ),
         ],
       ),
@@ -544,12 +553,20 @@ class _NoLargeFiles extends StatelessWidget {
                   color: scheme.primary,
                 ),
                 const SizedBox(height: 14),
-                Text('没有超过阈值的大文件', style: theme.textTheme.titleMedium),
+                Text(
+                  context.t('没有超过阈值的大文件'),
+                  style: theme.textTheme.titleMedium,
+                ),
                 const SizedBox(height: 6),
                 Text(
-                  '已检查 ${formatCount(report.scannedFiles)} 个文件'
-                  '（${formatBytes(report.scannedBytes)}），'
-                  '所选目录中没有大于 ${formatBytes(minFileSize)} 的文件。',
+                  context.tf(
+                    '已检查 {scanned} 个文件（{bytes}），所选目录中没有大于 {threshold} 的文件。',
+                    {
+                      'scanned': formatCount(report.scannedFiles),
+                      'bytes': formatBytes(report.scannedBytes),
+                      'threshold': formatBytes(minFileSize),
+                    },
+                  ),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
@@ -595,7 +612,7 @@ class _IdleState extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 18),
-              Text('看看是什么占用了空间', style: theme.textTheme.titleLarge),
+              Text(context.t('看看是什么占用了空间'), style: theme.textTheme.titleLarge),
               const SizedBox(height: 7),
               Text(
                 '选择一个文件夹开始分析。Broom 会找出超过阈值的大文件，'

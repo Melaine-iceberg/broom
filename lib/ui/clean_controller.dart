@@ -8,6 +8,7 @@ import '../core/platform/cleaner_platform.dart';
 import '../core/safety/path_guard.dart';
 import '../core/scan/scan_service.dart';
 import '../core/settings/exclusion_store.dart';
+import '../l10n/broom_strings.dart';
 
 enum CleanPhase { idle, scanning, preview, cleaning, done }
 
@@ -28,6 +29,7 @@ class CleanController extends ChangeNotifier {
     required this.guard,
     required this.quarantine,
     required this.exclusions,
+    this.isRuleEnabled,
     ScanService Function()? scanServiceFactory,
   }) : _scanServiceFactory = scanServiceFactory ?? ScanService.new;
 
@@ -35,12 +37,15 @@ class CleanController extends ChangeNotifier {
   final PathGuard guard;
   final QuarantineService quarantine;
   final ExclusionStore exclusions;
+  bool Function(String ruleId)? isRuleEnabled;
   final ScanService Function() _scanServiceFactory;
 
   CleanPhase _phase = CleanPhase.idle;
   ScanProgress? _scanProgress;
   List<RuleResult> _results = const [];
-  Set<String> _selectedRuleIds = <String>{};
+  final Set<String> _selectedPaths = <String>{};
+  final Map<String, int> _selectedCountByRule = <String, int>{};
+  final Map<String, JunkItem> _itemsByPath = <String, JunkItem>{};
   CleanReport? _lastReport;
   CleanProgress? _cleanProgress;
   List<QuarantineSessionInfo> _pendingSessions = const [];
@@ -100,24 +105,49 @@ class CleanController extends ChangeNotifier {
     return _pendingSessions.any((session) => session.id == id);
   }
 
-  int get selectedCount => selectedItems.length;
+  int get selectedCount => _selectedPaths.length;
   int get selectedBytes =>
       selectedItems.fold(0, (total, item) => total + item.size);
 
   List<JunkItem> get selectedItems => [
     for (final result in _results)
-      if (_selectedRuleIds.contains(result.rule.id)) ...result.items,
+      for (final item in result.items)
+        if (_selectedPaths.contains(item.path)) item,
   ];
 
-  bool isRuleSelected(String ruleId) => _selectedRuleIds.contains(ruleId);
+  bool get allItemsSelected =>
+      _results.isNotEmpty &&
+      _results.every(
+        (result) => _selectedCountByRule[result.rule.id] == result.items.length,
+      );
 
-  String? get scanningRuleTitle {
-    final ruleId = _scanProgress?.ruleId;
-    if (ruleId == null) return null;
-    for (final rule in platform.rules) {
-      if (rule.id == ruleId) return rule.title;
-    }
+  bool get hasSelection => _selectedPaths.isNotEmpty;
+
+  bool isItemSelected(String path) => _selectedPaths.contains(path);
+
+  bool isRuleSelected(String ruleId) {
+    final result = _findResult(ruleId);
+    if (result == null || result.items.isEmpty) return false;
+    return _selectedCountByRule[ruleId] == result.items.length;
+  }
+
+  bool? ruleSelectionValue(String ruleId) {
+    final result = _findResult(ruleId);
+    if (result == null || result.items.isEmpty) return false;
+    final selected = _selectedCountByRule[ruleId] ?? 0;
+    if (selected == 0) return false;
+    if (selected == result.items.length) return true;
     return null;
+  }
+
+  int selectedCountForRule(String ruleId) => _selectedCountByRule[ruleId] ?? 0;
+
+  int selectedBytesForRule(String ruleId) {
+    var total = 0;
+    for (final item in _findResult(ruleId)?.items ?? const <JunkItem>[]) {
+      if (_selectedPaths.contains(item.path)) total += item.size;
+    }
+    return total;
   }
 
   Future<void> initialize() async {
@@ -133,7 +163,7 @@ class CleanController extends ChangeNotifier {
     try {
       await _ensureExclusionsLoaded();
       if (_exclusionError != null) {
-        _error = '$_exclusionError 请打开“排除列表”页面重置后重试。';
+        _error = trf('{error} 请打开“排除列表”页面重置后重试。', {'error': _exclusionError});
         _notify();
         return;
       }
@@ -150,7 +180,7 @@ class CleanController extends ChangeNotifier {
         foundBytes: 0,
       );
       _results = const [];
-      _selectedRuleIds = <String>{};
+      _resetSelection();
       _scanDirectoryErrors = 0;
       _scanTruncated = false;
       _lastReport = null;
@@ -165,8 +195,8 @@ class CleanController extends ChangeNotifier {
         if (jobs.isEmpty) {
           _phase = CleanPhase.idle;
           _notice = exclusions.paths.isEmpty
-              ? '没有找到可扫描的缓存目录。'
-              : '没有可扫描的缓存目录（可能已被排除列表覆盖）。';
+              ? tr('没有找到可扫描的缓存目录。')
+              : tr('没有可扫描的缓存目录（可能已被排除列表覆盖）。');
           _notify();
           return;
         }
@@ -188,7 +218,7 @@ class CleanController extends ChangeNotifier {
 
         if (result.cancelled) {
           _phase = CleanPhase.idle;
-          _notice = '扫描已取消。';
+          _notice = tr('扫描已取消。');
           _notify();
           return;
         }
@@ -196,15 +226,16 @@ class CleanController extends ChangeNotifier {
         _scanDirectoryErrors = result.directoryErrors;
         _scanTruncated = result.truncated;
         _results = _groupResults(result.items);
-        _selectedRuleIds = {for (final result in _results) result.rule.id};
+        _resetSelection();
+        _selectAllItems(notify: false);
         _phase = CleanPhase.preview;
         if (_results.isEmpty) {
-          _notice = '没有发现可清理的内容。';
+          _notice = tr('没有发现可清理的内容。');
         }
         _notify();
       } catch (error) {
         _phase = CleanPhase.idle;
-        _error = '扫描失败：$error';
+        _error = trf('扫描失败：{error}', {'error': error});
         _notify();
       } finally {
         _scanService = null;
@@ -221,22 +252,116 @@ class CleanController extends ChangeNotifier {
   }
 
   void toggleRule(String ruleId) {
-    if (_selectedRuleIds.contains(ruleId)) {
-      _selectedRuleIds.remove(ruleId);
+    final result = _findResult(ruleId);
+    if (result == null || result.items.isEmpty) return;
+    if (isRuleSelected(ruleId)) {
+      _setRuleSelected(ruleId, false, notify: false);
     } else {
-      _selectedRuleIds.add(ruleId);
+      _setRuleSelected(ruleId, true, notify: false);
     }
     _notify();
   }
 
+  void setRuleSelected(String ruleId, bool selected) {
+    final result = _findResult(ruleId);
+    if (result == null || result.items.isEmpty) return;
+    _setRuleSelected(ruleId, selected, notify: false);
+    _notify();
+  }
+
+  void toggleItem(String path) {
+    final item = _itemsByPath[path];
+    if (item == null) return;
+    if (_selectedPaths.contains(path)) {
+      _selectedPaths.remove(path);
+      _selectedCountByRule[item.ruleId] =
+          (_selectedCountByRule[item.ruleId] ?? 1) - 1;
+    } else {
+      _selectedPaths.add(path);
+      _selectedCountByRule[item.ruleId] =
+          (_selectedCountByRule[item.ruleId] ?? 0) + 1;
+    }
+    _notify();
+  }
+
+  void setItemSelected(String path, bool selected) {
+    final item = _itemsByPath[path];
+    if (item == null) return;
+    final isSelected = _selectedPaths.contains(path);
+    if (isSelected == selected) return;
+    toggleItem(path);
+  }
+
   void selectAllRules() {
-    _selectedRuleIds = {for (final result in _results) result.rule.id};
+    _selectAllItems(notify: false);
+    _notify();
+  }
+
+  void invertSelection() {
+    for (final entry in _itemsByPath.entries) {
+      if (_selectedPaths.contains(entry.key)) {
+        _selectedPaths.remove(entry.key);
+      } else {
+        _selectedPaths.add(entry.key);
+      }
+    }
+    for (final result in _results) {
+      _selectedCountByRule[result.rule.id] = result.items
+          .where((item) => _selectedPaths.contains(item.path))
+          .length;
+    }
+    _notify();
+  }
+
+  void invertRuleSelection(String ruleId) {
+    final result = _findResult(ruleId);
+    if (result == null) return;
+    var selected = 0;
+    for (final item in result.items) {
+      if (_selectedPaths.remove(item.path)) continue;
+      _selectedPaths.add(item.path);
+      selected++;
+    }
+    _selectedCountByRule[ruleId] = selected;
     _notify();
   }
 
   void clearRuleSelection() {
-    _selectedRuleIds = <String>{};
+    _selectedPaths.clear();
+    _selectedCountByRule.clear();
     _notify();
+  }
+
+  void _selectAllItems({required bool notify}) {
+    for (final result in _results) {
+      for (final item in result.items) {
+        _selectedPaths.add(item.path);
+        _itemsByPath[item.path] = item;
+      }
+      _selectedCountByRule[result.rule.id] = result.items.length;
+    }
+    if (notify) _notify();
+  }
+
+  void _setRuleSelected(String ruleId, bool selected, {required bool notify}) {
+    final result = _findResult(ruleId);
+    if (result == null) return;
+    for (final item in result.items) {
+      _itemsByPath[item.path] = item;
+      if (selected) {
+        _selectedPaths.add(item.path);
+      } else {
+        _selectedPaths.remove(item.path);
+      }
+    }
+    _selectedCountByRule[ruleId] = selected ? result.items.length : 0;
+    if (notify) _notify();
+  }
+
+  void _resetSelection() {
+    _selectedPaths.clear();
+    _selectedCountByRule.clear();
+    _itemsByPath.clear();
   }
 
   Future<void> cleanSelected() async {
@@ -272,7 +397,7 @@ class CleanController extends ChangeNotifier {
     } catch (error) {
       _phase = CleanPhase.preview;
       _cleanProgress = null;
-      _error = '清理失败：$error';
+      _error = trf('清理失败：{error}', {'error': error});
       await _refreshPendingSessions(notify: false);
       _notify();
     }
@@ -290,7 +415,7 @@ class CleanController extends ChangeNotifier {
 
   Future<UndoReport> undo(String sessionId) async {
     if (_undoBusy) {
-      throw StateError('正在执行撤销，请稍候');
+      throw StateError(tr('正在执行撤销，请稍候'));
     }
     _undoBusy = true;
     _error = null;
@@ -300,7 +425,7 @@ class CleanController extends ChangeNotifier {
       await _refreshPendingSessions(notify: false);
       return report;
     } catch (error) {
-      _error = '撤销失败：$error';
+      _error = trf('撤销失败：{error}', {'error': error});
       rethrow;
     } finally {
       _undoBusy = false;
@@ -311,7 +436,7 @@ class CleanController extends ChangeNotifier {
   void returnHome() {
     _phase = CleanPhase.idle;
     _results = const [];
-    _selectedRuleIds = <String>{};
+    _resetSelection();
     _lastReport = null;
     _cleanProgress = null;
     _notice = null;
@@ -332,10 +457,10 @@ class CleanController extends ChangeNotifier {
   }
 
   Future<String?> addExclusion(String path) =>
-      _changeExclusions(() => exclusions.add(path), '添加');
+      _changeExclusions(() => exclusions.add(path), tr('添加'));
 
   Future<String?> removeExclusion(String path) =>
-      _changeExclusions(() => exclusions.remove(path), '移除');
+      _changeExclusions(() => exclusions.remove(path), tr('移除'));
 
   Future<String?> resetExclusions() async {
     try {
@@ -348,7 +473,7 @@ class CleanController extends ChangeNotifier {
     } on ExclusionException catch (error) {
       return error.message;
     } catch (error) {
-      return '无法重置排除列表：$error';
+      return trf('无法重置排除列表：{error}', {'error': error});
     }
   }
 
@@ -361,7 +486,7 @@ class CleanController extends ChangeNotifier {
   ) async {
     await _ensureExclusionsLoaded();
     if (!_exclusionsReady) {
-      return _exclusionError ?? '无法读取排除列表。';
+      return _exclusionError ?? tr('无法读取排除列表。');
     }
     try {
       await change();
@@ -371,7 +496,7 @@ class CleanController extends ChangeNotifier {
     } on ExclusionException catch (error) {
       return error.message;
     } catch (error) {
-      return '无法$action排除项：$error';
+      return trf('无法{action}排除项：{error}', {'action': action, 'error': error});
     }
   }
 
@@ -379,7 +504,8 @@ class CleanController extends ChangeNotifier {
     final jobs = <ScanJob>[];
     final seenRoots = <String>{};
     for (final rule in platform.rules.where(
-      (rule) => rule.risk == CleanRisk.safe,
+      (rule) =>
+          rule.risk == CleanRisk.safe && (isRuleEnabled?.call(rule.id) ?? true),
     )) {
       final resolvedRoots = await platform.resolveRoots(rule);
       final safeRoots = <String>[];
@@ -411,7 +537,7 @@ class CleanController extends ChangeNotifier {
       _exclusionError = null;
     } catch (_) {
       _exclusionsReady = false;
-      _exclusionError = exclusions.loadError ?? '无法读取排除列表。';
+      _exclusionError = exclusions.loadError ?? tr('无法读取排除列表。');
     }
     if (_exclusionsReady) {
       await _refreshRuleExclusionScopes(notify: false);
@@ -468,6 +594,13 @@ class CleanController extends ChangeNotifier {
     if (revision != _scopeRevision) return;
     _ruleExclusionScopes = scopes;
     if (notify) _notify();
+  }
+
+  RuleResult? _findResult(String ruleId) {
+    for (final result in _results) {
+      if (result.rule.id == ruleId) return result;
+    }
+    return null;
   }
 
   List<RuleResult> _groupResults(List<JunkItem> items) {

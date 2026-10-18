@@ -1,3 +1,4 @@
+import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 
 String formatBytes(int bytes) {
@@ -14,20 +15,51 @@ String formatBytes(int bytes) {
 }
 
 String formatCount(int count) {
-  if (count >= 100000) {
-    return '${(count / 10000).toStringAsFixed(count >= 1000000 ? 0 : 1)} 万';
+  final locale = Intl.defaultLocale ?? 'zh';
+  if (locale.startsWith('zh')) {
+    if (count >= 100000) {
+      final value = count / 10000;
+      return '${value.toStringAsFixed(count >= 1000000 ? 0 : 1)} 万';
+    }
+  } else if (count >= 100000) {
+    return NumberFormat.compact(locale: locale).format(count);
   }
-  return '$count';
+  return NumberFormat.decimalPattern(locale).format(count);
 }
 
 String formatDate(DateTime date) {
   String two(int value) => value.toString().padLeft(2, '0');
-  return '${date.year}-${two(date.month)}-${two(date.day)}';
+  final locale = Intl.defaultLocale ?? 'zh';
+  if (locale.startsWith('zh')) {
+    return '${date.year}-${two(date.month)}-${two(date.day)}';
+  }
+  return '${_months[date.month - 1]} ${date.day}, ${date.year}';
 }
 
 String formatDateTime(DateTime date) {
   String two(int value) => value.toString().padLeft(2, '0');
-  return '${formatDate(date)} ${two(date.hour)}:${two(date.minute)}';
+  final locale = Intl.defaultLocale ?? 'zh';
+  if (locale.startsWith('zh')) {
+    return '${formatDate(date)} ${two(date.hour)}:${two(date.minute)}';
+  }
+  final hour = date.hour % 12 == 0 ? 12 : date.hour % 12;
+  final suffix = date.hour < 12 ? 'AM' : 'PM';
+  return '${formatDate(date)} $hour:${two(date.minute)} $suffix';
 }
+
+const _months = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
 
 String fileNameOf(String path) => p.windows.basename(path);

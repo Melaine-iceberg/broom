@@ -14,8 +14,10 @@ import 'core/platform/system_cache_platform.dart';
 import 'core/safety/path_guard.dart';
 import 'core/settings/exclusion_store.dart';
 import 'core/settings/quarantine_policy_store.dart';
+import 'core/settings/settings_store.dart';
 import 'platform/window_chrome.dart';
 import 'ui/clean_controller.dart';
+import 'ui/settings_controller.dart';
 import 'ui/system_cache_controller.dart';
 
 void main(List<String> args) {
@@ -56,11 +58,18 @@ void main(List<String> args) {
       filePath: QuarantinePolicyStore.defaultFilePath(quarantineRoot),
     ),
   );
+  final settings = SettingsController(
+    store: SettingsStore(
+      filePath: SettingsStore.defaultFilePath(quarantineRoot),
+    ),
+  );
+  settings.load();
   final controller = CleanController(
     platform: platform,
     guard: guard,
     quarantine: quarantine,
     exclusions: exclusions,
+    isRuleEnabled: settings.isRuleEnabled,
   );
   unawaited(_initializeBroom(controller, retention));
 
@@ -75,6 +84,7 @@ void main(List<String> args) {
   _runBroom(
     BroomApp(
       controller: controller,
+      settingsController: settings,
       systemCacheController: systemCacheController,
       quarantineRetention: retention,
       analysisInitialDirectory: _downloadsDirectory(platform.environment),

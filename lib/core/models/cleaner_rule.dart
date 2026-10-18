@@ -11,6 +11,10 @@ class CleanerRule {
     this.minAge = Duration.zero,
     this.extensions,
     this.note,
+    this.titleEn,
+    this.categoryEn,
+    this.descriptionEn,
+    this.noteEn,
   });
 
   final String id;
@@ -22,4 +26,8 @@ class CleanerRule {
   final Duration minAge;
   final Set<String>? extensions;
   final String? note;
+  final String? titleEn;
+  final String? categoryEn;
+  final String? descriptionEn;
+  final String? noteEn;
 }

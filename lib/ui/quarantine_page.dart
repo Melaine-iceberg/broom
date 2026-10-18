@@ -6,6 +6,7 @@ import '../core/clean/quarantine_service.dart';
 import '../core/models/clean_models.dart';
 import '../core/models/quarantine_policy_models.dart';
 import '../core/shell/system_shell.dart';
+import '../l10n/broom_strings.dart';
 import 'analysis_widgets.dart';
 import 'format.dart';
 import 'quarantine_policy_dialog.dart';
@@ -87,7 +88,7 @@ class _QuarantinePageState extends State<QuarantinePage> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = '无法读取隔离区：$error';
+        _error = trf('无法读取隔离区：{error}', {'error': error});
         _loading = false;
       });
     }
@@ -108,7 +109,7 @@ class _QuarantinePageState extends State<QuarantinePage> {
       policy = choice;
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = '恢复失败：$error');
+      setState(() => _error = trf('恢复失败：{error}', {'error': error}));
       return;
     }
 
@@ -126,7 +127,7 @@ class _QuarantinePageState extends State<QuarantinePage> {
       _showMessage(_restoreMessage(report));
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = '恢复失败：$error');
+      setState(() => _error = trf('恢复失败：{error}', {'error': error}));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -137,7 +138,7 @@ class _QuarantinePageState extends State<QuarantinePage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => _PurgeConfirmDialog(
-        title: '永久释放这次清理？',
+        title: context.t('永久释放这次清理？'),
         fileCount: session.pendingCount,
         bytes: session.pendingBytes,
       ),
@@ -155,7 +156,7 @@ class _QuarantinePageState extends State<QuarantinePage> {
       _showMessage(_purgeMessage(report));
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = '释放失败：$error');
+      setState(() => _error = trf('释放失败：{error}', {'error': error}));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -166,7 +167,7 @@ class _QuarantinePageState extends State<QuarantinePage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => _PurgeConfirmDialog(
-        title: '永久释放整个隔离区？',
+        title: context.t('永久释放整个隔离区？'),
         fileCount: _pendingFiles,
         bytes: _pendingBytes,
       ),
@@ -184,7 +185,7 @@ class _QuarantinePageState extends State<QuarantinePage> {
       _showMessage(_purgeMessage(report));
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = '释放失败：$error');
+      setState(() => _error = trf('释放失败：{error}', {'error': error}));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -211,11 +212,13 @@ class _QuarantinePageState extends State<QuarantinePage> {
       await _load(showLoading: false);
       if (!mounted) return;
       if (report == null || !report.didPurge) {
-        _showMessage(updated.enabled ? '保留策略已保存。' : '自动永久释放已关闭。');
+        _showMessage(
+          updated.enabled ? context.t('保留策略已保存。') : context.t('自动永久释放已关闭。'),
+        );
       }
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = '无法保存保留策略：$error');
+      setState(() => _error = trf('无法保存保留策略：{error}', {'error': error}));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -252,16 +255,16 @@ class _QuarantinePageState extends State<QuarantinePage> {
         leading: IconButton(
           onPressed: () => Navigator.of(context).pop(),
           icon: const Icon(Icons.arrow_back_rounded),
-          tooltip: '返回',
+          tooltip: context.t('返回'),
         ),
         toolbarHeight: 68,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('隔离区'),
+            Text(context.t('隔离区')),
             const SizedBox(height: 1),
             Text(
-              '恢复文件，或永久释放磁盘空间',
+              context.t('恢复文件，或永久释放磁盘空间'),
               style: theme.textTheme.labelSmall?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
@@ -274,7 +277,7 @@ class _QuarantinePageState extends State<QuarantinePage> {
                 ? null
                 : () => _load(showLoading: false),
             icon: const Icon(Icons.refresh_rounded),
-            tooltip: '刷新',
+            tooltip: context.t('刷新'),
           ),
           const SizedBox(width: 12),
         ],
@@ -295,7 +298,9 @@ class _QuarantinePageState extends State<QuarantinePage> {
               ],
               if (_policyError case final message?) ...[
                 AnalysisBanner(
-                  message: '保留策略读取失败，自动永久释放已停用：$message',
+                  message: context.tf('保留策略读取失败，自动永久释放已停用：{error}', {
+                    'error': message,
+                  }),
                   isError: true,
                 ),
                 const SizedBox(height: 12),
@@ -327,11 +332,13 @@ class _QuarantinePageState extends State<QuarantinePage> {
                 children: [
                   Icon(Icons.restore_rounded, size: 18, color: scheme.primary),
                   const SizedBox(width: 8),
-                  Text('待处理清理', style: theme.textTheme.titleSmall),
+                  Text(context.t('待处理清理'), style: theme.textTheme.titleSmall),
                   const Spacer(),
                   if (_sessions.isNotEmpty)
                     Text(
-                      '${formatCount(_sessions.length)} 次会话',
+                      context.tf('{count} 次会话', {
+                        'count': formatCount(_sessions.length),
+                      }),
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),
@@ -444,7 +451,7 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = '无法读取隔离区文件：$error';
+        _error = trf('无法读取隔离区文件：{error}', {'error': error});
         _loading = false;
       });
     }
@@ -516,7 +523,7 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
       await _load(showLoading: false);
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = '恢复失败：$error');
+      setState(() => _error = trf('恢复失败：{error}', {'error': error}));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -527,7 +534,7 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => _PurgeConfirmDialog(
-        title: '永久释放剩余文件？',
+        title: context.t('永久释放剩余文件？'),
         fileCount: _pendingCount,
         bytes: _pendingBytes,
       ),
@@ -550,14 +557,16 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '已释放 ${report.removedCount} 个文件，'
-            '${report.failureCount} 个文件释放失败。',
+            trf('已释放 {removed} 个文件，{failed} 个文件释放失败。', {
+              'removed': report.removedCount,
+              'failed': report.failureCount,
+            }),
           ),
         ),
       );
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = '释放失败：$error');
+      setState(() => _error = trf('释放失败：{error}', {'error': error}));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -575,47 +584,66 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
         ),
         title: Text(
           report.restoredCount > 0
-              ? '已恢复 ${report.restoredCount} 个文件'
-              : '没有文件恢复',
+              ? context.tf('已恢复 {count} 个文件', {'count': report.restoredCount})
+              : context.t('没有文件恢复'),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('共 ${formatBytes(report.restoredBytes)} 已放回原位置。'),
+            Text(
+              context.tf('共 {bytes} 已放回原位置。', {
+                'bytes': formatBytes(report.restoredBytes),
+              }),
+            ),
             if (report.keptBothCount > 0) ...[
               const SizedBox(height: 8),
-              Text('${report.keptBothCount} 个文件以新名称恢复，原位置的文件保持不变。'),
+              Text(
+                context.tf('{count} 个文件以新名称恢复，原位置的文件保持不变。', {
+                  'count': report.keptBothCount,
+                }),
+              ),
             ],
             if (report.overwrittenCount > 0) ...[
               const SizedBox(height: 8),
-              Text('${report.overwrittenCount} 个文件已覆盖原位置内容。'),
+              Text(
+                context.tf('{count} 个文件已覆盖原位置内容。', {
+                  'count': report.overwrittenCount,
+                }),
+              ),
             ],
             if (report.conflictCount > 0) ...[
               const SizedBox(height: 8),
               Text(
-                '${report.conflictCount} 个文件的原位置已有新内容，本次已跳过。'
-                '可再次恢复并选择“保留两者”或“覆盖”。',
+                context.tf(
+                  '{count} 个文件的原位置已有新内容，本次已跳过。'
+                  '可再次恢复并选择“保留两者”或“覆盖”。',
+                  {'count': report.conflictCount},
+                ),
               ),
             ],
             if (report.integrityFailureCount > 0) ...[
               const SizedBox(height: 8),
               Text(
-                '${report.integrityFailureCount} 个文件未通过完整性校验，'
-                '已跳过恢复，仍保留在隔离区。',
+                context.tf(
+                  '{count} 个文件未通过完整性校验，'
+                  '已跳过恢复，仍保留在隔离区。',
+                  {'count': report.integrityFailureCount},
+                ),
               ),
             ],
             if (report.failureCount > report.integrityFailureCount) ...[
               const SizedBox(height: 8),
               Text(
-                '${report.failureCount - report.integrityFailureCount} 个文件'
-                '恢复失败，仍保留在隔离区。',
+                context.tf('{count} 个文件恢复失败，仍保留在隔离区。', {
+                  'count': report.failureCount - report.integrityFailureCount,
+                }),
               ),
             ],
             if (!report.sessionRemoved) ...[
               const SizedBox(height: 8),
               Text(
-                '仍有文件保留在隔离区，可稍后重试。',
+                context.t('仍有文件保留在隔离区，可稍后重试。'),
                 style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
                   color: Theme.of(dialogContext).colorScheme.onSurfaceVariant,
                 ),
@@ -626,7 +654,7 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
         actions: [
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('知道了'),
+            child: Text(context.t('知道了')),
           ),
         ],
       ),
@@ -646,16 +674,16 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
         leading: IconButton(
           onPressed: () => Navigator.of(context).pop(),
           icon: const Icon(Icons.arrow_back_rounded),
-          tooltip: '返回',
+          tooltip: context.t('返回'),
         ),
         toolbarHeight: 68,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('隔离区文件'),
+            Text(context.t('隔离区文件')),
             const SizedBox(height: 1),
             Text(
-              '清理于 $date',
+              context.tf('清理于 {date}', {'date': date}),
               style: theme.textTheme.labelSmall?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
@@ -668,7 +696,7 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
                 ? null
                 : () => _load(showLoading: false),
             icon: const Icon(Icons.refresh_rounded),
-            tooltip: '刷新',
+            tooltip: context.t('刷新'),
           ),
           const SizedBox(width: 12),
         ],
@@ -691,9 +719,11 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
                 ],
                 if (_integrityFailureCount > 0) ...[
                   AnalysisBanner(
-                    message:
-                        '$_integrityFailureCount 个隔离文件未通过完整性校验，'
-                        '已禁止恢复。可以永久释放这些文件。',
+                    message: context.tf(
+                      '{count} 个隔离文件未通过完整性校验，'
+                      '已禁止恢复。可以永久释放这些文件。',
+                      {'count': _integrityFailureCount},
+                    ),
                     isError: true,
                   ),
                   const SizedBox(height: 12),
@@ -820,16 +850,21 @@ class _SummaryCard extends StatelessWidget {
                   children: [
                     Text(
                       pendingFiles == 0
-                          ? '隔离区是空的'
-                          : '隔离区暂存了 ${formatBytes(pendingBytes)}',
+                          ? context.t('隔离区是空的')
+                          : context.tf('隔离区暂存了 {bytes}', {
+                              'bytes': formatBytes(pendingBytes),
+                            }),
                       style: theme.textTheme.titleLarge,
                     ),
                     const SizedBox(height: 4),
                     Text(
                       pendingFiles == 0
-                          ? '清理过的文件会先放在这里，随时可以恢复。'
-                          : '$pendingFiles 个文件 · $sessionCount 次清理。'
-                                '文件仍占用磁盘空间，永久释放后才会腾出空间。',
+                          ? context.t('清理过的文件会先放在这里，随时可以恢复。')
+                          : context.tf(
+                              '{files} 个文件 · {sessions} 次清理。'
+                              '文件仍占用磁盘空间，永久释放后才会腾出空间。',
+                              {'files': pendingFiles, 'sessions': sessionCount},
+                            ),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: scheme.onSurfaceVariant,
                         height: 1.55,
@@ -848,18 +883,20 @@ class _SummaryCard extends StatelessWidget {
             children: [
               _MetricChip(
                 icon: Icons.inventory_2_outlined,
-                label: '暂存占用',
+                label: context.t('暂存占用'),
                 value: formatBytes(pendingBytes),
               ),
               _MetricChip(
                 icon: Icons.restore_rounded,
-                label: '待处理',
-                value: '${formatCount(pendingFiles)} 个文件',
+                label: context.t('待处理'),
+                value: context.tf('{count} 个文件', {
+                  'count': formatCount(pendingFiles),
+                }),
               ),
               if (disk != null)
                 _MetricChip(
                   icon: Icons.sd_storage_outlined,
-                  label: '磁盘可用',
+                  label: context.t('磁盘可用'),
                   value: formatBytes(disk!.freeBytes),
                 ),
             ],
@@ -886,9 +923,11 @@ class _SummaryCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       policy.enabled
-                          ? '自动永久释放：保留 ${policy.retentionDays} 天 · '
-                                '上限 ${formatBytes(policy.maxBytes)}'
-                          : '自动永久释放未开启',
+                          ? context.tf('自动永久释放：保留 {days} 天 · 上限 {bytes}', {
+                              'days': policy.retentionDays,
+                              'bytes': formatBytes(policy.maxBytes),
+                            })
+                          : context.t('自动永久释放未开启'),
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),
@@ -898,7 +937,9 @@ class _SummaryCard extends StatelessWidget {
                     TextButton(
                       key: const ValueKey('retention-policy-button'),
                       onPressed: busy ? null : onEditPolicy,
-                      child: Text(policy.enabled ? '调整策略' : '设置策略'),
+                      child: Text(
+                        policy.enabled ? context.t('调整策略') : context.t('设置策略'),
+                      ),
                     ),
                 ],
               ),
@@ -922,7 +963,7 @@ class _SummaryCard extends StatelessWidget {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.delete_forever_rounded, size: 19),
-                label: const Text('全部永久释放'),
+                label: Text(context.t('全部永久释放')),
               ),
             ),
           ],
@@ -1044,8 +1085,10 @@ class _SessionCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        '${formatCount(session.pendingCount)} 个文件 · '
-                        '${formatBytes(session.pendingBytes)} 待处理',
+                        context.tf('{files} 个文件 · {bytes} 待处理', {
+                          'files': formatCount(session.pendingCount),
+                          'bytes': formatBytes(session.pendingBytes),
+                        }),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),
@@ -1056,12 +1099,12 @@ class _SessionCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 TextButton(
                   onPressed: busy ? null : onOpen,
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('查看文件'),
-                      SizedBox(width: 2),
-                      Icon(Icons.chevron_right_rounded, size: 17),
+                      Text(context.t('查看文件')),
+                      const SizedBox(width: 2),
+                      const Icon(Icons.chevron_right_rounded, size: 17),
                     ],
                   ),
                 ),
@@ -1074,14 +1117,14 @@ class _SessionCard extends StatelessWidget {
                 TextButton.icon(
                   onPressed: busy ? null : onRestore,
                   icon: const Icon(Icons.restore_rounded, size: 17),
-                  label: const Text('恢复全部'),
+                  label: Text(context.t('恢复全部')),
                 ),
                 const SizedBox(width: 4),
                 TextButton.icon(
                   onPressed: busy ? null : onPurge,
                   style: TextButton.styleFrom(foregroundColor: scheme.error),
                   icon: const Icon(Icons.delete_forever_rounded, size: 17),
-                  label: const Text('永久释放'),
+                  label: Text(context.t('永久释放')),
                 ),
               ],
             ),
@@ -1109,7 +1152,7 @@ class _StatusChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
-        partial ? '部分可恢复' : '可恢复',
+        partial ? context.t('部分可恢复') : context.t('可恢复'),
         style: theme.textTheme.labelSmall?.copyWith(
           color: partial
               ? scheme.onTertiaryContainer
@@ -1158,8 +1201,11 @@ class _SessionDetailHeader extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              '$pendingCount 个文件 · ${formatBytes(pendingBytes)} 仍在隔离区。'
-              '冲突文件可选择跳过、保留两者或覆盖；永久释放后无法找回。',
+              context.tf(
+                '{count} 个文件 · {bytes} 仍在隔离区。'
+                '冲突文件可选择跳过、保留两者或覆盖；永久释放后无法找回。',
+                {'count': pendingCount, 'bytes': formatBytes(pendingBytes)},
+              ),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onSurfaceVariant,
                 height: 1.5,
@@ -1171,7 +1217,7 @@ class _SessionDetailHeader extends StatelessWidget {
             onPressed: busy ? null : onPurge,
             style: TextButton.styleFrom(foregroundColor: scheme.error),
             icon: const Icon(Icons.delete_forever_rounded, size: 17),
-            label: const Text('永久删除剩余'),
+            label: Text(context.t('永久删除剩余')),
           ),
         ],
       ),
@@ -1198,19 +1244,22 @@ class _EntryTile extends StatelessWidget {
     final scheme = theme.colorScheme;
     final (:label, :color) = switch (entry) {
       QuarantineEntry(restored: true) => (
-        label: '已恢复',
+        label: context.t('已恢复'),
         color: scheme.onSurfaceVariant,
       ),
-      QuarantineEntry(present: false) => (label: '隔离文件缺失', color: scheme.error),
+      QuarantineEntry(present: false) => (
+        label: context.t('隔离文件缺失'),
+        color: scheme.error,
+      ),
       QuarantineEntry(integrityFailure: _?) => (
-        label: '完整性异常',
+        label: context.t('完整性异常'),
         color: scheme.error,
       ),
       QuarantineEntry(originalExists: true) => (
-        label: '原位置已有文件',
+        label: context.t('原位置已有文件'),
         color: scheme.tertiary,
       ),
-      _ => (label: '可恢复', color: scheme.primary),
+      _ => (label: context.t('可恢复'), color: scheme.primary),
     };
 
     return Material(
@@ -1347,7 +1396,9 @@ class _SessionActionBar extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                selectedCount == 0 ? '未选择文件' : '已选 $selectedCount 个文件',
+                selectedCount == 0
+                    ? context.t('未选择文件')
+                    : context.tf('已选 {count} 个文件', {'count': selectedCount}),
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
@@ -1366,17 +1417,19 @@ class _SessionActionBar extends StatelessWidget {
             children: [
               TextButton(
                 onPressed: busy ? null : onToggleAll,
-                child: Text(allSelected ? '取消全选' : '全选可恢复'),
+                child: Text(
+                  allSelected ? context.t('取消全选') : context.t('全选可恢复'),
+                ),
               ),
               OutlinedButton.icon(
                 onPressed: onRestoreSelected,
                 icon: const Icon(Icons.restore_rounded, size: 17),
-                label: const Text('恢复选中'),
+                label: Text(context.t('恢复选中')),
               ),
               FilledButton.icon(
                 onPressed: onRestoreAll,
                 icon: const Icon(Icons.restore_page_rounded, size: 17),
-                label: const Text('恢复全部'),
+                label: Text(context.t('恢复全部')),
               ),
             ],
           ),
@@ -1406,10 +1459,10 @@ class _EmptyState extends StatelessWidget {
         children: [
           Icon(Icons.restore_rounded, size: 42, color: scheme.primary),
           const SizedBox(height: 12),
-          Text('没有待处理的清理', style: theme.textTheme.titleMedium),
+          Text(context.t('没有待处理的清理'), style: theme.textTheme.titleMedium),
           const SizedBox(height: 5),
           Text(
-            '完成一次清理后，文件会暂存在这里。你可以随时恢复它们，或永久释放空间。',
+            context.t('完成一次清理后，文件会暂存在这里。你可以随时恢复它们，或永久释放空间。'),
             textAlign: TextAlign.center,
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
@@ -1431,7 +1484,7 @@ class _EmptyEntries extends StatelessWidget {
     final scheme = theme.colorScheme;
     return Center(
       child: Text(
-        '没有可显示的文件记录。',
+        context.t('没有可显示的文件记录。'),
         style: theme.textTheme.bodySmall?.copyWith(
           color: scheme.onSurfaceVariant,
         ),
@@ -1461,8 +1514,10 @@ class _PolicyNote extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: Text(
-            '隔离区文件只保存在本机。恢复遇到同名文件时可选择跳过、保留两者或覆盖；'
-            '覆盖需要二次确认。永久释放是不可撤销的操作，页面会再次要求确认。',
+            context.t(
+              '隔离区文件只保存在本机。恢复遇到同名文件时可选择跳过、保留两者或覆盖；'
+              '覆盖需要二次确认。永久释放是不可撤销的操作，页面会再次要求确认。',
+            ),
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
               height: 1.5,
@@ -1503,13 +1558,17 @@ class _PurgeConfirmDialogState extends State<_PurgeConfirmDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '将永久删除 ${widget.fileCount} 个文件，'
-            '共 ${formatBytes(widget.bytes)}。',
+            context.tf('将永久删除 {count} 个文件，共 {bytes}。', {
+              'count': widget.fileCount,
+              'bytes': formatBytes(widget.bytes),
+            }),
           ),
           const SizedBox(height: 8),
           Text(
-            '删除后无法恢复，也不会放回原位置。文件当前仍占用磁盘空间，'
-            '释放后这部分空间才会真正回收。',
+            context.t(
+              '删除后无法恢复，也不会放回原位置。文件当前仍占用磁盘空间，'
+              '释放后这部分空间才会真正回收。',
+            ),
             style: Theme.of(context).textTheme.bodySmall
                 ?.copyWith(color: scheme.onSurfaceVariant, height: 1.5),
           ),
@@ -1523,7 +1582,7 @@ class _PurgeConfirmDialogState extends State<_PurgeConfirmDialog> {
             contentPadding: EdgeInsets.zero,
             dense: true,
             title: Text(
-              '我明白这些文件将被永久删除，且无法恢复',
+              context.t('我明白这些文件将被永久删除，且无法恢复'),
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
@@ -1532,7 +1591,7 @@ class _PurgeConfirmDialogState extends State<_PurgeConfirmDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('取消'),
+          child: Text(context.t('取消')),
         ),
         FilledButton(
           key: const ValueKey('purge-confirm-button'),
@@ -1544,7 +1603,7 @@ class _PurgeConfirmDialogState extends State<_PurgeConfirmDialog> {
             foregroundColor: scheme.onError,
             disabledBackgroundColor: scheme.error.withValues(alpha: 0.12),
           ),
-          child: const Text('永久释放'),
+          child: Text(context.t('永久释放')),
         ),
       ],
     );
@@ -1590,7 +1649,9 @@ class _ConflictResolutionDialogState extends State<_ConflictResolutionDialog> {
         size: 30,
         color: scheme.tertiary,
       ),
-      title: Text('${widget.conflictCount} 个文件的原位置已有内容'),
+      title: Text(
+        context.tf('{count} 个文件的原位置已有内容', {'count': widget.conflictCount}),
+      ),
       content: SizedBox(
         width: 460,
         child: SingleChildScrollView(
@@ -1610,7 +1671,7 @@ class _ConflictResolutionDialogState extends State<_ConflictResolutionDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '这些文件的原路径在清理后出现了新内容。请选择本次恢复的处理方式：',
+                  context.t('这些文件的原路径在清理后出现了新内容。请选择本次恢复的处理方式：'),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                     height: 1.5,
@@ -1621,22 +1682,22 @@ class _ConflictResolutionDialogState extends State<_ConflictResolutionDialog> {
                   value: UndoConflictPolicy.skip,
                   contentPadding: EdgeInsets.zero,
                   visualDensity: VisualDensity.compact,
-                  title: const Text('跳过冲突文件'),
-                  subtitle: const Text('暂存文件继续留在隔离区，原位置内容不变。'),
+                  title: Text(context.t('跳过冲突文件')),
+                  subtitle: Text(context.t('暂存文件继续留在隔离区，原位置内容不变。')),
                 ),
                 RadioListTile<UndoConflictPolicy>(
                   value: UndoConflictPolicy.keepBoth,
                   contentPadding: EdgeInsets.zero,
                   visualDensity: VisualDensity.compact,
-                  title: const Text('保留两者'),
-                  subtitle: const Text('暂存文件恢复为重命名副本，例如“文件名 (已恢复).扩展名”。'),
+                  title: Text(context.t('保留两者')),
+                  subtitle: Text(context.t('暂存文件恢复为重命名副本，例如“文件名 (已恢复).扩展名”。')),
                 ),
                 RadioListTile<UndoConflictPolicy>(
                   value: UndoConflictPolicy.overwrite,
                   contentPadding: EdgeInsets.zero,
                   visualDensity: VisualDensity.compact,
-                  title: const Text('覆盖原位置文件'),
-                  subtitle: const Text('用暂存文件替换原位置内容，原位置的新内容将被删除。'),
+                  title: Text(context.t('覆盖原位置文件')),
+                  subtitle: Text(context.t('用暂存文件替换原位置内容，原位置的新内容将被删除。')),
                 ),
                 if (_policy == UndoConflictPolicy.overwrite)
                   CheckboxListTile(
@@ -1648,7 +1709,7 @@ class _ConflictResolutionDialogState extends State<_ConflictResolutionDialog> {
                     contentPadding: EdgeInsets.zero,
                     dense: true,
                     title: Text(
-                      '我明白原位置的文件将被覆盖且无法恢复',
+                      context.t('我明白原位置的文件将被覆盖且无法恢复'),
                       style: theme.textTheme.bodySmall,
                     ),
                   ),
@@ -1660,14 +1721,14 @@ class _ConflictResolutionDialogState extends State<_ConflictResolutionDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
+          child: Text(context.t('取消')),
         ),
         FilledButton(
           key: const ValueKey('conflict-confirm-button'),
           onPressed: _canConfirm
               ? () => Navigator.of(context).pop(_policy)
               : null,
-          child: const Text('继续恢复'),
+          child: Text(context.t('继续恢复')),
         ),
       ],
     );
@@ -1676,47 +1737,56 @@ class _ConflictResolutionDialogState extends State<_ConflictResolutionDialog> {
 
 String _retentionReportMessage(QuarantineRetentionReport report) {
   if (report.removedSessionCount == 0 && report.failureCount > 0) {
-    return '自动保留策略未能释放旧会话：${report.failureCount} 个错误，'
-        '相关文件仍保留在隔离区。';
+    return trf('自动保留策略未能释放旧会话：{count} 个错误，相关文件仍保留在隔离区。', {
+      'count': report.failureCount,
+    });
   }
   final parts = <String>[
-    '自动保留策略已永久释放 ${report.removedSessionCount} 个旧会话，'
-        '共 ${report.removedFileCount} 个文件'
-        '（${formatBytes(report.removedBytes)}）',
+    trf('自动保留策略已永久释放 {sessions} 个旧会话，共 {files} 个文件（{bytes}）', {
+      'sessions': report.removedSessionCount,
+      'files': report.removedFileCount,
+      'bytes': formatBytes(report.removedBytes),
+    }),
   ];
   if (report.failureCount > 0) {
-    parts.add('${report.failureCount} 个文件释放失败，仍保留在隔离区');
+    parts.add(trf('{count} 个文件释放失败，仍保留在隔离区', {'count': report.failureCount}));
   }
-  return '${parts.join('；')}。';
+  return '${parts.join(tr('；'))}${tr('。')}';
 }
 
 String _restoreMessage(UndoReport report) {
-  final parts = <String>['已恢复 ${report.restoredCount} 个文件'];
+  final parts = <String>[
+    trf('已恢复 {count} 个文件', {'count': report.restoredCount}),
+  ];
   if (report.keptBothCount > 0) {
-    parts.add('${report.keptBothCount} 个以新名称保留两者');
+    parts.add(trf('{count} 个以新名称保留两者', {'count': report.keptBothCount}));
   }
   if (report.overwrittenCount > 0) {
-    parts.add('${report.overwrittenCount} 个覆盖了原位置');
+    parts.add(trf('{count} 个覆盖了原位置', {'count': report.overwrittenCount}));
   }
   if (report.conflictCount > 0) {
-    parts.add('${report.conflictCount} 个已跳过冲突');
+    parts.add(trf('{count} 个已跳过冲突', {'count': report.conflictCount}));
   }
   if (report.integrityFailureCount > 0) {
-    parts.add('${report.integrityFailureCount} 个完整性校验失败');
+    parts.add(trf('{count} 个完整性校验失败', {'count': report.integrityFailureCount}));
   }
   final otherFailures = report.failureCount - report.integrityFailureCount;
   if (otherFailures > 0) {
-    parts.add('$otherFailures 个恢复失败');
+    parts.add(trf('{count} 个恢复失败', {'count': otherFailures}));
   }
   return parts.join('；');
 }
 
 String _purgeMessage(QuarantinePurgeReport report) {
   if (report.complete) {
-    return '已永久释放 ${report.removedCount} 个文件'
-        '（${formatBytes(report.removedBytes)}）。';
+    return trf('已永久释放 {count} 个文件（{bytes}）。', {
+      'count': report.removedCount,
+      'bytes': formatBytes(report.removedBytes),
+    });
   }
-  return '已释放 ${report.removedCount} 个文件'
-      '（${formatBytes(report.removedBytes)}），'
-      '${report.failureCount} 个文件未能释放。';
+  return trf('已释放 {count} 个文件（{bytes}），{failed} 个文件未能释放。', {
+    'count': report.removedCount,
+    'bytes': formatBytes(report.removedBytes),
+    'failed': report.failureCount,
+  });
 }

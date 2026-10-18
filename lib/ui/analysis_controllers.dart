@@ -5,6 +5,7 @@ import '../core/analysis/duplicate_finder.dart';
 import '../core/analysis/large_file_scanner.dart';
 import '../core/models/analysis_models.dart';
 import '../core/shell/system_shell.dart';
+import '../l10n/broom_strings.dart';
 
 enum AnalysisToolPhase { idle, running, results }
 
@@ -92,7 +93,7 @@ class DuplicateFinderController extends ChangeNotifier {
     if (isRunning) return;
     final directory = _directory;
     if (directory == null) {
-      _notice = '请先选择要分析的文件夹。';
+      _notice = tr('请先选择要分析的文件夹。');
       _notify();
       return;
     }
@@ -121,7 +122,7 @@ class DuplicateFinderController extends ChangeNotifier {
       if (_disposed) return;
       if (report.cancelled) {
         _phase = AnalysisToolPhase.idle;
-        _notice = '分析已取消。';
+        _notice = tr('分析已取消。');
       } else {
         _report = report;
         _phase = AnalysisToolPhase.results;
@@ -129,7 +130,7 @@ class DuplicateFinderController extends ChangeNotifier {
     } catch (error) {
       if (_disposed) return;
       _phase = AnalysisToolPhase.idle;
-      _error = '分析失败：${analysisErrorMessage(error)}';
+      _error = trf('分析失败：{error}', {'error': analysisErrorMessage(error)});
     } finally {
       runner.dispose();
       if (identical(_runner, runner)) _runner = null;
@@ -242,7 +243,7 @@ class LargeFileController extends ChangeNotifier {
     if (isRunning) return;
     final directory = _directory;
     if (directory == null) {
-      _notice = '请先选择要分析的文件夹。';
+      _notice = tr('请先选择要分析的文件夹。');
       _notify();
       return;
     }
@@ -272,7 +273,7 @@ class LargeFileController extends ChangeNotifier {
       if (_disposed) return;
       if (report.cancelled) {
         _phase = AnalysisToolPhase.idle;
-        _notice = '分析已取消。';
+        _notice = tr('分析已取消。');
       } else {
         _report = report;
         _phase = AnalysisToolPhase.results;
@@ -280,7 +281,7 @@ class LargeFileController extends ChangeNotifier {
     } catch (error) {
       if (_disposed) return;
       _phase = AnalysisToolPhase.idle;
-      _error = '分析失败：${analysisErrorMessage(error)}';
+      _error = trf('分析失败：{error}', {'error': analysisErrorMessage(error)});
     } finally {
       runner.dispose();
       if (identical(_runner, runner)) _runner = null;

@@ -4,10 +4,15 @@ import 'cleaner_rule.dart';
 enum SystemCacheLocation { windowsUpdate, deliveryOptimization }
 
 class SystemServiceSpec {
-  const SystemServiceSpec({required this.name, required this.label});
+  const SystemServiceSpec({
+    required this.name,
+    required this.label,
+    this.labelEn,
+  });
 
   final String name;
   final String label;
+  final String? labelEn;
 }
 
 class SystemCacheRule {
@@ -20,6 +25,10 @@ class SystemCacheRule {
     required this.displayPath,
     this.services = const [],
     this.note,
+    this.titleEn,
+    this.categoryEn,
+    this.descriptionEn,
+    this.noteEn,
   });
 
   final String id;
@@ -30,6 +39,10 @@ class SystemCacheRule {
   final String displayPath;
   final List<SystemServiceSpec> services;
   final String? note;
+  final String? titleEn;
+  final String? categoryEn;
+  final String? descriptionEn;
+  final String? noteEn;
 
   CleanRisk get risk => CleanRisk.review;
 }

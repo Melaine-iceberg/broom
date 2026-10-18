@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/models/cleaner_rule.dart';
+import '../l10n/broom_strings.dart';
 import 'format.dart';
 
 class RiskBadge extends StatelessWidget {
@@ -14,19 +15,19 @@ class RiskBadge extends StatelessWidget {
     final scheme = theme.colorScheme;
     final (:label, :background, :foreground, :border) = switch (risk) {
       CleanRisk.safe => (
-        label: 'SAFE · 可撤销',
+        label: context.t('SAFE · 可撤销'),
         background: scheme.primaryContainer.withValues(alpha: 0.35),
         foreground: scheme.onPrimaryContainer,
         border: scheme.primary.withValues(alpha: 0.16),
       ),
       CleanRisk.review => (
-        label: 'REVIEW · 需确认',
+        label: context.t('REVIEW · 需确认'),
         background: scheme.tertiaryContainer.withValues(alpha: 0.45),
         foreground: scheme.onTertiaryContainer,
         border: scheme.tertiary.withValues(alpha: 0.18),
       ),
       CleanRisk.info => (
-        label: 'INFO · 只读',
+        label: context.t('INFO · 只读'),
         background: scheme.secondaryContainer.withValues(alpha: 0.4),
         foreground: scheme.onSecondaryContainer,
         border: scheme.secondary.withValues(alpha: 0.16),
@@ -143,7 +144,7 @@ class AnalysisBanner extends StatelessWidget {
               onPressed: onClose,
               icon: const Icon(Icons.close_rounded, size: 17),
               visualDensity: VisualDensity.compact,
-              tooltip: '关闭',
+              tooltip: context.t('关闭'),
             ),
         ],
       ),
@@ -157,13 +158,13 @@ class FolderSelectionCard extends StatelessWidget {
     required this.path,
     required this.onPick,
     this.enabled = true,
-    this.label = '分析范围',
+    this.label,
   });
 
   final String? path;
   final VoidCallback onPick;
   final bool enabled;
-  final String label;
+  final String? label;
 
   @override
   Widget build(BuildContext context) {
@@ -201,7 +202,7 @@ class FolderSelectionCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  label,
+                  label ?? context.t('分析范围'),
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -210,7 +211,7 @@ class FolderSelectionCard extends StatelessWidget {
                 Tooltip(
                   message: path ?? '',
                   child: Text(
-                    path ?? '尚未选择文件夹',
+                    path ?? context.t('尚未选择文件夹'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyMedium?.copyWith(
@@ -228,7 +229,7 @@ class FolderSelectionCard extends StatelessWidget {
           OutlinedButton.icon(
             onPressed: enabled ? onPick : null,
             icon: const Icon(Icons.drive_folder_upload_outlined, size: 16),
-            label: Text(hasPath ? '更改' : '选择文件夹'),
+            label: Text(hasPath ? context.t('更改') : context.t('选择文件夹')),
           ),
         ],
       ),
@@ -386,7 +387,9 @@ class AnalysisProgressCard extends StatelessWidget {
           TextButton.icon(
             onPressed: cancelRequested ? null : onCancel,
             icon: const Icon(Icons.stop_circle_outlined, size: 17),
-            label: Text(cancelRequested ? '正在停止…' : '停止分析'),
+            label: Text(
+              cancelRequested ? context.t('正在停止…') : context.t('停止分析'),
+            ),
           ),
         ],
       ),

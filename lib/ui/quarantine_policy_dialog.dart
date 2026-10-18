@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/models/quarantine_policy_models.dart';
+import '../l10n/broom_strings.dart';
 import 'format.dart';
 
 Future<QuarantineRetentionPolicy?> showQuarantinePolicyDialog(
@@ -56,7 +57,7 @@ class _QuarantinePolicyDialogState extends State<_QuarantinePolicyDialog> {
 
     return AlertDialog(
       icon: Icon(Icons.auto_delete_outlined, size: 30, color: scheme.tertiary),
-      title: const Text('隔离区保留策略'),
+      title: Text(context.t('隔离区保留策略')),
       content: SizedBox(
         width: 500,
         child: SingleChildScrollView(
@@ -76,18 +77,18 @@ class _QuarantinePolicyDialogState extends State<_QuarantinePolicyDialog> {
                   });
                 },
                 contentPadding: EdgeInsets.zero,
-                title: const Text('自动永久释放旧会话'),
-                subtitle: const Text('Broom 会在启动时和保存后按以下规则处理；默认关闭。'),
+                title: Text(context.t('自动永久释放旧会话')),
+                subtitle: Text(context.t('Broom 会在启动时和保存后按以下规则处理；默认关闭。')),
               ),
               if (_enabled) ...[
                 const SizedBox(height: 8),
                 DropdownButtonFormField<int>(
                   key: const ValueKey('retention-days-dropdown'),
                   initialValue: _days,
-                  decoration: const InputDecoration(
-                    labelText: '保留最近',
-                    suffixText: '天',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: context.t('保留最近'),
+                    suffixText: context.t('天'),
+                    border: const OutlineInputBorder(),
                     isDense: true,
                   ),
                   items: [
@@ -102,9 +103,9 @@ class _QuarantinePolicyDialogState extends State<_QuarantinePolicyDialog> {
                 DropdownButtonFormField<int>(
                   key: const ValueKey('retention-size-dropdown'),
                   initialValue: _maxBytes,
-                  decoration: const InputDecoration(
-                    labelText: '隔离区占用上限',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: context.t('隔离区占用上限'),
+                    border: const OutlineInputBorder(),
                     isDense: true,
                   ),
                   items: [
@@ -136,8 +137,10 @@ class _QuarantinePolicyDialogState extends State<_QuarantinePolicyDialog> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          '超过保留天数或占用上限的旧会话会被永久删除，'
-                          '不进入回收站，也无法恢复。容量超限时从最旧的会话开始释放。',
+                          context.t(
+                            '超过保留天数或占用上限的旧会话会被永久删除，'
+                            '不进入回收站，也无法恢复。容量超限时从最旧的会话开始释放。',
+                          ),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: scheme.onErrorContainer,
                             height: 1.5,
@@ -157,15 +160,17 @@ class _QuarantinePolicyDialogState extends State<_QuarantinePolicyDialog> {
                   controlAffinity: ListTileControlAffinity.leading,
                   dense: true,
                   title: Text(
-                    '我明白自动清理会永久删除隔离区文件，且无法恢复',
+                    context.t('我明白自动清理会永久删除隔离区文件，且无法恢复'),
                     style: theme.textTheme.bodySmall,
                   ),
                 ),
               ] else ...[
                 const SizedBox(height: 6),
                 Text(
-                  '关闭后，Broom 不会自动删除任何隔离区文件；'
-                  '你仍可手动恢复或永久释放。',
+                  context.t(
+                    '关闭后，Broom 不会自动删除任何隔离区文件；'
+                    '你仍可手动恢复或永久释放。',
+                  ),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                     height: 1.5,
@@ -179,7 +184,7 @@ class _QuarantinePolicyDialogState extends State<_QuarantinePolicyDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
+          child: Text(context.t('取消')),
         ),
         FilledButton(
           key: const ValueKey('retention-save-button'),
@@ -192,7 +197,7 @@ class _QuarantinePolicyDialogState extends State<_QuarantinePolicyDialog> {
                   ),
                 )
               : null,
-          child: const Text('保存并应用'),
+          child: Text(context.t('保存并应用')),
         ),
       ],
     );

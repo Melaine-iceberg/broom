@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/broom_strings.dart';
 import '../platform/window_chrome.dart';
 
 /// Places the custom title bar above every route of the Windows app.
@@ -110,7 +111,7 @@ class WindowTitleBar extends StatelessWidget {
                               ),
                               const SizedBox(width: 10),
                               Text(
-                                'Windows 安全清理',
+                                context.t('Windows 安全清理'),
                                 style: theme.textTheme.labelSmall?.copyWith(
                                   color: scheme.onSurfaceVariant,
                                   letterSpacing: 0.2,
@@ -147,20 +148,20 @@ class _WindowControls extends StatelessWidget {
             _WindowButton(
               key: const ValueKey('window-minimize'),
               glyph: _WindowGlyph.minimize,
-              label: '最小化',
+              label: context.t('最小化'),
               onPressed: () => unawaited(WindowChrome.instance.minimize()),
             ),
             _WindowButton(
               key: const ValueKey('window-maximize'),
               glyph: maximized ? _WindowGlyph.restore : _WindowGlyph.maximize,
-              label: maximized ? '还原' : '最大化',
+              label: maximized ? context.t('还原') : context.t('最大化'),
               onPressed: () =>
                   unawaited(WindowChrome.instance.toggleMaximize()),
             ),
             _WindowButton(
               key: const ValueKey('window-close'),
               glyph: _WindowGlyph.close,
-              label: '关闭',
+              label: context.t('关闭'),
               isCloseButton: true,
               onPressed: () => unawaited(WindowChrome.instance.close()),
             ),
