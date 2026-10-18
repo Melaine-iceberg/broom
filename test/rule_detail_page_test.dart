@@ -216,4 +216,87 @@ void main() {
     expect(find.byTooltip('可能正被其他程序占用，清理时会跳过'), findsOneWidget);
     expect(find.textContaining('仍可勾选'), findsOneWidget);
   });
+
+  testWidgets('shows rule audit notes and regression coverage', (tester) async {
+    tester.view.physicalSize = const Size(1200, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final temp = Directory.systemTemp.createTempSync('broom_rule_audit_ui_');
+    addTearDown(() {
+      if (temp.existsSync()) temp.deleteSync(recursive: true);
+    });
+    final root = Directory(p.windows.join(temp.path, 'cache'))
+      ..createSync(recursive: true);
+    final item = JunkItem(
+      ruleId: 'test.cache',
+      rootPath: root.path,
+      path: p.windows.join(root.path, 'cache.tmp'),
+      size: 10,
+      modified: DateTime(2026, 10, 18),
+    );
+    const audit = RuleAudit(
+      reviewNotes: '仅扫描测试缓存。',
+      reviewNotesEn: 'Test cache only.',
+      reverseEvidence: '不会匹配相邻目录。',
+      reverseEvidenceEn: 'Adjacent directories do not match.',
+      samples: [
+        RuleAuditSample(
+          pattern: 'test-cache',
+          path: r'%TEMP%\audit-positive.tmp',
+          inScope: true,
+        ),
+        RuleAuditSample(
+          pattern: 'test-cache',
+          path: r'%TEMP%\audit-negative.tmp',
+          inScope: false,
+        ),
+      ],
+    );
+    const rule = CleanerRule(
+      id: 'test.cache',
+      title: '测试缓存',
+      category: '测试',
+      description: '测试规则',
+      pathPatterns: ['test-cache'],
+      audit: audit,
+    );
+    final exclusions = ExclusionStore(
+      filePath: p.windows.join(temp.path, 'exclusions.json'),
+    );
+    await exclusions.ensureLoaded();
+    final controller = CleanController(
+      platform: _Platform(rule: rule, roots: [root.path]),
+      guard: PathGuard(protectedRoots: const []),
+      quarantine: FakeQuarantineService(),
+      exclusions: exclusions,
+      scanServiceFactory: () => _FakeScanService([item]),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    await controller.scan();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildBroomTheme(Brightness.light),
+        home: RuleDetailPage(
+          controller: controller,
+          result: controller.results.single,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('rule-audit-test.cache')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('评审说明'), findsOneWidget);
+    expect(find.text('仅扫描测试缓存。'), findsOneWidget);
+    expect(find.text('反向证据'), findsOneWidget);
+    expect(find.text('不会匹配相邻目录。'), findsOneWidget);
+    expect(find.text('正例 1 个 · 反例 1 个'), findsOneWidget);
+    expect(find.text('内置样例由规则审计测试逐条校验。'), findsOneWidget);
+    expect(find.text('SAFE · 可撤销'), findsOneWidget);
+  });
 }

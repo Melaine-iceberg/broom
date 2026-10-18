@@ -1,3 +1,4 @@
+import '../models/cleaner_rule.dart';
 import '../models/system_models.dart';
 
 /// System-level caches live under protected Windows directories. Their roots
@@ -27,6 +28,40 @@ const windowsSystemCacheRules = <SystemCacheRule>[
     ],
     note: '清理期间会临时停止 Windows Update 与 BITS，完成或中止后自动恢复；不会删除更新历史、系统设置或 Windows.old。',
     noteEn: 'Windows Update and BITS are stopped temporarily and restarted afterwards. Update history, system settings, and Windows.old are not removed.',
+    audit: RuleAudit(
+      reviewNotes:
+          '仅覆盖 Windows Update 的 SoftwareDistribution\\Download；清理时临时停止 '
+          'wuauserv 与 bits，不删除更新历史、系统设置或 Windows.old。',
+      reviewNotesEn:
+          'Covers only SoftwareDistribution\\Download for Windows Update. '
+          'wuauserv and bits are stopped temporarily; update history, system '
+          'settings, and Windows.old are not removed.',
+      reverseEvidence: 'SoftwareDistribution\\DataStore、WinSxS 与 DownloadExtra 等相邻目录不在规则根下；根目录本身永不删除。',
+      reverseEvidenceEn:
+          'Sibling locations such as SoftwareDistribution\\DataStore, WinSxS, '
+          'and DownloadExtra are outside the rule root. The root itself is '
+          'never deleted.',
+      samples: [
+        RuleAuditSample(
+          pattern: r'%WINDIR%\SoftwareDistribution\Download',
+          path:
+              r'%WINDIR%\SoftwareDistribution\Download\broom-audit\update.cab',
+          inScope: true,
+        ),
+        RuleAuditSample(
+          pattern: r'%WINDIR%\SoftwareDistribution\Download',
+          path: r'%WINDIR%\SoftwareDistribution\DataStore\DataStore.edb',
+          inScope: false,
+          reason: '更新数据库不属于下载缓存',
+        ),
+        RuleAuditSample(
+          pattern: r'%WINDIR%\SoftwareDistribution\Download',
+          path: r'%WINDIR%\SoftwareDistribution\DownloadExtra\update.cab',
+          inScope: false,
+          reason: '相邻的 DownloadExtra 目录必须保留',
+        ),
+      ],
+    ),
   ),
   SystemCacheRule(
     id: 'windows.delivery_optimization',
@@ -47,5 +82,42 @@ const windowsSystemCacheRules = <SystemCacheRule>[
     ],
     note: '清理期间会临时停止传递优化服务，完成或中止后自动恢复。',
     noteEn: 'Delivery Optimization is stopped temporarily and restarted afterwards.',
+    audit: RuleAudit(
+      reviewNotes:
+          '仅覆盖传递优化的 DeliveryOptimization\\Cache；清理时临时停止 dosvc，'
+          '不删除传递优化配置、日志或统计。',
+      reviewNotesEn:
+          'Covers only the Delivery Optimization Cache. dosvc is stopped '
+          'temporarily; Delivery Optimization configuration, logs, and '
+          'statistics are not removed.',
+      reverseEvidence:
+          '同级的 Config、Logs 与 CacheExtra 目录不匹配；清理范围由原生 API 解析的固定路径再次校验。',
+      reverseEvidenceEn:
+          'Sibling Config, Logs, and CacheExtra directories do not match. The '
+          'native API resolves a fixed path that is validated again before '
+          'cleaning.',
+      samples: [
+        RuleAuditSample(
+          pattern:
+              r'%ProgramData%\Microsoft\Windows\DeliveryOptimization\Cache',
+          path: r'%ProgramData%\Microsoft\Windows\DeliveryOptimization\Cache\broom-audit\file.cab',
+          inScope: true,
+        ),
+        RuleAuditSample(
+          pattern:
+              r'%ProgramData%\Microsoft\Windows\DeliveryOptimization\Cache',
+          path: r'%ProgramData%\Microsoft\Windows\DeliveryOptimization\Config\settings.json',
+          inScope: false,
+          reason: '传递优化配置不属于下载缓存',
+        ),
+        RuleAuditSample(
+          pattern:
+              r'%ProgramData%\Microsoft\Windows\DeliveryOptimization\Cache',
+          path: r'%ProgramData%\Microsoft\Windows\DeliveryOptimization\CacheExtra\file.cab',
+          inScope: false,
+          reason: '相邻的 CacheExtra 目录必须保留',
+        ),
+      ],
+    ),
   ),
 ];

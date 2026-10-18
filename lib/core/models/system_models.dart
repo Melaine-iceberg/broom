@@ -29,6 +29,7 @@ class SystemCacheRule {
     this.categoryEn,
     this.descriptionEn,
     this.noteEn,
+    this.audit,
   });
 
   final String id;
@@ -43,6 +44,7 @@ class SystemCacheRule {
   final String? categoryEn;
   final String? descriptionEn;
   final String? noteEn;
+  final RuleAudit? audit;
 
   CleanRisk get risk => CleanRisk.review;
 }

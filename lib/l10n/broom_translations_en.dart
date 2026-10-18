@@ -23,6 +23,16 @@ const translationsEn = <String, String>{
   '已选 {selected} / {total} 个文件 · {bytes}':
       '{selected} of {total} files selected · {bytes}',
   '按大小排序': 'Sorted by size',
+  '规则审计': 'Rule audit',
+  '{rule} · 规则审计': '{rule} · Rule audit',
+  '风险等级': 'Risk level',
+  '评审说明': 'Review notes',
+  '反向证据': 'Reverse evidence',
+  '回归样例': 'Regression samples',
+  '正例 {positive} 个 · 反例 {negative} 个':
+      '{positive} in scope · {negative} out of scope',
+  '内置样例由规则审计测试逐条校验。':
+      'Built-in samples are verified individually by the rule audit tests.',
   'WINDOWS · SAFE 级清理': 'WINDOWS · SAFE CLEANUP',
   '复制路径': 'Copy path',
   '已复制路径': 'Path copied',

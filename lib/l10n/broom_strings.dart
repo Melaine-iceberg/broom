@@ -46,6 +46,14 @@ class BroomStrings {
   String? ruleNote(CleanerRule rule) =>
       localeName == 'en' ? (rule.noteEn ?? rule.note) : rule.note;
 
+  String auditReviewNotes(RuleAudit audit) => localeName == 'en'
+      ? (audit.reviewNotesEn ?? audit.reviewNotes)
+      : audit.reviewNotes;
+
+  String auditReverseEvidence(RuleAudit audit) => localeName == 'en'
+      ? (audit.reverseEvidenceEn ?? audit.reverseEvidence)
+      : audit.reverseEvidence;
+
   String systemRuleTitle(SystemCacheRule rule) =>
       localeName == 'en' ? (rule.titleEn ?? rule.title) : rule.title;
 

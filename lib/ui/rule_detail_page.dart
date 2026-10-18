@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../core/models/cleaner_rule.dart';
 import '../core/models/scan_models.dart';
 import '../l10n/broom_strings.dart';
+import 'analysis_widgets.dart';
 import 'clean_controller.dart';
 import 'format.dart';
 
@@ -59,6 +61,16 @@ class RuleDetailPage extends StatelessWidget {
                 ),
               ],
             ),
+            actions: [
+              if (rule.audit != null)
+                IconButton(
+                  key: ValueKey('rule-audit-${rule.id}'),
+                  onPressed: () => _showRuleAudit(context, rule),
+                  icon: const Icon(Icons.policy_outlined),
+                  tooltip: context.t('规则审计'),
+                ),
+              const SizedBox(width: 8),
+            ],
           ),
           body: Center(
             child: ConstrainedBox(
@@ -246,6 +258,108 @@ class RuleDetailPage extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+Future<void> _showRuleAudit(BuildContext context, CleanerRule rule) {
+  final audit = rule.audit;
+  if (audit == null) return Future.value();
+  final strings = context.strings;
+  final positive = audit.samples.where((sample) => sample.inScope).length;
+  final negative = audit.samples.length - positive;
+
+  return showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      icon: const Icon(Icons.policy_outlined, size: 30),
+      title: Text(
+        strings.tf('{rule} · 规则审计', {'rule': strings.ruleTitle(rule)}),
+      ),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    strings.t('风险等级'),
+                    style: Theme.of(dialogContext).textTheme.labelMedium
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(width: 10),
+                  RiskBadge(risk: rule.risk),
+                ],
+              ),
+              const SizedBox(height: 18),
+              _AuditSection(
+                title: strings.t('评审说明'),
+                body: strings.auditReviewNotes(audit),
+              ),
+              const SizedBox(height: 16),
+              _AuditSection(
+                title: strings.t('反向证据'),
+                body: strings.auditReverseEvidence(audit),
+              ),
+              const SizedBox(height: 16),
+              _AuditSection(
+                title: strings.t('回归样例'),
+                body: strings.tf('正例 {positive} 个 · 反例 {negative} 个', {
+                  'positive': positive,
+                  'negative': negative,
+                }),
+                footer: strings.t('内置样例由规则审计测试逐条校验。'),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: Text(strings.t('知道了')),
+        ),
+      ],
+    ),
+  );
+}
+
+class _AuditSection extends StatelessWidget {
+  const _AuditSection({required this.title, required this.body, this.footer});
+
+  final String title;
+  final String body;
+  final String? footer;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(body, style: theme.textTheme.bodySmall?.copyWith(height: 1.5)),
+        if (footer case final footer?) ...[
+          const SizedBox(height: 4),
+          Text(
+            footer,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
