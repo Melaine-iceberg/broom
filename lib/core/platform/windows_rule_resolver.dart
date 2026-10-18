@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../models/cleaner_rule.dart';
+import 'windows_path.dart';
 
 class WindowsRuleResolver {
   WindowsRuleResolver({
@@ -22,7 +23,10 @@ class WindowsRuleResolver {
       final expanded = _expandEnvironment(pattern);
       if (expanded == null) continue;
       for (final root in await _expandWildcards(expanded)) {
-        if (await FileSystemEntity.type(root, followLinks: false) !=
+        if (await FileSystemEntity.type(
+              WindowsPath.forIo(root),
+              followLinks: false,
+            ) !=
             FileSystemEntityType.directory) {
           continue;
         }
@@ -47,7 +51,7 @@ class WindowsRuleResolver {
   }
 
   Future<List<String>> _expandWildcards(String pattern) async {
-    final normalized = p.windows.normalize(pattern);
+    final normalized = p.windows.normalize(WindowsPath.canonical(pattern));
     final rootPrefix = p.windows.rootPrefix(normalized);
     if (rootPrefix.isEmpty) return const [];
 
@@ -64,11 +68,15 @@ class WindowsRuleResolver {
         for (final base in current) {
           try {
             await for (final entity in Directory(
-              base,
+              WindowsPath.forIo(base),
             ).list(followLinks: false)) {
               if (entity is! Directory) continue;
-              if (!matcher.hasMatch(p.windows.basename(entity.path))) continue;
-              next.add(entity.path);
+              if (!matcher.hasMatch(
+                p.windows.basename(WindowsPath.canonical(entity.path)),
+              )) {
+                continue;
+              }
+              next.add(WindowsPath.canonical(entity.path));
               if (next.length >= maxWildcardMatches) break;
             }
           } on FileSystemException {
@@ -79,7 +87,10 @@ class WindowsRuleResolver {
       } else {
         for (final base in current) {
           final candidate = p.windows.join(base, segment);
-          if (await FileSystemEntity.type(candidate, followLinks: false) ==
+          if (await FileSystemEntity.type(
+                WindowsPath.forIo(candidate),
+                followLinks: false,
+              ) ==
               FileSystemEntityType.directory) {
             next.add(candidate);
           }

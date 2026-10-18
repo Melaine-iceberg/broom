@@ -7,6 +7,8 @@ import 'package:path/path.dart' as p;
 
 import '../models/clean_models.dart';
 import '../models/scan_models.dart';
+import '../platform/filesystem_error.dart';
+import '../platform/windows_path.dart';
 import '../safety/path_exclusions.dart';
 import '../safety/path_guard.dart';
 import 'file_metadata.dart';
@@ -287,7 +289,10 @@ class QuarantineService {
 
         FileSystemEntityType type;
         try {
-          type = await FileSystemEntity.type(item.path, followLinks: false);
+          type = await FileSystemEntity.type(
+            WindowsPath.forIo(item.path),
+            followLinks: false,
+          );
         } on FileSystemException catch (error) {
           recordFailure(item.path, error);
           report(currentPath: item.path);
@@ -302,7 +307,7 @@ class QuarantineService {
         int size;
         FileMetadata? metadata;
         try {
-          final stat = await File(item.path).stat();
+          final stat = await File(WindowsPath.forIo(item.path)).stat();
           if (stat.type != FileSystemEntityType.file) {
             recordFailure(item.path, '文件已不存在或不是普通文件');
             report(currentPath: item.path);
@@ -428,7 +433,10 @@ class QuarantineService {
     final restoredNames = await _readRestoredNames(sessionDir);
     final pending = await _pendingEntries(sessionDir, entries, restoredNames);
 
-    if (entries.isEmpty && remainingCount == 0) {
+    // An entry is written before the move so a crash cannot lose undo data.
+    // If every move failed (for example on read-only media), no stored file is
+    // left to restore and the empty session must not be kept as pending.
+    if (pending.isEmpty && remainingCount == 0) {
       await _deleteSessionDirectory(sessionDir);
       return (sessionRemoved: true, remainingCount: 0);
     }
@@ -567,7 +575,7 @@ class QuarantineService {
       FileSystemEntityType targetType;
       try {
         targetType = await FileSystemEntity.type(
-          entry.originalPath,
+          WindowsPath.forIo(entry.originalPath),
           followLinks: false,
         );
       } on FileSystemException catch (error) {
@@ -630,8 +638,9 @@ class QuarantineService {
       }
 
       try {
-        await Directory(p.windows.dirname(entry.originalPath))
-            .create(recursive: true);
+        await Directory(
+          WindowsPath.forIo(p.windows.dirname(entry.originalPath)),
+        ).create(recursive: true);
         await _moveFile(storedPath, entry.originalPath);
       } on FileSystemException catch (error) {
         recordFailure(entry.originalPath, error);
@@ -699,10 +708,13 @@ class QuarantineService {
         final storedPath = p.windows.join(filesDir, entry.storedName);
         try {
           present =
-              await FileSystemEntity.type(storedPath, followLinks: false) ==
+              await FileSystemEntity.type(
+                WindowsPath.forIo(storedPath),
+                followLinks: false,
+              ) ==
               FileSystemEntityType.file;
           if (present) {
-            final length = await File(storedPath).length();
+            final length = await File(WindowsPath.forIo(storedPath)).length();
             if (length != entry.size) {
               integrityFailure =
                   '隔离文件大小与清理记录不一致'
@@ -719,7 +731,7 @@ class QuarantineService {
       try {
         originalExists =
             await FileSystemEntity.type(
-              entry.originalPath,
+              WindowsPath.forIo(entry.originalPath),
               followLinks: false,
             ) !=
             FileSystemEntityType.notFound;
@@ -1035,17 +1047,7 @@ class QuarantineService {
     return '${sequence.toString().padLeft(6, '0')}_$name';
   }
 
-  static String _failureReason(Object error) {
-    if (error is String) return error;
-    if (error is FileSystemException) {
-      final code = error.osError?.errorCode;
-      if (code == 2 || code == 3) return '文件或目录不存在';
-      if (code == 5) return '没有访问权限';
-      if (code == 32 || code == 33) return '文件正被其他程序占用';
-      return error.message;
-    }
-    return error.toString();
-  }
+  static String _failureReason(Object error) => describeFilesystemError(error);
 
   Future<FileMetadata?> _captureMetadata(String path) async {
     try {
@@ -1061,7 +1063,7 @@ class QuarantineService {
   static Future<String?> _tryHashFile(String path, int size) async {
     if (size > _integrityHashLimitBytes) return null;
     try {
-      final bytes = await File(path).readAsBytes();
+      final bytes = await File(WindowsPath.forIo(path)).readAsBytes();
       return sha256.convert(bytes).toString();
     } on FileSystemException {
       return null;
@@ -1074,7 +1076,10 @@ class QuarantineService {
   ) async {
     FileSystemEntityType type;
     try {
-      type = await FileSystemEntity.type(storedPath, followLinks: false);
+      type = await FileSystemEntity.type(
+        WindowsPath.forIo(storedPath),
+        followLinks: false,
+      );
     } on FileSystemException catch (error) {
       return (missing: false, reason: '无法读取隔离文件：${_failureReason(error)}');
     }
@@ -1084,7 +1089,7 @@ class QuarantineService {
 
     int length;
     try {
-      length = await File(storedPath).length();
+      length = await File(WindowsPath.forIo(storedPath)).length();
     } on FileSystemException catch (error) {
       return (missing: false, reason: '无法读取隔离文件：${_failureReason(error)}');
     }
@@ -1101,7 +1106,7 @@ class QuarantineService {
     if (expectedDigest != null) {
       String actualDigest;
       try {
-        final bytes = await File(storedPath).readAsBytes();
+        final bytes = await File(WindowsPath.forIo(storedPath)).readAsBytes();
         actualDigest = sha256.convert(bytes).toString();
       } on FileSystemException catch (error) {
         return (missing: false, reason: '无法校验隔离文件：${_failureReason(error)}');
@@ -1122,7 +1127,10 @@ class QuarantineService {
       final suffix = index == 1 ? ' (已恢复)' : ' (已恢复 $index)';
       final candidate = p.windows.join(directory, '$base$suffix$extension');
       try {
-        final type = await FileSystemEntity.type(candidate, followLinks: false);
+        final type = await FileSystemEntity.type(
+          WindowsPath.forIo(candidate),
+          followLinks: false,
+        );
         if (type == FileSystemEntityType.notFound) return candidate;
       } on FileSystemException {
         // Try the next suffix.
@@ -1135,12 +1143,12 @@ class QuarantineService {
   /// destroys the file that currently occupies the original path.
   Future<void> _replaceFile(String sourcePath, String targetPath) async {
     final backupPath = await _backupPath(targetPath);
-    await File(targetPath).rename(backupPath);
+    await File(WindowsPath.forIo(targetPath)).rename(backupPath);
     try {
       await _moveFile(sourcePath, targetPath);
     } catch (_) {
       try {
-        await File(backupPath).rename(targetPath);
+        await File(WindowsPath.forIo(backupPath)).rename(targetPath);
       } on FileSystemException {
         // The previous content stays at the backup path rather than being lost.
       }
@@ -1162,7 +1170,10 @@ class QuarantineService {
       ).join();
       final candidate = p.windows.join(directory, '.broom-backup-$suffix.tmp');
       try {
-        final type = await FileSystemEntity.type(candidate, followLinks: false);
+        final type = await FileSystemEntity.type(
+          WindowsPath.forIo(candidate),
+          followLinks: false,
+        );
         if (type == FileSystemEntityType.notFound) return candidate;
       } on FileSystemException {
         // Try another candidate.
@@ -1172,16 +1183,17 @@ class QuarantineService {
   }
 
   Future<void> _moveFile(String sourcePath, String destinationPath) async {
-    final source = File(sourcePath);
+    final source = File(WindowsPath.forIo(sourcePath));
+    final destination = WindowsPath.forIo(destinationPath);
     try {
-      await source.rename(destinationPath);
+      await source.rename(destination);
       return;
     } on FileSystemException {
       // Rename only works within one volume; fall through for cross-volume
       // moves. A locked source will also be cleaned up safely below.
     }
 
-    await source.copy(destinationPath);
+    await source.copy(destination);
     try {
       await _deleteFile(sourcePath);
     } catch (_) {
@@ -1195,9 +1207,10 @@ class QuarantineService {
   }
 
   Future<void> _deleteFile(String path) async {
+    final ioPath = WindowsPath.forIo(path);
     var readOnly = false;
     try {
-      final stat = await File(path).stat();
+      final stat = await File(ioPath).stat();
       readOnly =
           stat.type == FileSystemEntityType.file && isReadOnlyMode(stat.mode);
     } on FileSystemException {
@@ -1212,7 +1225,7 @@ class QuarantineService {
       }
     }
     try {
-      await File(path).delete();
+      await File(ioPath).delete();
     } catch (_) {
       if (readOnly) {
         try {

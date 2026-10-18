@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 
 import '../models/analysis_models.dart';
+import '../platform/windows_path.dart';
 import 'file_tree_walker.dart';
 
 const defaultDuplicateMinFileSize = 1024 * 1024;
@@ -216,7 +217,7 @@ class DuplicateFinder {
   Future<String> _partialDigest(DuplicateFile file) async {
     RandomAccessFile? handle;
     try {
-      handle = await File(file.path).open();
+      handle = await File(WindowsPath.forIo(file.path)).open();
       final length = await handle.length();
       if (length != file.size) {
         throw FileSystemException('文件在分析期间发生变化', file.path);
@@ -246,7 +247,7 @@ class DuplicateFinder {
   ) async {
     RandomAccessFile? handle;
     try {
-      handle = await File(file.path).open();
+      handle = await File(WindowsPath.forIo(file.path)).open();
       final length = await handle.length();
       if (length != file.size) {
         throw FileSystemException('文件在分析期间发生变化', file.path);

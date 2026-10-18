@@ -42,6 +42,7 @@ v1 内置的 Safe 级规则：
 - **不跟随链接**：目录遍历使用 `followLinks: false`，遇到 `Link` 直接跳过。
 - **移动而非删除**：清理先把文件移动到隔离区，失败的文件保留在原处并记录原因；运行中的程序占用的文件会自动跳过。
 - **跨卷兼容**：同卷优先 `rename`，跨卷退回“复制 + 删除”，删除失败时清理复制出的半成品。
+- **长路径与 UNC**：接近或超过 `MAX_PATH` 时自动使用 `\\?\` / `\\?\UNC\` 扩展长度路径；程序清单声明 `longPathAware`，原生元数据通道同样支持。会话记录与界面始终保存不带前缀的规范路径，路径守卫对 UNC 共享和大小写不敏感比较。验证范围与操作步骤见 [docs/filesystem-validation.md](docs/filesystem-validation.md)。
 - **崩溃安全**：移动每个文件前，先把撤销记录追加写入并 `flush`；即使清理中途崩溃，已移动的文件仍可撤销。
 - **完整性校验**：隔离记录保存每个文件的大小；不超过 32 MiB 的文件额外记录 SHA-256。恢复前重新检查大小与哈希，异常文件禁止恢复并继续留在隔离区。
 - **可撤销**：撤销前重新做路径守卫检查；遇到原位置已有文件时可选跳过、保留两者（恢复为“名称 (已恢复).扩展名”）或覆盖（需二次确认，并在替换前再次校验）。支持按文件或按会话恢复。
@@ -179,7 +180,7 @@ lib/
     models/                        # 规则、设置、扫描、清理、撤销、系统缓存与分析数据模型
     rules/windows_rules.dart       # Windows Safe 规则
     rules/windows_system_rules.dart # Windows 系统级缓存规则
-    platform/                      # CleanerPlatform、SystemAccess、系统缓存路径解析
+    platform/                      # CleanerPlatform、SystemAccess、长路径与文件系统错误辅助、系统缓存路径解析
     safety/path_guard.dart         # 路径包含与保护规则
     scan/                          # 扫描器与 isolate 扫描服务
     clean/quarantine_service.dart  # 隔离、撤销、会话管理
@@ -196,8 +197,9 @@ lib/
 windows/runner/system_shell_channel.*  # 原生 Shell API 通道
 windows/runner/system_access_channel.* # 原生提权与系统缓存路径通道
 windows/runner/file_metadata_channel.* # 原生元数据 / DACL 恢复通道
-test/                              # 路径守卫、扫描、隔离区、分析、系统缓存、Shell 通道与页面测试
+test/                              # 路径守卫、扫描、隔离区、分析、系统缓存、Shell 通道、长路径与特殊文件系统测试
 docs/roadmap.md                    # 未实现目标与非目标
+docs/filesystem-validation.md      # 长路径 / UNC / FAT / 网络盘 / 只读介质验证说明
 ```
 
 ## 开发
@@ -212,7 +214,7 @@ flutter test
 flutter build windows --release
 ```
 
-构建产物位于 `build/windows/x64/runner/Release/`。
+构建产物位于 `build/windows/x64/runner/Release/`。FAT/exFAT、网络盘与物理只读介质的可选验证命令见 [docs/filesystem-validation.md](docs/filesystem-validation.md)。
 
 ## 平台与移动端扩展
 
@@ -232,6 +234,7 @@ flutter build windows --release
 - 自动保留策略只在 Broom 启动时和保存策略后执行，没有后台定时清理；策略默认关闭，且自动释放等同永久删除。策略配置损坏时会自动停用，文件继续保留。
 - 完整性校验以文件大小为基础，仅对不超过 32 MiB 的文件记录 SHA-256；更大的隔离文件只能检测大小变化，无法发现等长的内容修改。计算哈希会让清理额外读取一次这些小文件。
 - 元数据恢复覆盖创建 / 修改 / 访问时间与只读属性。ACL 仅对跨卷移动尽力恢复 DACL（含继承 / 保护状态），不恢复所有者、组与 SACL；FAT/exFAT、权限不足或抓取失败时会保留目标 ACL 并给出元数据警告。隐藏 / 系统属性与备用数据流仍依赖文件系统移动 / 复制语义。
+- 长路径、UNC 与网络盘已通过实机往返验证；只读失败路径使用写保护目录代理验证。FAT/exFAT 与物理只读介质需要对应设备，测试已提供但本机未执行，详见 [docs/filesystem-validation.md](docs/filesystem-validation.md)。真实写保护介质返回的 `ERROR_WRITE_PROTECT` 已有错误提示映射测试。
 - 排除列表只能选择现有文件夹，不能按文件或通配符配置；配置损坏时会阻止扫描，需要在排除列表页重置。
 - 设置页不包含定时任务、隔离区位置迁移与清理历史；配置版本不匹配时会回退默认设置，不执行自动迁移。
 - 中英文界面覆盖应用文案与规则元数据，但核心层和 Windows 原生调用返回的错误详情可能仍为中文。

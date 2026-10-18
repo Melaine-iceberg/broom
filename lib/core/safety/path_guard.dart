@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../platform/windows_path.dart';
+
 class PathGuard {
   PathGuard({required List<String> protectedRoots})
     : _protectedRoots = protectedRoots
@@ -41,7 +43,7 @@ class PathGuard {
   List<String> get protectedRoots => List.unmodifiable(_protectedRoots);
 
   static String normalize(String path) =>
-      p.windows.normalize(p.windows.absolute(path));
+      p.windows.normalize(p.windows.absolute(WindowsPath.canonical(path)));
 
   bool isWithin(String root, String candidate) {
     final rootKey = normalize(root).toLowerCase();

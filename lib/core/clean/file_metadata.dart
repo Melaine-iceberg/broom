@@ -3,6 +3,9 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
+import '../platform/windows_path.dart';
+import '../safety/path_guard.dart';
+
 class FileMetadata {
   const FileMetadata({
     this.created,
@@ -48,7 +51,7 @@ class LocalFileMetadataAccess implements FileMetadataAccess {
 
   @override
   Future<FileMetadata?> read(String path, {required bool captureAcl}) async {
-    final stat = await File(path).stat();
+    final stat = await File(WindowsPath.forIo(path)).stat();
     if (stat.type != FileSystemEntityType.file) return null;
     return FileMetadata(
       created: stat.changed,
@@ -61,7 +64,7 @@ class LocalFileMetadataAccess implements FileMetadataAccess {
 
   @override
   Future<void> apply(String path, FileMetadata metadata) async {
-    final file = File(path);
+    final file = File(WindowsPath.forIo(path));
     if (metadata.modified != null) {
       await file.setLastModified(metadata.modified!);
     }
@@ -78,7 +81,7 @@ class MethodChannelFileMetadataAccess implements FileMetadataAccess {
 
   @override
   Future<FileMetadata?> read(String path, {required bool captureAcl}) async {
-    final stat = await File(path).stat();
+    final stat = await File(WindowsPath.forIo(path)).stat();
     if (stat.type != FileSystemEntityType.file) return null;
 
     String? acl;
@@ -86,7 +89,7 @@ class MethodChannelFileMetadataAccess implements FileMetadataAccess {
     if (captureAcl) {
       try {
         final value = await channel.invokeMethod<String>('readAcl', {
-          'path': path,
+          'path': WindowsPath.canonical(path),
         });
         if (value == null || value.isEmpty) {
           aclUnavailable = true;
@@ -113,7 +116,7 @@ class MethodChannelFileMetadataAccess implements FileMetadataAccess {
   @override
   Future<void> apply(String path, FileMetadata metadata) async {
     final arguments = <String, Object?>{
-      'path': path,
+      'path': WindowsPath.canonical(path),
       'readOnly': metadata.readOnly,
       if (metadata.acl != null) 'acl': metadata.acl,
       if (metadata.created != null) 'created': _fileTime(metadata.created!),
@@ -135,10 +138,10 @@ class MethodChannelFileMetadataAccess implements FileMetadataAccess {
 /// before moving it.
 bool shouldCaptureAcl(String sourcePath, String quarantineRoot) {
   final sourceRoot = p.windows
-      .rootPrefix(p.windows.normalize(sourcePath))
+      .rootPrefix(PathGuard.normalize(sourcePath))
       .toLowerCase();
   final quarantinePrefix = p.windows
-      .rootPrefix(p.windows.normalize(quarantineRoot))
+      .rootPrefix(PathGuard.normalize(quarantineRoot))
       .toLowerCase();
   return sourceRoot.isNotEmpty && sourceRoot != quarantinePrefix;
 }

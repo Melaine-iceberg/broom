@@ -3,6 +3,9 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../platform/windows_path.dart';
+import '../safety/path_guard.dart';
+
 const defaultAnalysisMaxFiles = 200000;
 
 class FileWalkResult {
@@ -50,8 +53,7 @@ class FileTreeWalker {
   final int maxFiles;
   final Set<String> _excludedKeys = {};
 
-  static String _normalize(String path) =>
-      p.windows.normalize(p.windows.absolute(path));
+  static String _normalize(String path) => PathGuard.normalize(path);
 
   static String _key(String path) => _normalize(path).toLowerCase();
 
@@ -89,7 +91,10 @@ class FileTreeWalker {
 
     FileSystemEntityType rootType;
     try {
-      rootType = await FileSystemEntity.type(root, followLinks: false);
+      rootType = await FileSystemEntity.type(
+        WindowsPath.forIo(root),
+        followLinks: false,
+      );
     } on FileSystemException {
       return build(rootMissing: true);
     }
@@ -112,19 +117,20 @@ class FileTreeWalker {
       final current = pending.removeLast();
       try {
         await for (final entity in Directory(
-          current,
+          WindowsPath.forIo(current),
         ).list(followLinks: false)) {
           if (isCancelled?.call() ?? false) {
             cancelled = true;
             break scanLoop;
           }
           if (entity is Link) continue;
-          final entityKey = _key(entity.path);
+          final entityPath = WindowsPath.canonical(entity.path);
+          final entityKey = _key(entityPath);
           if (_isExcludedKey(entityKey)) continue;
 
           if (entity is Directory) {
             if (seenDirectories.add(entityKey)) {
-              pending.add(entity.path);
+              pending.add(entityPath);
             }
             continue;
           }
@@ -146,8 +152,8 @@ class FileTreeWalker {
 
           scannedFiles++;
           scannedBytes += stat.size;
-          onFile(entity, stat);
-          report(entity.path);
+          onFile(File(entityPath), stat);
+          report(entityPath);
         }
       } on FileSystemException {
         errorCount++;

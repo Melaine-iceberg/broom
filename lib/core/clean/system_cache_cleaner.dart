@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import '../models/clean_models.dart';
 import '../models/scan_models.dart';
 import '../models/system_models.dart';
+import '../platform/windows_path.dart';
 import '../safety/path_guard.dart';
 import 'system_services.dart';
 
@@ -119,7 +120,10 @@ class FileSystemCacheCleaner implements SystemCacheCleaner {
           continue;
         }
 
-        final type = await FileSystemEntity.type(item.path, followLinks: false);
+        final type = await FileSystemEntity.type(
+          WindowsPath.forIo(item.path),
+          followLinks: false,
+        );
         if (type == FileSystemEntityType.link) {
           recordFailure(item.path, '跳过符号链接或 junction');
           report(currentPath: item.path);
@@ -133,7 +137,7 @@ class FileSystemCacheCleaner implements SystemCacheCleaner {
 
         int size;
         try {
-          size = await File(item.path).length();
+          size = await File(WindowsPath.forIo(item.path)).length();
         } on FileSystemException catch (error) {
           recordFailure(item.path, _failureReason(error));
           report(currentPath: item.path);
@@ -141,7 +145,7 @@ class FileSystemCacheCleaner implements SystemCacheCleaner {
         }
 
         try {
-          await File(item.path).delete();
+          await File(WindowsPath.forIo(item.path)).delete();
         } on FileSystemException catch (error) {
           recordFailure(item.path, _failureReason(error));
           report(currentPath: item.path);

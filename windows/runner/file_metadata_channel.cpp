@@ -124,13 +124,30 @@ bool ToFileTime(int64_t value, FILETIME* out) {
   return true;
 }
 
+std::wstring ToExtendedPath(const std::wstring& path) {
+  if (path.empty() || path.rfind(L"\\\\?\\", 0) == 0) {
+    return path;
+  }
+  if (path.rfind(L"\\\\", 0) == 0) {
+    return L"\\\\?\\UNC\\" + path.substr(2);
+  }
+  return L"\\\\?\\" + path;
+}
+
+HANDLE OpenForSecurity(const std::wstring& path, DWORD access) {
+  return ::CreateFileW(
+      ToExtendedPath(path).c_str(), access,
+      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+      OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+}
+
 DWORD ApplyFileTimes(const std::wstring& path, const FILETIME* created,
                      const FILETIME* accessed, const FILETIME* modified) {
   if (created == nullptr && accessed == nullptr && modified == nullptr) {
     return ERROR_SUCCESS;
   }
   HANDLE handle = ::CreateFileW(
-      path.c_str(), FILE_WRITE_ATTRIBUTES,
+      ToExtendedPath(path).c_str(), FILE_WRITE_ATTRIBUTES,
       FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
       OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
   if (handle == INVALID_HANDLE_VALUE) {
@@ -143,7 +160,8 @@ DWORD ApplyFileTimes(const std::wstring& path, const FILETIME* created,
 }
 
 DWORD ApplyReadOnly(const std::wstring& path, bool read_only) {
-  const DWORD attributes = ::GetFileAttributesW(path.c_str());
+  const std::wstring io_path = ToExtendedPath(path);
+  const DWORD attributes = ::GetFileAttributesW(io_path.c_str());
   if (attributes == INVALID_FILE_ATTRIBUTES) {
     return ::GetLastError();
   }
@@ -153,8 +171,8 @@ DWORD ApplyReadOnly(const std::wstring& path, bool read_only) {
   if (desired == attributes) {
     return ERROR_SUCCESS;
   }
-  return ::SetFileAttributesW(path.c_str(), desired) ? ERROR_SUCCESS
-                                                     : ::GetLastError();
+  return ::SetFileAttributesW(io_path.c_str(), desired) ? ERROR_SUCCESS
+                                                        : ::GetLastError();
 }
 
 struct DaclResult {
@@ -165,12 +183,17 @@ struct DaclResult {
 };
 
 DaclResult ReadDacl(const std::wstring& path) {
+  HANDLE handle = OpenForSecurity(path, READ_CONTROL);
+  if (handle == INVALID_HANDLE_VALUE) {
+    return DaclResult{false, false, std::string(), ::GetLastError()};
+  }
+
   PSECURITY_DESCRIPTOR descriptor = nullptr;
   PACL dacl = nullptr;
-  std::wstring mutable_path = path;
-  const DWORD error = ::GetNamedSecurityInfoW(
-      mutable_path.data(), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, nullptr,
-      nullptr, &dacl, nullptr, &descriptor);
+  const DWORD error = ::GetSecurityInfo(
+      handle, SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, nullptr, nullptr, &dacl,
+      nullptr, &descriptor);
+  ::CloseHandle(handle);
   if (error != ERROR_SUCCESS) {
     return DaclResult{false, false, std::string(), error};
   }
@@ -225,10 +248,15 @@ DWORD ApplyDacl(const std::wstring& path, const std::string& sddl) {
                      ? PROTECTED_DACL_SECURITY_INFORMATION
                      : UNPROTECTED_DACL_SECURITY_INFORMATION;
 
-  std::wstring mutable_path = path;
-  const DWORD error = ::SetNamedSecurityInfoW(
-      mutable_path.data(), SE_FILE_OBJECT, information, nullptr, nullptr, dacl,
-      nullptr);
+  HANDLE handle = OpenForSecurity(path, READ_CONTROL | WRITE_DAC);
+  if (handle == INVALID_HANDLE_VALUE) {
+    const DWORD error = ::GetLastError();
+    ::LocalFree(descriptor);
+    return error;
+  }
+  const DWORD error = ::SetSecurityInfo(handle, SE_FILE_OBJECT, information,
+                                        nullptr, nullptr, dacl, nullptr);
+  ::CloseHandle(handle);
   ::LocalFree(descriptor);
   return error;
 }

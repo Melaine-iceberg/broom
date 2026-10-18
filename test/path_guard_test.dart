@@ -68,5 +68,65 @@ void main() {
       expect(fromEnv.isProtected(r'C:\ProgramData\vendor\cache'), isTrue);
       expect(fromEnv.isProtected(r'C:\Users\Alice\cache'), isFalse);
     });
+
+    test('normalizes extended-length paths before comparing', () {
+      expect(
+        PathGuard.normalize(r'\\?\C:\Users\Alice\Temp\..\Temp\file.tmp'),
+        r'C:\Users\Alice\Temp\file.tmp',
+      );
+      expect(
+        guard.allows(
+          path: r'\\?\C:\Users\Alice\Temp\cache\file.tmp',
+          root: r'C:\Users\Alice\Temp',
+        ),
+        isTrue,
+      );
+      expect(guard.isProtected(r'\\?\C:\Windows\Temp\file.tmp'), isTrue);
+    });
+
+    test('handles UNC roots without matching sibling shares', () {
+      final uncGuard = PathGuard(protectedRoots: [r'\\server\share\Windows']);
+
+      expect(
+        uncGuard.allows(
+          path: r'\\server\share\cache\file.tmp',
+          root: r'\\server\share\cache',
+        ),
+        isTrue,
+      );
+      expect(
+        uncGuard.allows(
+          path: r'\\server\share2\cache\file.tmp',
+          root: r'\\server\share\cache',
+        ),
+        isFalse,
+      );
+      expect(
+        uncGuard.allows(
+          path: r'\\server\share\cache',
+          root: r'\\server\share\cache',
+        ),
+        isFalse,
+      );
+      expect(
+        uncGuard.isWithin(
+          r'\\server\share\cache',
+          r'\\SERVER\Share\Cache\sub\file.tmp',
+        ),
+        isTrue,
+      );
+      expect(uncGuard.isProtected(r'\\server\share\Windows\file.dll'), isTrue);
+      expect(
+        uncGuard.isProtected(r'\\server\share\WindowsApps\file.dll'),
+        isFalse,
+      );
+      expect(
+        uncGuard.allows(
+          path: r'\\?\UNC\server\share\cache\file.tmp',
+          root: r'\\server\share\cache',
+        ),
+        isTrue,
+      );
+    });
   });
 }

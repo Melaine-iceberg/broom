@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../models/scan_models.dart';
+import '../platform/windows_path.dart';
 import '../safety/path_guard.dart';
 
 const defaultMaxScanItems = 100000;
@@ -67,8 +68,12 @@ class JunkScanner {
       currentRuleId = job.ruleId;
       report(force: true, jobIndex: jobIndex);
 
-      for (final root in job.roots) {
-        if (await FileSystemEntity.type(root, followLinks: false) !=
+      for (final rawRoot in job.roots) {
+        final root = WindowsPath.canonical(rawRoot);
+        if (await FileSystemEntity.type(
+              WindowsPath.forIo(root),
+              followLinks: false,
+            ) !=
             FileSystemEntityType.directory) {
           continue;
         }
@@ -89,23 +94,24 @@ class JunkScanner {
 
           try {
             await for (final entity in Directory(
-              current.directory,
+              WindowsPath.forIo(current.directory),
             ).list(followLinks: false)) {
               if (isCancelled?.call() ?? false) {
                 cancelled = true;
                 break scanLoop;
               }
               if (entity is Link) continue;
-              final entityKey = _key(entity.path);
+              final entityPath = WindowsPath.canonical(entity.path);
+              final entityKey = _key(entityPath);
               if (_isExcluded(entityKey)) continue;
 
               if (entity is Directory) {
-                pending.add((directory: entity.path, root: current.root));
+                pending.add((directory: entityPath, root: current.root));
                 continue;
               }
               if (entity is! File) continue;
               if (!_isWithin(rootKey, entityKey)) continue;
-              if (!_acceptsExtension(job, entity.path)) continue;
+              if (!_acceptsExtension(job, entityPath)) continue;
 
               scannedFiles++;
               FileStat stat;
@@ -131,7 +137,7 @@ class JunkScanner {
                 JunkItem(
                   ruleId: job.ruleId,
                   rootPath: current.root,
-                  path: entity.path,
+                  path: entityPath,
                   size: stat.size,
                   modified: stat.modified,
                 ),
