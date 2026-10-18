@@ -5,6 +5,7 @@ import 'package:broom/core/models/cleaner_rule.dart';
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/platform/cleaner_platform.dart';
 import 'package:broom/core/safety/path_guard.dart';
+import 'package:broom/core/scan/ntfs_index.dart';
 import 'package:broom/core/scan/scan_service.dart';
 import 'package:broom/core/settings/exclusion_store.dart';
 import 'package:broom/ui/clean_controller.dart';
@@ -35,6 +36,9 @@ class _Platform implements CleanerPlatform {
   String? get quarantineRoot => null;
 
   @override
+  String get rulesVersion => 'builtin';
+
+  @override
   Future<List<String>> resolveRoots(CleanerRule rule) async => roots;
 }
 
@@ -47,10 +51,16 @@ class _FakeScanService extends ScanService {
   Future<ScanResult> scan({
     required List<ScanJob> jobs,
     required List<String> excludedPaths,
+    ScanOptions options = const ScanOptions(),
+    NtfsIndex? ntfsIndex,
     void Function(ScanProgress progress)? onProgress,
+    void Function(List<JunkItem> items)? onItems,
+    void Function(ScanIssue issue)? onIssue,
+    bool retainItems = true,
   }) async {
+    if (items.isNotEmpty) onItems?.call(items);
     return ScanResult(
-      items: items,
+      items: retainItems ? items : const [],
       scannedFiles: items.length,
       directoryErrors: 0,
       truncated: false,

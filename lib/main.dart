@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
@@ -13,12 +14,18 @@ import 'core/platform/cleaner_platform.dart';
 import 'core/platform/file_lock_probe.dart';
 import 'core/platform/system_access.dart';
 import 'core/platform/system_cache_platform.dart';
+import 'core/rules/rule_catalog_store.dart';
+import 'core/rules/rule_update_service.dart';
 import 'core/safety/path_guard.dart';
+import 'core/scan/ntfs_index.dart';
+import 'core/scan/ntfs_index_client.dart';
+import 'core/scan/scan_result_store.dart';
 import 'core/settings/exclusion_store.dart';
 import 'core/settings/quarantine_policy_store.dart';
 import 'core/settings/settings_store.dart';
 import 'platform/window_chrome.dart';
 import 'ui/clean_controller.dart';
+import 'ui/rule_update_controller.dart';
 import 'ui/settings_controller.dart';
 import 'ui/system_cache_controller.dart';
 
@@ -67,13 +74,42 @@ void main(List<String> args) {
     ),
   );
   settings.load();
+
+  final catalogStore = RuleCatalogStore(
+    directoryPath: RuleCatalogStore.defaultDirectory(quarantineRoot),
+  );
+  final activeCatalog = catalogStore.loadSync();
+  if (platform is WindowsCleanerPlatform) {
+    platform.applyRuleCatalog(activeCatalog.rules, activeCatalog.version);
+  }
+  final ntfsIndex = Platform.isWindows
+      ? NtfsIndexClient()
+      : const UnavailableNtfsIndex();
   final controller = CleanController(
     platform: platform,
     guard: guard,
     quarantine: quarantine,
     exclusions: exclusions,
     isRuleEnabled: settings.isRuleEnabled,
+    scanSettings: () => settings.scanSettings,
+    scanResultStore: ScanResultStore(
+      rootDirectory: p.windows.join(p.windows.dirname(quarantineRoot), 'scans'),
+    ),
+    ntfsIndex: ntfsIndex,
     lockProbe: createFileLockProbe(),
+  );
+  final ruleUpdates = RuleUpdateController(
+    service: RuleUpdateService(
+      store: catalogStore,
+      signingKey: RuleUpdateService.compiledSigningKey,
+    ),
+    settings: settings,
+    onCatalogChanged: (catalog) {
+      if (platform is WindowsCleanerPlatform) {
+        platform.applyRuleCatalog(catalog.rules, catalog.version);
+      }
+      unawaited(controller.refreshRuleExclusionScopes());
+    },
   );
   unawaited(_initializeBroom(controller, retention));
 
@@ -95,6 +131,7 @@ void main(List<String> args) {
       analysisInitialDirectory: _downloadsDirectory(platform.environment),
       analysisExcludedPaths: [quarantineRoot],
       startInSystemCache: args.contains('--system-cache'),
+      ruleUpdates: ruleUpdates,
     ),
   );
 }

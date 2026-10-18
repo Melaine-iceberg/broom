@@ -8,6 +8,7 @@ import 'core/shell/system_shell.dart';
 import 'l10n/broom_strings.dart';
 import 'ui/clean_controller.dart';
 import 'ui/home_page.dart';
+import 'ui/rule_update_controller.dart';
 import 'ui/settings_controller.dart';
 import 'ui/system_cache_controller.dart';
 import 'ui/window_title_bar.dart';
@@ -24,6 +25,7 @@ class BroomApp extends StatefulWidget {
     this.analysisInitialDirectory,
     this.analysisExcludedPaths = const [],
     this.startInSystemCache = false,
+    this.ruleUpdates,
   });
 
   final CleanController controller;
@@ -35,6 +37,7 @@ class BroomApp extends StatefulWidget {
   final String? analysisInitialDirectory;
   final List<String> analysisExcludedPaths;
   final bool startInSystemCache;
+  final RuleUpdateController? ruleUpdates;
 
   @override
   State<BroomApp> createState() => _BroomAppState();
@@ -50,6 +53,7 @@ class _BroomAppState extends State<BroomApp> {
     super.initState();
     if (_ownsSettings) _settings.load();
     widget.controller.isRuleEnabled = _settings.isRuleEnabled;
+    widget.controller.scanSettings = () => _settings.scanSettings;
   }
 
   @override
@@ -95,6 +99,7 @@ class _BroomAppState extends State<BroomApp> {
             analysisInitialDirectory: widget.analysisInitialDirectory,
             analysisExcludedPaths: widget.analysisExcludedPaths,
             startInSystemCache: widget.startInSystemCache,
+            ruleUpdates: widget.ruleUpdates,
           ),
         );
       },

@@ -4,11 +4,14 @@ import 'package:broom/app.dart';
 import 'package:broom/core/models/app_settings.dart';
 import 'package:broom/core/models/cleaner_rule.dart';
 import 'package:broom/core/platform/cleaner_platform.dart';
+import 'package:broom/core/rules/rule_catalog_store.dart';
+import 'package:broom/core/rules/rule_update_service.dart';
 import 'package:broom/core/safety/path_guard.dart';
 import 'package:broom/core/settings/exclusion_store.dart';
 import 'package:broom/core/settings/settings_store.dart';
 import 'package:broom/core/shell/system_shell.dart';
 import 'package:broom/ui/clean_controller.dart';
+import 'package:broom/ui/rule_update_controller.dart';
 import 'package:broom/ui/settings_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,6 +36,9 @@ class _SettingsPlatform implements CleanerPlatform {
 
   @override
   String? get quarantineRoot => null;
+
+  @override
+  String get rulesVersion => 'builtin';
 
   @override
   Future<List<String>> resolveRoots(CleanerRule rule) async => const [];
@@ -83,8 +89,9 @@ void main() {
   });
 
   Future<(SettingsController, CleanController)> pumpApp(
-    WidgetTester tester,
-  ) async {
+    WidgetTester tester, {
+    RuleUpdateController? ruleUpdates,
+  }) async {
     tester.view.physicalSize = const Size(1200, 1800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -112,6 +119,7 @@ void main() {
         controller: controller,
         settingsController: settings,
         systemShell: _FakeSystemShell(),
+        ruleUpdates: ruleUpdates,
       ),
     );
     await tester.pumpAndSettle();
@@ -186,6 +194,56 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(settingsStore.load().isRuleEnabled('test.cache'), isTrue);
+  });
+
+  testWidgets('toggles scan categories and low priority', (tester) async {
+    await pumpApp(tester);
+
+    await tester.ensureVisible(find.text('扫描引擎'));
+    expect(find.text('扫描引擎'), findsOneWidget);
+    expect(find.text('并行扫描线程'), findsOneWidget);
+
+    final category = find.byKey(const ValueKey('settings-category-other'));
+    await tester.ensureVisible(category);
+    await tester.tap(category);
+    await tester.pumpAndSettle();
+    expect(settingsStore.load().disabledCategoryIds, contains('other'));
+
+    final lowPriority = find.byKey(const ValueKey('settings-low-priority'));
+    await tester.ensureVisible(lowPriority);
+    await tester.tap(lowPriority);
+    await tester.pumpAndSettle();
+    expect(settingsStore.load().scanLowPriority, isFalse);
+  });
+
+  testWidgets('shows rule update status for a build without a key', (
+    tester,
+  ) async {
+    final store = RuleCatalogStore(
+      directoryPath: p.windows.join(temp.path, 'rules'),
+      builtinRules: const [_testRule],
+    );
+    final ruleSettings = SettingsController(store: settingsStore);
+    ruleSettings.load();
+    addTearDown(ruleSettings.dispose);
+    final ruleUpdates = RuleUpdateController(
+      service: RuleUpdateService(store: store, signingKey: ''),
+      settings: ruleSettings,
+      onCatalogChanged: (_) {},
+    );
+    addTearDown(ruleUpdates.dispose);
+
+    await pumpApp(tester, ruleUpdates: ruleUpdates);
+
+    await tester.ensureVisible(find.text('规则更新'));
+    expect(find.text('规则更新'), findsOneWidget);
+    expect(find.textContaining('在线更新已禁用'), findsOneWidget);
+    expect(
+      tester
+          .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, '检查更新'))
+          .onPressed,
+      isNull,
+    );
   });
 
   testWidgets('opens the exclusions manager from settings', (tester) async {

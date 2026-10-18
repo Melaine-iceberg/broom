@@ -12,18 +12,39 @@ abstract interface class CleanerPlatform {
   String? get quarantineRoot;
   Map<String, String> get environment;
   List<CleanerRule> get rules;
+
+  /// Identifies the active rule catalog (built-in or a verified online
+  /// update). Persisted scan results are considered stale when this changes.
+  String get rulesVersion;
   Future<List<String>> resolveRoots(CleanerRule rule);
 }
 
 class WindowsCleanerPlatform implements CleanerPlatform {
-  WindowsCleanerPlatform({Map<String, String>? environment})
-    : environment = environment ?? Platform.environment {
-    _resolver = WindowsRuleResolver(environment: this.environment);
+  factory WindowsCleanerPlatform({
+    Map<String, String>? environment,
+    List<CleanerRule>? rules,
+    String rulesVersion = 'builtin',
+  }) {
+    return WindowsCleanerPlatform._(
+      environment ?? Platform.environment,
+      rules ?? windowsCleanupRules,
+      rulesVersion,
+    );
+  }
+
+  WindowsCleanerPlatform._(
+    this.environment,
+    List<CleanerRule> rules,
+    this._rulesVersion,
+  ) : _rules = List.unmodifiable(rules) {
+    _resolver = WindowsRuleResolver(environment: environment);
   }
 
   @override
   final Map<String, String> environment;
   late final WindowsRuleResolver _resolver;
+  List<CleanerRule> _rules;
+  String _rulesVersion;
 
   @override
   bool get isSupported => Platform.isWindows;
@@ -32,7 +53,15 @@ class WindowsCleanerPlatform implements CleanerPlatform {
   String get displayName => 'Windows';
 
   @override
-  List<CleanerRule> get rules => windowsCleanupRules;
+  List<CleanerRule> get rules => _rules;
+
+  @override
+  String get rulesVersion => _rulesVersion;
+
+  void applyRuleCatalog(List<CleanerRule> rules, String version) {
+    _rules = List.unmodifiable(rules);
+    _rulesVersion = version;
+  }
 
   @override
   String? get quarantineRoot {
@@ -85,6 +114,9 @@ class UnsupportedCleanerPlatform implements CleanerPlatform {
 
   @override
   List<CleanerRule> get rules => const [];
+
+  @override
+  String get rulesVersion => 'builtin';
 
   @override
   Future<List<String>> resolveRoots(CleanerRule rule) async => const [];

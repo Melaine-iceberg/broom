@@ -1,5 +1,6 @@
 import 'package:broom/core/clean/system_cache_cleaner.dart';
 import 'package:broom/core/models/scan_models.dart';
+import 'package:broom/core/scan/ntfs_index.dart';
 import 'package:broom/core/models/system_models.dart';
 import 'package:broom/core/platform/system_access.dart';
 import 'package:broom/core/platform/system_cache_platform.dart';
@@ -132,7 +133,12 @@ class FakeScanService extends ScanService {
   Future<ScanResult> scan({
     required List<ScanJob> jobs,
     required List<String> excludedPaths,
+    ScanOptions options = const ScanOptions(),
+    NtfsIndex? ntfsIndex,
     void Function(ScanProgress progress)? onProgress,
+    void Function(List<JunkItem> items)? onItems,
+    void Function(ScanIssue issue)? onIssue,
+    bool retainItems = true,
   }) async {
     calls++;
     lastJobs = jobs;
@@ -148,7 +154,8 @@ class FakeScanService extends ScanService {
       ),
     );
     if (error case final failure?) throw failure;
-    return result ??
+    final scanResult =
+        result ??
         const ScanResult(
           items: [],
           scannedFiles: 0,
@@ -156,6 +163,8 @@ class FakeScanService extends ScanService {
           truncated: false,
           cancelled: false,
         );
+    if (scanResult.items.isNotEmpty) onItems?.call(scanResult.items);
+    return scanResult;
   }
 
   @override

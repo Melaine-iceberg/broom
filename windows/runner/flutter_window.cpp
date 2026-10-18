@@ -13,6 +13,8 @@
 #include "file_lock_channel.h"
 #include "file_metadata_channel.h"
 #include "flutter/generated_plugin_registrant.h"
+#include "ntfs_index_channel.h"
+#include "scan_priority_channel.h"
 #include "system_access_channel.h"
 #include "system_shell_channel.h"
 
@@ -174,6 +176,9 @@ void FlutterWindow::SetUpWindowChannels() {
   system_access_channel_ = std::make_unique<SystemAccessChannel>(messenger);
   file_metadata_channel_ = std::make_unique<FileMetadataChannel>(messenger);
   file_lock_channel_ = std::make_unique<FileLockChannel>(messenger);
+  ntfs_index_channel_ =
+      std::make_unique<NtfsIndexChannel>(messenger, GetHandle());
+  scan_priority_channel_ = std::make_unique<ScanPriorityChannel>(messenger);
 }
 
 void FlutterWindow::OnDestroy() {
@@ -198,6 +203,8 @@ void FlutterWindow::OnDestroy() {
   system_shell_channel_.reset();
   file_metadata_channel_.reset();
   file_lock_channel_.reset();
+  ntfs_index_channel_.reset();
+  scan_priority_channel_.reset();
 
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
@@ -235,6 +242,13 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   if (message == WM_SIZE && wparam != SIZE_MINIMIZED &&
       window_state_emitter_ != nullptr) {
     window_state_emitter_->Notify();
+  }
+
+  if (message == NtfsIndexChannel::kPostedMessage) {
+    if (ntfs_index_channel_ != nullptr) {
+      ntfs_index_channel_->HandlePostedMessages();
+    }
+    return 0;
   }
 
   // Give Flutter, including plugins, an opportunity to handle window messages.

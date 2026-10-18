@@ -563,4 +563,121 @@ const translationsEn = <String, String>{
   '这些系统缓存不会进入 Broom 隔离区，删除后无法撤销。更新与共享缓存会在需要时重新下载。': 'These system caches do not enter Broom quarantine and cannot be undone. Update and sharing caches are downloaded again when needed.',
   '所选内容包含 Windows.old。删除后将失去回滚到上一版本 Windows 的能力，并可能移除其中保留的旧用户配置文件副本、旧程序和系统设置，且无法恢复。请先备份所需文件；当前系统的个人文件、还原点和更新历史不受影响。': 'The selection includes Windows.old. Deleting it removes the ability to roll back to the previous Windows version and may remove old user-profile copies, programs, and system settings retained there, with no recovery. Back up needed files first; personal files in the current system, restore points, and update history are unaffected.',
   '不会删除当前 Windows、个人文件、系统还原点或更新历史。': 'The current Windows installation, personal files, restore points, and update history are not deleted.',
+
+  // Scan scope, streaming results and saved results
+  '本次跳过': 'Skipped',
+  '勾选类别决定本次扫描范围；关闭的类别不会解析目录或访问磁盘。': 'Checked categories define this scan. Unchecked categories are not resolved or read from disk.',
+  '上次扫描 · {time}': 'Last scan · {time}',
+  '规则已变化': 'Rules changed',
+  '{count} 个文件 · {bytes} · {issues} 个扫描问题':
+      '{count} files · {bytes} · {issues} scan issues',
+  '查看结果': 'View results',
+  '查看明细': 'Details',
+  '扫描时遇到 {count} 个路径问题，已跳过。':
+      '{count} path issues were skipped during the scan.',
+  '上次扫描结果达到设定的数量上限，可能不完整。':
+      'The saved scan reached the configured item limit and may be incomplete.',
+  '扫描结果达到设定的数量上限，预览与清理仅包含已找到的部分。': 'The scan reached the configured item limit. Preview and cleanup only include the files found so far.',
+  '扫描问题明细': 'Scan issue details',
+  '这些路径在扫描时无法读取，已安全跳过，不会影响其他结果。': 'These paths could not be read and were skipped safely; other results are unaffected.',
+  '没有可展示的问题明细。': 'No issue details are available.',
+  '没有访问权限': 'Access denied',
+  '路径过长': 'Path too long',
+  '文件或目录不存在': 'File or folder not found',
+  '设备未就绪': 'Device not ready',
+  '网络路径不可用': 'Network path unavailable',
+  '介质为只读': 'Read-only media',
+  '磁盘空间不足': 'Insufficient disk space',
+  '文件系统不支持': 'Unsupported file system',
+  '被其他程序占用': 'In use by another program',
+  '文件名或路径无效': 'Invalid file name or path',
+  '读取失败': 'Read failure',
+  '其他错误': 'Other error',
+  '流式结果 · 已聚合的结果会立即计入统计':
+      'Streaming results · aggregated items count immediately',
+  '已有 {count} 个路径问题，扫描结束后可查看明细。':
+      '{count} path issues so far; details are available after the scan.',
+  '第 {current} / {total} 组 · {workers} 个并行线程':
+      'Group {current} / {total} · {workers} parallel workers',
+  '已恢复上次扫描结果：按当前规则与类别没有可清理的内容。': 'Restored the last scan: no cleanable content remains under the current rules and categories.',
+  '已恢复 {time} 的扫描结果，清理前会重新校验路径。':
+      'Restored the scan from {time}. Paths are revalidated before cleanup.',
+  '已按当前规则与类别过滤 {count} 项。':
+      'Filtered out {count} items based on the current rules and categories.',
+  '规则或内置目录已变化，建议重新扫描。':
+      'Rules or built-in paths have changed; a fresh scan is recommended.',
+  '没有可恢复的上次扫描结果。': 'No saved scan is available to restore.',
+  '上次扫描结果已不可用，请重新扫描。':
+      'The saved scan is no longer available. Please scan again.',
+  '无法恢复上次扫描结果：{error}': 'Could not restore the last scan: {error}',
+  '无法保存本次扫描结果：{error}': 'Could not save this scan: {error}',
+  '扫描结果超出磁盘保护上限，持久化内容可能不完整。': 'The scan exceeded the disk protection limit; the saved result may be incomplete.',
+  'NTFS 索引不可用，已回退到目录扫描：':
+      'NTFS index unavailable, falling back to directory scan: ',
+
+  // Scan engine settings
+  '扫描引擎': 'Scan engine',
+  '扫描类别、并行线程、低优先级与 NTFS 索引都在本机生效。扫描结果默认不限制数量；NTFS 索引在权限不足或非 NTFS 卷上会自动回退。': 'Categories, parallel workers, low priority, and the NTFS index run locally. Result count is unlimited by default; the NTFS index falls back automatically without sufficient privileges or on non-NTFS volumes.',
+  '扫描类别': 'Scan categories',
+  '{count} 条规则': '{count} rules',
+  '并行扫描线程': 'Parallel workers',
+  '自动': 'Auto',
+  '低优先级扫描': 'Low-priority scan',
+  '扫描期间尝试使用后台 I/O 与低于正常的 CPU 优先级，减少对前台程序的影响；结束后恢复。': 'During a scan, try background I/O and below-normal CPU priority to reduce impact on foreground programs, then restore afterwards.',
+  '优先使用 NTFS 索引': 'Prefer NTFS index',
+  '通过 USN 日志快速枚举文件，需要管理员权限且仅支持 NTFS 卷；不可用时会自动回退到逐目录扫描，不会漏掉回退路径。': 'Enumerate files through the USN journal. Requires administrator rights and NTFS volumes. Falls back to directory traversal when unavailable.',
+  '扫描结果数量上限': 'Scan result item limit',
+  '不限制（默认）': 'Unlimited (default)',
+  '最多 {count} 个文件': 'Up to {count} files',
+  '调整': 'Adjust',
+  '最多文件数': 'Maximum files',
+  '留空表示不限制。上限只影响预览与清理集合，不会删除文件。': 'Leave empty for unlimited. The limit only affects the preview and cleanup set; nothing is deleted by it.',
+  '保存': 'Save',
+  '请输入不小于 1 的整数，或留空表示不限制。':
+      'Enter an integer of at least 1, or leave empty for unlimited.',
+  '扫描结果数量不限制。': 'Scan result count is unlimited.',
+  '扫描结果最多保留 {count} 个文件。': 'Keep at most {count} files in scan results.',
+
+  // Online rule updates
+  '规则更新': 'Rule updates',
+  '规则更新地址': 'Rule update URL',
+  'HTTPS URL': 'HTTPS URL',
+  '规则清单必须由 Broom 发布密钥签名，签名校验失败会拒绝更新。': 'The rule manifest must be signed by Broom\'s release key; updates with invalid signatures are rejected.',
+  '在线规则清单必须使用 HTTPS，并通过构建时注入的签名密钥校验。更新会完整替换规则目录；缺少内置规则、审计信息或签名不符都会被拒绝。': 'Online rule manifests must use HTTPS and pass verification with the signing key injected at build time. An update replaces the rule catalog; missing built-in rules, missing audit metadata, or a bad signature are rejected.',
+  '内置规则': 'Built-in rules',
+  '在线更新': 'Online update',
+  '此构建未配置规则签名密钥，在线更新已禁用。请使用 --dart-define=BROOM_RULE_SIGNING_KEY=... 构建后再启用。': 'This build has no rule signing key, so online updates are disabled. Build with --dart-define=BROOM_RULE_SIGNING_KEY=... to enable them.',
+  '当前规则版本：{version}': 'Current rule version: {version}',
+  '{source} · {count} 条规则': '{source} · {count} rules',
+  '未设置': 'Not set',
+  '设置地址': 'Set URL',
+  '规则版本 {version} 已下载并通过签名校验':
+      'Rule version {version} was downloaded and passed signature verification',
+  '应用': 'Apply',
+  '检查更新': 'Check for updates',
+  '回滚上一版': 'Roll back',
+  '恢复内置规则': 'Restore built-in rules',
+  '应用规则更新？': 'Apply rule update?',
+  '将启用规则版本 {version}，共 {count} 条规则。更新会替换当前规则目录，但保留上一版本用于回滚；用户关闭的规则、扫描类别与排除列表继续生效。': 'Rule version {version} with {count} rules will be enabled. The current catalog is replaced but kept for rollback; disabled rules, scan categories, and exclusions continue to apply.',
+  '应用更新': 'Apply update',
+  '回滚规则版本？': 'Roll back the rule version?',
+  '将重新启用上一版规则目录。当前版本会被替换；签名与审计校验仍会执行。': 'The previous rule catalog will be re-enabled. The current version is replaced; signature and audit validation still apply.',
+  '恢复内置规则？': 'Restore built-in rules?',
+  '将停用在线更新规则并恢复应用内置规则。当前在线版本会保留为上一版，可再次回滚。': 'Online rules will be disabled and built-in rules restored. The current online version is kept as the previous version for another rollback.',
+  '继续': 'Continue',
+  '此构建未配置规则签名密钥，在线更新不可用。':
+      'This build has no rule signing key, so online updates are unavailable.',
+  '请先填写有效的 HTTPS 规则更新地址。': 'Enter a valid HTTPS rule update URL first.',
+  '当前规则已是最新版本。': 'The current rules are already up to date.',
+  '发现规则版本 {version}，确认后可应用。':
+      'Rule version {version} is available; confirm to apply it.',
+  '规则更新检查失败：{error}': 'Rule update check failed: {error}',
+  '已启用规则版本 {version}。': 'Rule version {version} is now active.',
+  '无法启用规则更新：{error}': 'Could not activate the rule update: {error}',
+  '没有可回滚的规则版本。': 'There is no previous rule version to roll back to.',
+  '已回滚到规则版本 {version}。': 'Rolled back to rule version {version}.',
+  '规则回滚失败：{error}': 'Rule rollback failed: {error}',
+  '已恢复内置规则，上一版本保留用于回滚。':
+      'Built-in rules restored; the previous version is kept for rollback.',
+  '无法恢复内置规则：{error}': 'Could not restore built-in rules: {error}',
 };

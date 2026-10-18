@@ -13,6 +13,8 @@ class SystemShellChannel;
 class SystemAccessChannel;
 class FileMetadataChannel;
 class FileLockChannel;
+class NtfsIndexChannel;
+class ScanPriorityChannel;
 
 namespace flutter {
 class EncodableValue;
@@ -65,6 +67,8 @@ class FlutterWindow : public Win32Window {
   std::unique_ptr<SystemAccessChannel> system_access_channel_;
   std::unique_ptr<FileMetadataChannel> file_metadata_channel_;
   std::unique_ptr<FileLockChannel> file_lock_channel_;
+  std::unique_ptr<NtfsIndexChannel> ntfs_index_channel_;
+  std::unique_ptr<ScanPriorityChannel> scan_priority_channel_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

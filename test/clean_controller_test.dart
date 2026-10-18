@@ -5,6 +5,8 @@ import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/platform/cleaner_platform.dart';
 import 'package:broom/core/platform/file_lock_probe.dart';
 import 'package:broom/core/safety/path_guard.dart';
+import 'package:broom/core/scan/ntfs_index.dart';
+import 'package:broom/core/scan/scan_result_store.dart';
 import 'package:broom/core/scan/scan_service.dart';
 import 'package:broom/core/settings/exclusion_store.dart';
 import 'package:broom/ui/clean_controller.dart';
@@ -35,6 +37,9 @@ class _TestPlatform implements CleanerPlatform {
   List<CleanerRule> get rules => definedRules;
 
   @override
+  String get rulesVersion => 'builtin';
+
+  @override
   Future<List<String>> resolveRoots(CleanerRule rule) async =>
       rootsByRule[rule.id] ?? const [];
 }
@@ -51,12 +56,18 @@ class _RecordingScanService extends ScanService {
   Future<ScanResult> scan({
     required List<ScanJob> jobs,
     required List<String> excludedPaths,
+    ScanOptions options = const ScanOptions(),
+    NtfsIndex? ntfsIndex,
     void Function(ScanProgress progress)? onProgress,
+    void Function(List<JunkItem> items)? onItems,
+    void Function(ScanIssue issue)? onIssue,
+    bool retainItems = true,
   }) async {
     this.jobs = jobs;
     this.excludedPaths = excludedPaths;
+    if (items.isNotEmpty) onItems?.call(items);
     return ScanResult(
-      items: items,
+      items: retainItems ? items : const [],
       scannedFiles: items.length,
       directoryErrors: 0,
       truncated: false,
@@ -131,6 +142,8 @@ void main() {
     required List<CleanerRule> rules,
     required Map<String, List<String>> rootsByRule,
     FileLockProbe? lockProbe,
+    ScanSettings Function()? scanSettings,
+    ScanResultStore? scanResultStore,
   }) {
     return CleanController(
       platform: _TestPlatform(definedRules: rules, rootsByRule: rootsByRule),
@@ -139,6 +152,8 @@ void main() {
       exclusions: exclusions,
       scanServiceFactory: () => scanner,
       lockProbe: lockProbe,
+      scanSettings: scanSettings,
+      scanResultStore: scanResultStore,
     );
   }
 
@@ -520,5 +535,86 @@ void main() {
     expect(controller.lockProbeRunning, isFalse);
     expect(controller.possiblyLockedCount, 0);
     expect(controller.selectedCount, 1);
+  });
+
+  test('builds scan jobs only for enabled categories', () async {
+    final exclusions = createStore();
+    await exclusions.ensureLoaded();
+    final devRule = createRule(id: 'dev.mock');
+    final browserRule = createRule(id: 'browser.mock');
+    final scanner = _RecordingScanService();
+    final controller = createController(
+      exclusions: exclusions,
+      scanner: scanner,
+      rules: [devRule, browserRule],
+      rootsByRule: {
+        devRule.id: [rootA.path],
+        browserRule.id: [rootB.path],
+      },
+      scanSettings: () => const ScanSettings(disabledCategoryIds: {'browser'}),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    await controller.scan();
+
+    expect(scanner.jobs, hasLength(1));
+    expect(scanner.jobs!.single.ruleId, devRule.id);
+    expect(controller.activeCategoryIds, isNot(contains('browser')));
+  });
+
+  test('persists results and restores them after restart', () async {
+    final item = JunkItem(
+      ruleId: 'test.rule',
+      rootPath: rootA.path,
+      path: p.windows.join(rootA.path, 'saved.tmp'),
+      size: 42,
+      modified: DateTime(2026, 10, 18),
+    );
+    final scanner = _RecordingScanService(items: [item]);
+    final rule = createRule();
+    final store = ScanResultStore(
+      rootDirectory: p.windows.join(temp.path, 'scan-results'),
+    );
+    final exclusions = createStore();
+    final first = createController(
+      exclusions: exclusions,
+      scanner: scanner,
+      rules: [rule],
+      rootsByRule: {
+        rule.id: [rootA.path],
+      },
+      scanResultStore: store,
+    );
+    await first.initialize();
+    await first.scan();
+
+    expect(first.phase, CleanPhase.preview);
+    expect(first.results.single.items, hasLength(1));
+    expect(await store.loadLatest(), isNotNull);
+    first.dispose();
+
+    final second = createController(
+      exclusions: exclusions,
+      scanner: _RecordingScanService(),
+      rules: [rule],
+      rootsByRule: {
+        rule.id: [rootA.path],
+      },
+      scanResultStore: store,
+    );
+    addTearDown(second.dispose);
+    await second.initialize();
+
+    expect(second.lastScanSummary, isNotNull);
+    expect(second.lastScanStale, isFalse);
+
+    await second.restoreLastScan();
+
+    expect(second.phase, CleanPhase.preview);
+    expect(second.results.single.items, hasLength(1));
+    expect(second.results.single.items.single.path, item.path);
+    expect(second.scanRestoredFromPersistence, isTrue);
+    expect(second.selectedCount, 1);
   });
 }

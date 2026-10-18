@@ -8,6 +8,7 @@ import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/platform/cleaner_platform.dart';
 import 'package:broom/core/rules/windows_rules.dart';
 import 'package:broom/core/safety/path_guard.dart';
+import 'package:broom/core/scan/ntfs_index.dart';
 import 'package:broom/core/scan/scan_service.dart';
 import 'package:broom/core/settings/exclusion_store.dart';
 import 'package:broom/core/shell/system_shell.dart';
@@ -57,6 +58,9 @@ class _FakePlatform implements CleanerPlatform {
   List<CleanerRule> get rules => windowsSafeRules;
 
   @override
+  String get rulesVersion => 'builtin';
+
+  @override
   Future<List<String>> resolveRoots(CleanerRule rule) async => const [];
 }
 
@@ -82,6 +86,9 @@ class _FixedRootsPlatform implements CleanerPlatform {
   List<CleanerRule> get rules => [rule];
 
   @override
+  String get rulesVersion => 'builtin';
+
+  @override
   Future<List<String>> resolveRoots(CleanerRule rule) async => roots;
 }
 
@@ -94,14 +101,22 @@ class _FixedScanService extends ScanService {
   Future<ScanResult> scan({
     required List<ScanJob> jobs,
     required List<String> excludedPaths,
+    ScanOptions options = const ScanOptions(),
+    NtfsIndex? ntfsIndex,
     void Function(ScanProgress progress)? onProgress,
-  }) async => ScanResult(
-    items: items,
-    scannedFiles: items.length,
-    directoryErrors: 0,
-    truncated: false,
-    cancelled: false,
-  );
+    void Function(List<JunkItem> items)? onItems,
+    void Function(ScanIssue issue)? onIssue,
+    bool retainItems = true,
+  }) async {
+    if (items.isNotEmpty) onItems?.call(items);
+    return ScanResult(
+      items: retainItems ? items : const [],
+      scannedFiles: items.length,
+      directoryErrors: 0,
+      truncated: false,
+      cancelled: false,
+    );
+  }
 }
 
 class _ReportingQuarantineService extends FakeQuarantineService {

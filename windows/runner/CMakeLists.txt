@@ -11,6 +11,8 @@ add_executable(${BINARY_NAME} WIN32
   "file_metadata_channel.cpp"
   "flutter_window.cpp"
   "main.cpp"
+  "ntfs_index_channel.cpp"
+  "scan_priority_channel.cpp"
   "system_access_channel.cpp"
   "system_shell_channel.cpp"
   "utils.cpp"

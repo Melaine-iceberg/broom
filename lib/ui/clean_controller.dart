@@ -9,6 +9,8 @@ import '../core/models/scan_models.dart';
 import '../core/platform/cleaner_platform.dart';
 import '../core/platform/file_lock_probe.dart';
 import '../core/safety/path_guard.dart';
+import '../core/scan/ntfs_index.dart';
+import '../core/scan/scan_result_store.dart';
 import '../core/scan/scan_service.dart';
 import '../core/settings/exclusion_store.dart';
 import '../l10n/broom_strings.dart';
@@ -26,6 +28,18 @@ class RuleResult {
   final int totalBytes;
 }
 
+class ScanIssueGroup {
+  const ScanIssueGroup({
+    required this.kind,
+    required this.count,
+    required this.samplePaths,
+  });
+
+  final ScanErrorKind kind;
+  final int count;
+  final List<String> samplePaths;
+}
+
 class CleanController extends ChangeNotifier {
   CleanController({
     required this.platform,
@@ -33,6 +47,9 @@ class CleanController extends ChangeNotifier {
     required this.quarantine,
     required this.exclusions,
     this.isRuleEnabled,
+    this.scanSettings,
+    this.scanResultStore,
+    this.ntfsIndex,
     ScanService Function()? scanServiceFactory,
     FileLockProbe? lockProbe,
   }) : _scanServiceFactory = scanServiceFactory ?? ScanService.new,
@@ -43,6 +60,9 @@ class CleanController extends ChangeNotifier {
   final QuarantineService quarantine;
   final ExclusionStore exclusions;
   bool Function(String ruleId)? isRuleEnabled;
+  ScanSettings Function()? scanSettings;
+  final ScanResultStore? scanResultStore;
+  final NtfsIndex? ntfsIndex;
   final ScanService Function() _scanServiceFactory;
   final FileLockProbe _lockProbe;
 
@@ -59,6 +79,19 @@ class CleanController extends ChangeNotifier {
   int _scanDirectoryErrors = 0;
   bool _scanTruncated = false;
   bool _scanStarting = false;
+  final Map<String, List<JunkItem>> _streamItemsByRule = {};
+  final List<JunkItem> _recentScanItems = [];
+  final Map<ScanErrorKind, int> _issueCounts = {};
+  final Map<ScanErrorKind, List<String>> _issueSamples = {};
+  int _liveFoundCount = 0;
+  int _liveFoundBytes = 0;
+  DateTime _lastStreamNotify = DateTime.fromMillisecondsSinceEpoch(0);
+  Future<void> _persistQueue = Future<void>.value();
+  String? _persistenceNotice;
+  StoredScanSummary? _lastScanSummary;
+  bool _restoringLastScan = false;
+  bool _scanRestoredFromPersistence = false;
+  Set<String> _activeCategoryIds = const {};
   bool _initialized = false;
   bool _exclusionsReady = false;
   String? _exclusionError;
@@ -105,6 +138,40 @@ class CleanController extends ChangeNotifier {
   String? get exclusionError => _exclusionError;
   int get scanDirectoryErrors => _scanDirectoryErrors;
   bool get scanTruncated => _scanTruncated;
+  int get liveFoundCount => _liveFoundCount;
+  int get liveFoundBytes => _liveFoundBytes;
+  List<JunkItem> get recentScanItems => List.unmodifiable(_recentScanItems);
+  Set<String> get activeCategoryIds => _activeCategoryIds;
+  Map<String, int> get liveRuleCounts => {
+    for (final entry in _streamItemsByRule.entries)
+      if (entry.value.isNotEmpty) entry.key: entry.value.length,
+  };
+  String? get scanPersistenceNotice => _persistenceNotice;
+  StoredScanSummary? get lastScanSummary => _lastScanSummary;
+  bool get restoringLastScan => _restoringLastScan;
+  bool get scanRestoredFromPersistence => _scanRestoredFromPersistence;
+
+  bool get lastScanStale {
+    final summary = _lastScanSummary;
+    if (summary == null) return false;
+    if (summary.rulesVersion != platform.rulesVersion) return true;
+    final currentIds = {for (final rule in platform.rules) rule.id};
+    return summary.ruleIds.any((id) => !currentIds.contains(id));
+  }
+
+  List<ScanIssueGroup> get scanIssueGroups {
+    final entries = _issueCounts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return [
+      for (final entry in entries)
+        ScanIssueGroup(
+          kind: entry.key,
+          count: entry.value,
+          samplePaths: List.unmodifiable(_issueSamples[entry.key] ?? const []),
+        ),
+    ];
+  }
+
   String? get notice => _notice;
   String? get error => _error;
   bool get undoBusy => _undoBusy;
@@ -208,9 +275,115 @@ class CleanController extends ChangeNotifier {
   Future<void> initialize() async {
     await _ensureExclusionsLoaded();
     await _refreshPendingSessions(notify: false);
+    await _refreshLastScanSummary(notify: false);
     _initialized = true;
     _notify();
   }
+
+  Future<void> _refreshLastScanSummary({bool notify = true}) async {
+    final store = scanResultStore;
+    if (store == null) {
+      _lastScanSummary = null;
+      if (notify) _notify();
+      return;
+    }
+    try {
+      _lastScanSummary = await store.loadLatest();
+    } catch (_) {
+      _lastScanSummary = null;
+    }
+    if (notify) _notify();
+  }
+
+  Future<void> restoreLastScan() async {
+    if (isBusy || _restoringLastScan) return;
+    final store = scanResultStore;
+    final summary = _lastScanSummary;
+    if (store == null || summary == null) {
+      _error = tr('没有可恢复的上次扫描结果。');
+      _notify();
+      return;
+    }
+    _restoringLastScan = true;
+    _error = null;
+    _notice = null;
+    _persistenceNotice = null;
+    _notify();
+    try {
+      final data = await store.load(summary);
+      if (data == null) {
+        _lastScanSummary = null;
+        _error = tr('上次扫描结果已不可用，请重新扫描。');
+        _notify();
+        return;
+      }
+      final settings = scanSettings?.call() ?? const ScanSettings();
+      final allowedRules = {
+        for (final rule in platform.rules)
+          if ((isRuleEnabled?.call(rule.id) ?? true) &&
+              settings.isCategoryEnabled(ruleCategoryKey(rule)))
+            rule.id,
+      };
+      final restoredItems = [
+        for (final item in data.items)
+          if (allowedRules.contains(item.ruleId)) item,
+      ];
+      final filteredCount = data.items.length - restoredItems.length;
+      _resetScanStreamState();
+      _resetSelection();
+      _resetLockProbeState();
+      _results = _groupResults(restoredItems);
+      _resetSelection();
+      _selectDefaultItems(notify: false);
+      _liveFoundCount = restoredItems.length;
+      _liveFoundBytes = restoredItems.fold(
+        0,
+        (total, item) => total + item.size,
+      );
+      _scanDirectoryErrors = summary.issueCount;
+      _issueCounts
+        ..clear()
+        ..addAll(summary.errorCounts);
+      _issueSamples.clear();
+      _scanTruncated = summary.truncated || summary.persistenceLimited;
+      _scanRestoredFromPersistence = true;
+      _lastReport = null;
+      _cleanProgress = null;
+      _phase = CleanPhase.preview;
+      _notice = restoredItems.isEmpty
+          ? tr('已恢复上次扫描结果：按当前规则与类别没有可清理的内容。')
+          : trf('已恢复 {time} 的扫描结果，清理前会重新校验路径。', {
+              'time': _formatRestoreTime(summary.completedAt),
+            });
+      if (filteredCount > 0) {
+        _notice =
+            '${_notice!} ${trf('已按当前规则与类别过滤 {count} 项。', {'count': filteredCount})}';
+      }
+      if (lastScanStale) {
+        _notice = '${_notice!} ${tr('规则或内置目录已变化，建议重新扫描。')}';
+      }
+      if (summary.persistenceLimited) {
+        _persistenceNotice = tr('上次扫描结果超出磁盘保护上限，持久化内容可能不完整。');
+      }
+      _notify();
+      _startLockProbe();
+    } catch (error) {
+      _error = trf('无法恢复上次扫描结果：{error}', {'error': error});
+      _notify();
+    } finally {
+      _restoringLastScan = false;
+      _notify();
+    }
+  }
+
+  String _formatRestoreTime(DateTime time) {
+    final local = time.toLocal();
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${local.year}-${two(local.month)}-${two(local.day)} '
+        '${two(local.hour)}:${two(local.minute)}';
+  }
+
+  Future<void> refreshLastScanSummary() => _refreshLastScanSummary();
 
   Future<void> scan() async {
     if (isBusy || _scanStarting) return;
@@ -225,6 +398,8 @@ class CleanController extends ChangeNotifier {
 
       _notice = null;
       _error = null;
+      _persistenceNotice = null;
+      _scanRestoredFromPersistence = false;
       _phase = CleanPhase.scanning;
       _scanProgress = ScanProgress(
         jobIndex: 0,
@@ -237,6 +412,7 @@ class CleanController extends ChangeNotifier {
       _results = const [];
       _resetSelection();
       _resetLockProbeState();
+      _resetScanStreamState();
       _scanDirectoryErrors = 0;
       _scanTruncated = false;
       _lastReport = null;
@@ -245,6 +421,8 @@ class CleanController extends ChangeNotifier {
 
       final service = _scanServiceFactory();
       _scanService = service;
+      ScanResultWriter? writer;
+      var writerFailed = false;
 
       try {
         final jobs = await _buildScanJobs();
@@ -262,17 +440,46 @@ class CleanController extends ChangeNotifier {
           ?platform.quarantineRoot,
           ...guard.protectedRoots,
         ];
+        final store = scanResultStore;
+        if (store != null) {
+          try {
+            writer = await store.begin(
+              ruleIds: [for (final job in jobs) job.ruleId],
+              rulesVersion: platform.rulesVersion,
+            );
+          } catch (error) {
+            writerFailed = true;
+            _persistenceNotice = trf('无法保存本次扫描结果：{error}', {'error': error});
+          }
+        }
 
+        final settings = scanSettings?.call() ?? const ScanSettings();
         final result = await service.scan(
           jobs: jobs,
           excludedPaths: excludedPaths,
+          options: settings.toOptions(),
+          ntfsIndex: ntfsIndex,
+          retainItems: false,
           onProgress: (progress) {
             _scanProgress = progress;
+            _scanDirectoryErrors = progress.errorCount;
             _notify();
+          },
+          onItems: (items) {
+            _acceptScanBatch(items);
+            if (writer != null && !writerFailed) {
+              _queuePersist(writer, items);
+            }
+          },
+          onIssue: (issue) {
+            _acceptScanIssue(issue);
           },
         );
 
+        await _persistQueue;
+
         if (result.cancelled) {
+          await _abortWriter(writer);
           _phase = CleanPhase.idle;
           _notice = tr('扫描已取消。');
           _notify();
@@ -281,7 +488,7 @@ class CleanController extends ChangeNotifier {
 
         _scanDirectoryErrors = result.directoryErrors;
         _scanTruncated = result.truncated;
-        _results = _groupResults(result.items);
+        _results = _groupResultsFromStream();
         _resetSelection();
         _selectDefaultItems(notify: false);
         _phase = CleanPhase.preview;
@@ -289,8 +496,29 @@ class CleanController extends ChangeNotifier {
           _notice = tr('没有发现可清理的内容。');
         }
         _notify();
+
+        if (writer != null) {
+          try {
+            final summary = await writer.complete(
+              scannedFiles: result.scannedFiles,
+              foundFiles: _liveFoundCount,
+              foundBytes: _liveFoundBytes,
+              issueCount: _scanDirectoryErrors,
+              errorCounts: Map<ScanErrorKind, int>.of(_issueCounts),
+              truncated: result.truncated,
+            );
+            _lastScanSummary = summary;
+            if (summary.persistenceLimited) {
+              _persistenceNotice = tr('扫描结果超出磁盘保护上限，持久化内容可能不完整。');
+            }
+          } catch (error) {
+            _persistenceNotice = trf('无法保存本次扫描结果：{error}', {'error': error});
+          }
+        }
+        _notify();
         _startLockProbe();
       } catch (error) {
+        await _abortWriter(writer);
         _phase = CleanPhase.idle;
         _error = trf('扫描失败：{error}', {'error': error});
         _notify();
@@ -301,6 +529,82 @@ class CleanController extends ChangeNotifier {
     } finally {
       _scanStarting = false;
     }
+  }
+
+  void _resetScanStreamState() {
+    _streamItemsByRule.clear();
+    _recentScanItems.clear();
+    _issueCounts.clear();
+    _issueSamples.clear();
+    _liveFoundCount = 0;
+    _liveFoundBytes = 0;
+    _lastStreamNotify = DateTime.fromMillisecondsSinceEpoch(0);
+    _persistQueue = Future<void>.value();
+  }
+
+  void _acceptScanBatch(List<JunkItem> items) {
+    if (items.isEmpty) return;
+    for (final item in items) {
+      _streamItemsByRule.putIfAbsent(item.ruleId, () => <JunkItem>[]).add(item);
+      _liveFoundCount++;
+      _liveFoundBytes += item.size;
+    }
+    _recentScanItems.insertAll(0, items.take(5));
+    if (_recentScanItems.length > 8) {
+      _recentScanItems.removeRange(8, _recentScanItems.length);
+    }
+    final now = DateTime.now();
+    if (now.difference(_lastStreamNotify) >=
+        const Duration(milliseconds: 120)) {
+      _lastStreamNotify = now;
+      _notify();
+    }
+  }
+
+  void _acceptScanIssue(ScanIssue issue) {
+    _issueCounts[issue.kind] = (_issueCounts[issue.kind] ?? 0) + 1;
+    final samples = _issueSamples.putIfAbsent(issue.kind, () => <String>[]);
+    if (!samples.contains(issue.path) && samples.length < 5) {
+      samples.add(issue.path);
+    }
+    _scanDirectoryErrors = _issueCounts.values.fold(0, (a, b) => a + b);
+    final now = DateTime.now();
+    if (now.difference(_lastStreamNotify) >=
+        const Duration(milliseconds: 120)) {
+      _lastStreamNotify = now;
+      _notify();
+    }
+  }
+
+  void _queuePersist(ScanResultWriter writer, List<JunkItem> items) {
+    _persistQueue = _persistQueue.then((_) async {
+      try {
+        await writer.addItems(items);
+      } catch (error) {
+        _persistenceNotice = trf('无法保存本次扫描结果：{error}', {'error': error});
+      }
+    });
+  }
+
+  Future<void> _abortWriter(ScanResultWriter? writer) async {
+    if (writer == null) return;
+    try {
+      await _persistQueue;
+    } catch (_) {
+      // Individual writes report their own errors.
+    }
+    await writer.abort();
+  }
+
+  List<RuleResult> _groupResultsFromStream() {
+    final results = <RuleResult>[];
+    for (final rule in platform.rules) {
+      final items = _streamItemsByRule[rule.id];
+      if (items == null || items.isEmpty) continue;
+      items.sort((a, b) => b.size.compareTo(a.size));
+      results.add(RuleResult(rule: rule, items: items));
+    }
+    return results;
   }
 
   void cancelScan() {
@@ -511,10 +815,14 @@ class CleanController extends ChangeNotifier {
     _phase = CleanPhase.idle;
     _results = const [];
     _resetSelection();
+    _resetScanStreamState();
     _lastReport = null;
     _cleanProgress = null;
     _notice = null;
     _error = null;
+    _persistenceNotice = null;
+    _scanRestoredFromPersistence = false;
+    unawaited(_refreshLastScanSummary(notify: false));
     _notify();
   }
 
@@ -577,8 +885,17 @@ class CleanController extends ChangeNotifier {
   Future<List<ScanJob>> _buildScanJobs() async {
     final jobs = <ScanJob>[];
     final seenRoots = <String>{};
+    final settings = scanSettings?.call() ?? const ScanSettings();
+    _activeCategoryIds = {
+      for (final rule in platform.rules)
+        if ((isRuleEnabled?.call(rule.id) ?? true) &&
+            settings.isCategoryEnabled(ruleCategoryKey(rule)))
+          ruleCategoryKey(rule),
+    };
     for (final rule in platform.rules.where(
-      (rule) => isRuleEnabled?.call(rule.id) ?? true,
+      (rule) =>
+          (isRuleEnabled?.call(rule.id) ?? true) &&
+          settings.isCategoryEnabled(ruleCategoryKey(rule)),
     )) {
       final resolvedRoots = await platform.resolveRoots(rule);
       final scanRoots = <String>[];

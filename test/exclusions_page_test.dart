@@ -30,6 +30,9 @@ class _PagePlatform implements CleanerPlatform {
   List<CleanerRule> get rules => const [];
 
   @override
+  String get rulesVersion => 'builtin';
+
+  @override
   Future<List<String>> resolveRoots(CleanerRule rule) async => const [];
 }
 
