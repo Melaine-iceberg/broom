@@ -88,8 +88,9 @@ class JunkScanner {
           if (_isExcluded(directoryKey)) continue;
 
           try {
-            await for (final entity
-                in Directory(current.directory).list(followLinks: false)) {
+            await for (final entity in Directory(
+              current.directory,
+            ).list(followLinks: false)) {
               if (isCancelled?.call() ?? false) {
                 cancelled = true;
                 break scanLoop;
@@ -99,9 +100,7 @@ class JunkScanner {
               if (_isExcluded(entityKey)) continue;
 
               if (entity is Directory) {
-                pending.add(
-                  (directory: entity.path, root: current.root),
-                );
+                pending.add((directory: entity.path, root: current.root));
                 continue;
               }
               if (entity is! File) continue;

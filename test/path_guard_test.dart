@@ -25,8 +25,10 @@ void main() {
     });
 
     test('does not confuse a sibling prefix with a child path', () {
-      expect(guard.isWithin(r'C:\Users\Alice\Cache', r'C:\Users\Alice\Cache2\x'),
-          isFalse);
+      expect(
+        guard.isWithin(r'C:\Users\Alice\Cache', r'C:\Users\Alice\Cache2\x'),
+        isFalse,
+      );
       expect(
         guard.isWithin(r'C:\Users\Alice\Cache', r'c:\users\alice\cache\sub\x'),
         isTrue,

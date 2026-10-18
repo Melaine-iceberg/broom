@@ -85,11 +85,7 @@ class ScanService {
     _exitSubscription = exits.listen((_) {
       Future<void>.delayed(const Duration(milliseconds: 80), () {
         if (!_finished) {
-          _finish(
-            error: StateError(
-              _cancelRequested ? '扫描已取消' : '扫描进程意外退出',
-            ),
-          );
+          _finish(error: StateError(_cancelRequested ? '扫描已取消' : '扫描进程意外退出'));
         }
       });
     });

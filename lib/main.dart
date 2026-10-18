@@ -5,12 +5,17 @@ import 'package:path/path.dart' as p;
 
 import 'app.dart';
 import 'core/clean/quarantine_service.dart';
+import 'core/clean/system_cache_cleaner.dart';
+import 'core/clean/system_services.dart';
 import 'core/platform/cleaner_platform.dart';
+import 'core/platform/system_access.dart';
+import 'core/platform/system_cache_platform.dart';
 import 'core/safety/path_guard.dart';
 import 'platform/window_chrome.dart';
 import 'ui/clean_controller.dart';
+import 'ui/system_cache_controller.dart';
 
-void main() {
+void main(List<String> args) {
   WidgetsFlutterBinding.ensureInitialized();
 
   final platform = createCleanerPlatform();
@@ -45,11 +50,21 @@ void main() {
   );
   unawaited(controller.initialize());
 
+  final systemAccess = createSystemAccess();
+  final systemCacheController = SystemCacheController(
+    platform: createSystemCachePlatform(access: systemAccess),
+    access: systemAccess,
+    cleaner: FileSystemCacheCleaner(services: WindowsServiceManager()),
+    quarantineRoot: quarantineRoot,
+  );
+
   _runBroom(
     BroomApp(
       controller: controller,
+      systemCacheController: systemCacheController,
       analysisInitialDirectory: _downloadsDirectory(platform.environment),
       analysisExcludedPaths: [quarantineRoot],
+      startInSystemCache: args.contains('--system-cache'),
     ),
   );
 }

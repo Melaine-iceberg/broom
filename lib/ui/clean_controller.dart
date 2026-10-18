@@ -12,7 +12,7 @@ enum CleanPhase { idle, scanning, preview, cleaning, done }
 
 class RuleResult {
   RuleResult({required this.rule, required this.items})
-      : totalBytes = items.fold(0, (total, item) => total + item.size);
+    : totalBytes = items.fold(0, (total, item) => total + item.size);
 
   final CleanerRule rule;
   final List<JunkItem> items;
@@ -76,9 +76,9 @@ class CleanController extends ChangeNotifier {
       selectedItems.fold(0, (total, item) => total + item.size);
 
   List<JunkItem> get selectedItems => [
-        for (final result in _results)
-          if (_selectedRuleIds.contains(result.rule.id)) ...result.items,
-      ];
+    for (final result in _results)
+      if (_selectedRuleIds.contains(result.rule.id)) ...result.items,
+  ];
 
   bool isRuleSelected(String ruleId) => _selectedRuleIds.contains(ruleId);
 
@@ -153,9 +153,7 @@ class CleanController extends ChangeNotifier {
       _scanDirectoryErrors = result.directoryErrors;
       _scanTruncated = result.truncated;
       _results = _groupResults(result.items);
-      _selectedRuleIds = {
-        for (final result in _results) result.rule.id,
-      };
+      _selectedRuleIds = {for (final result in _results) result.rule.id};
       _phase = CleanPhase.preview;
       if (_results.isEmpty) {
         _notice = '没有发现可清理的内容。';
@@ -186,9 +184,7 @@ class CleanController extends ChangeNotifier {
   }
 
   void selectAllRules() {
-    _selectedRuleIds = {
-      for (final result in _results) result.rule.id,
-    };
+    _selectedRuleIds = {for (final result in _results) result.rule.id};
     _notify();
   }
 
@@ -288,8 +284,9 @@ class CleanController extends ChangeNotifier {
   Future<List<ScanJob>> _buildScanJobs() async {
     final jobs = <ScanJob>[];
     final seenRoots = <String>{};
-    for (final rule
-        in platform.rules.where((rule) => rule.risk == CleanRisk.safe)) {
+    for (final rule in platform.rules.where(
+      (rule) => rule.risk == CleanRisk.safe,
+    )) {
       final resolvedRoots = await platform.resolveRoots(rule);
       final safeRoots = <String>[];
       for (final root in resolvedRoots) {

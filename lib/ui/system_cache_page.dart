@@ -1,0 +1,1381 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+import '../core/models/clean_models.dart';
+import '../core/models/cleaner_rule.dart';
+import '../core/models/system_models.dart';
+import '../platform/window_chrome.dart';
+import 'analysis_widgets.dart';
+import 'format.dart';
+import 'system_cache_confirm_dialog.dart';
+import 'system_cache_controller.dart';
+
+class SystemCachePage extends StatefulWidget {
+  const SystemCachePage({super.key, required this.controller});
+
+  final SystemCacheController controller;
+
+  @override
+  State<SystemCachePage> createState() => _SystemCachePageState();
+}
+
+class _SystemCachePageState extends State<SystemCachePage> {
+  SystemCacheController get controller => widget.controller;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(controller.checkAccess());
+  }
+
+  Future<void> _elevate() async {
+    final launched = await controller.relaunchElevated();
+    if (!launched || !mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('已启动管理员窗口，正在切换…')));
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    if (!mounted) return;
+    await WindowChrome.instance.close();
+  }
+
+  Future<void> _confirmClean() async {
+    if (controller.selectedCount == 0) return;
+    final confirmed = await showSystemCacheConfirmDialog(
+      context,
+      fileCount: controller.selectedCount,
+      bytes: controller.selectedBytes,
+      services: controller.selectedServices,
+    );
+    if (confirmed && mounted) {
+      await controller.cleanSelected();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        return Scaffold(
+          appBar: AppBar(
+            leading: IconButton(
+              onPressed: () => Navigator.of(context).pop(),
+              icon: const Icon(Icons.arrow_back_rounded),
+              tooltip: '返回',
+            ),
+            toolbarHeight: 68,
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('系统级缓存'),
+                const SizedBox(height: 1),
+                Text(
+                  'Windows 更新与传递优化 · 需管理员权限',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: 20),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (controller.isElevated) ...[
+                      const _AdminChip(),
+                      const SizedBox(width: 8),
+                    ],
+                    const RiskBadge(risk: CleanRisk.review),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          body: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 900),
+              child: _buildBody(context),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
+    if (controller.checkingAccess) {
+      return const _AccessLoading();
+    }
+    if (!controller.isElevated) {
+      return _AdminGate(controller: controller, onElevate: _elevate);
+    }
+
+    return switch (controller.phase) {
+      SystemCachePhase.idle => _IdleView(
+        controller: controller,
+        onScan: controller.scan,
+      ),
+      SystemCachePhase.scanning => _ScanningView(controller: controller),
+      SystemCachePhase.preview => _PreviewView(
+        controller: controller,
+        onCleanRequested: _confirmClean,
+      ),
+      SystemCachePhase.cleaning => _CleaningView(controller: controller),
+      SystemCachePhase.done => _DoneView(controller: controller),
+    };
+  }
+}
+
+class _AccessLoading extends StatelessWidget {
+  const _AccessLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const CircularProgressIndicator(strokeWidth: 3),
+          const SizedBox(height: 16),
+          Text(
+            '正在检查管理员权限…',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AdminGate extends StatelessWidget {
+  const _AdminGate({required this.controller, required this.onElevate});
+
+  final SystemCacheController controller;
+  final Future<void> Function() onElevate;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(28, 8, 28, 28),
+      children: [
+        if (controller.error case final error?) ...[
+          AnalysisBanner(
+            message: error,
+            isError: true,
+            onClose: controller.clearError,
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (controller.notice case final notice?) ...[
+          AnalysisBanner(message: notice, onClose: controller.clearNotice),
+          const SizedBox(height: 12),
+        ],
+        const _ReviewWarning(),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.fromLTRB(28, 30, 28, 24),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: scheme.outlineVariant.withValues(alpha: 0.55),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: scheme.shadow.withValues(alpha: 0.035),
+                blurRadius: 24,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: scheme.tertiaryContainer.withValues(alpha: 0.5),
+                ),
+                child: Icon(
+                  Icons.admin_panel_settings_outlined,
+                  size: 34,
+                  color: scheme.onTertiaryContainer,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '需要管理员权限',
+                style: theme.textTheme.titleLarge,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Windows 更新缓存位于系统目录中。Broom 会通过 Windows UAC '
+                '以管理员身份重新启动，只在新的管理员窗口中进行扫描和清理。',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  height: 1.55,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '重启后不会自动扫描或删除任何内容。',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              if (controller.accessError case final accessError?) ...[
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: scheme.errorContainer.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    accessError,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onErrorContainer,
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 20),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: controller.relaunching
+                        ? null
+                        : () => controller.checkAccess(),
+                    icon: const Icon(Icons.refresh_rounded, size: 17),
+                    label: const Text('重新检测'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: controller.relaunching ? null : onElevate,
+                    icon: controller.relaunching
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.verified_user_outlined, size: 19),
+                    label: Text(
+                      controller.relaunching ? '正在请求授权…' : '以管理员身份重新启动',
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        _RuleOverview(rules: controller.platform.rules),
+        const SizedBox(height: 16),
+        const _BoundaryNote(),
+      ],
+    );
+  }
+}
+
+class _AdminChip extends StatelessWidget {
+  const _AdminChip();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.16)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.verified_user_outlined,
+            size: 12,
+            color: scheme.onPrimaryContainer,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '管理员',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: scheme.onPrimaryContainer,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReviewWarning extends StatelessWidget {
+  const _ReviewWarning();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(15, 13, 15, 13),
+      decoration: BoxDecoration(
+        color: scheme.tertiaryContainer.withValues(alpha: 0.38),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scheme.tertiary.withValues(alpha: 0.16)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.warning_amber_rounded,
+            size: 19,
+            color: scheme.onTertiaryContainer,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '系统级缓存属于 Review 级操作：被清理的缓存会永久删除，'
+              '不会进入 Broom 隔离区，也没有撤销入口。'
+              '如有正在下载或安装的 Windows 更新，建议完成后再清理。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onTertiaryContainer,
+                height: 1.55,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RuleOverview extends StatelessWidget {
+  const _RuleOverview({required this.rules});
+
+  final List<SystemCacheRule> rules;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.travel_explore_rounded,
+                size: 18,
+                color: scheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Text('可清理的系统缓存', style: theme.textTheme.titleSmall),
+            ],
+          ),
+          const SizedBox(height: 6),
+          for (final rule in rules)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 7),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    _ruleIcon(rule.id),
+                    size: 16,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          rule.title,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          rule.description,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                            height: 1.45,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BoundaryNote extends StatelessWidget {
+  const _BoundaryNote();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.45),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.verified_user_outlined,
+                size: 17,
+                color: scheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Text('Broom 的处理边界', style: theme.textTheme.titleSmall),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Broom 只使用 Windows 原生 API 定位缓存目录，不接受任意路径输入，'
+            '并且只删除这些目录内的普通文件。更新历史、系统设置、'
+            'Windows.old 与用户文档不在处理范围内。',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+              height: 1.6,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _IdleView extends StatelessWidget {
+  const _IdleView({required this.controller, required this.onScan});
+
+  final SystemCacheController controller;
+  final VoidCallback onScan;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(28, 8, 28, 28),
+      children: [
+        if (controller.error case final error?) ...[
+          AnalysisBanner(
+            message: error,
+            isError: true,
+            onClose: controller.clearError,
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (controller.notice case final notice?) ...[
+          AnalysisBanner(message: notice, onClose: controller.clearNotice),
+          const SizedBox(height: 12),
+        ],
+        const _ReviewWarning(),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.fromLTRB(26, 26, 26, 24),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: scheme.outlineVariant.withValues(alpha: 0.55),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: scheme.primaryContainer.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(
+                      Icons.cleaning_services_rounded,
+                      size: 23,
+                      color: scheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('系统级缓存', style: theme.textTheme.titleMedium),
+                        const SizedBox(height: 2),
+                        Text(
+                          '扫描 Windows 更新与传递优化的下载缓存，'
+                          '确认后永久删除以释放磁盘空间。',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                            height: 1.45,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              for (final rule in controller.platform.rules) ...[
+                _SystemRuleCard(rule: rule),
+                const SizedBox(height: 10),
+              ],
+              const SizedBox(height: 6),
+              FilledButton.icon(
+                onPressed: controller.isBusy ? null : onScan,
+                icon: const Icon(Icons.search_rounded, size: 19),
+                label: const Text('扫描系统缓存'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        const _BoundaryNote(),
+      ],
+    );
+  }
+}
+
+class _SystemRuleCard extends StatelessWidget {
+  const _SystemRuleCard({
+    required this.rule,
+    this.result,
+    this.selected = false,
+    this.onToggle,
+  });
+
+  final SystemCacheRule rule;
+  final SystemRuleResult? result;
+  final bool selected;
+  final VoidCallback? onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final selectable = onToggle != null;
+
+    return Material(
+      color: selected
+          ? scheme.primaryContainer.withValues(
+              alpha: theme.brightness == Brightness.dark ? 0.24 : 0.3,
+            )
+          : scheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: selected
+              ? scheme.primary.withValues(alpha: 0.18)
+              : scheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onToggle,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 13, 14, 13),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (selectable)
+                Checkbox(
+                  value: selected,
+                  onChanged: (_) => onToggle?.call(),
+                  visualDensity: VisualDensity.compact,
+                ),
+              Container(
+                margin: const EdgeInsets.only(top: 2, right: 12),
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: scheme.surface.withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(
+                  _ruleIcon(rule.id),
+                  size: 19,
+                  color: scheme.primary,
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            rule.title,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        if (result != null) ...[
+                          const SizedBox(width: 10),
+                          Text(
+                            formatBytes(result!.totalBytes),
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      result == null
+                          ? rule.description
+                          : '${formatCount(result!.items.length)} 个文件 · '
+                                '${rule.description}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        height: 1.45,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    _PathLine(
+                      path: result != null && result!.roots.isNotEmpty
+                          ? result!.roots.join(' · ')
+                          : rule.displayPath,
+                    ),
+                    if (rule.note case final note?) ...[
+                      const SizedBox(height: 5),
+                      Text(
+                        note,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant.withValues(
+                            alpha: 0.85,
+                          ),
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PathLine extends StatelessWidget {
+  const _PathLine({required this.path});
+
+  final String path;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Row(
+      children: [
+        Icon(
+          Icons.folder_outlined,
+          size: 13,
+          color: scheme.onSurfaceVariant.withValues(alpha: 0.85),
+        ),
+        const SizedBox(width: 5),
+        Expanded(
+          child: Tooltip(
+            message: path,
+            child: Text(
+              path,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant.withValues(alpha: 0.9),
+                fontFamily: 'Consolas',
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ScanningView extends StatelessWidget {
+  const _ScanningView({required this.controller});
+
+  final SystemCacheController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = controller.scanProgress;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(28, 8, 28, 28),
+      children: [
+        AnalysisProgressCard(
+          icon: Icons.admin_panel_settings_outlined,
+          title: '正在扫描系统缓存',
+          description: controller.scanningRuleTitle == null
+              ? '正在准备系统缓存目录…'
+              : '正在读取 ${controller.scanningRuleTitle}…',
+          stats: [
+            AnalysisProgressStat(
+              label: '已检查文件',
+              value: formatCount(progress?.scannedFiles ?? 0),
+            ),
+            AnalysisProgressStat(
+              label: '发现文件',
+              value: formatCount(progress?.foundFiles ?? 0),
+            ),
+            AnalysisProgressStat(
+              label: '已找到',
+              value: formatBytes(progress?.foundBytes ?? 0),
+            ),
+          ],
+          onCancel: controller.cancelScan,
+        ),
+      ],
+    );
+  }
+}
+
+class _PreviewView extends StatelessWidget {
+  const _PreviewView({
+    required this.controller,
+    required this.onCleanRequested,
+  });
+
+  final SystemCacheController controller;
+  final VoidCallback onCleanRequested;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final totalItems = controller.results.fold<int>(
+      0,
+      (total, result) => total + result.items.length,
+    );
+    final totalBytes = controller.results.fold<int>(
+      0,
+      (total, result) => total + result.totalBytes,
+    );
+    final allSelected =
+        controller.results.isNotEmpty &&
+        controller.results.every(
+          (result) => controller.isRuleSelected(result.rule.id),
+        );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(28, 8, 28, 8),
+            children: [
+              if (controller.error case final error?) ...[
+                AnalysisBanner(
+                  message: error,
+                  isError: true,
+                  onClose: controller.clearError,
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (controller.notice case final notice?) ...[
+                AnalysisBanner(
+                  message: notice,
+                  onClose: controller.clearNotice,
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (controller.scanDirectoryErrors > 0) ...[
+                AnalysisBanner(
+                  message: '有 ${controller.scanDirectoryErrors} 个目录无法读取，已自动跳过。',
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (controller.scanTruncated) ...[
+                const AnalysisBanner(message: '文件数量超过单次扫描上限，预览与清理仅包含已找到的部分。'),
+                const SizedBox(height: 12),
+              ],
+              const _ReviewWarning(),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.fromLTRB(22, 20, 22, 14),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: scheme.outlineVariant.withValues(alpha: 0.55),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('扫描结果', style: theme.textTheme.titleLarge),
+                              const SizedBox(height: 2),
+                              Text(
+                                controller.results.isEmpty
+                                    ? '没有发现可清理的系统缓存'
+                                    : '发现 ${formatCount(totalItems)} 个文件 · '
+                                          '${formatBytes(totalBytes)}。'
+                                          '默认不勾选，请选择要永久删除的内容。',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        OutlinedButton.icon(
+                          onPressed: controller.scan,
+                          icon: const Icon(Icons.refresh_rounded, size: 17),
+                          label: const Text('重新扫描'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    if (controller.results.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 26),
+                        child: Center(
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.check_circle_outline_rounded,
+                                size: 40,
+                                color: scheme.primary,
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                '系统缓存看起来很干净',
+                                style: theme.textTheme.titleSmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      for (final result in controller.results)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _SystemRuleCard(
+                            rule: result.rule,
+                            result: result,
+                            selected: controller.isRuleSelected(result.rule.id),
+                            onToggle: () =>
+                                controller.toggleRule(result.rule.id),
+                          ),
+                        ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const _BoundaryNote(),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(28, 6, 28, 28),
+          child: _ActionBar(
+            controller: controller,
+            allSelected: allSelected,
+            onCleanRequested: onCleanRequested,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ActionBar extends StatelessWidget {
+  const _ActionBar({
+    required this.controller,
+    required this.allSelected,
+    required this.onCleanRequested,
+  });
+
+  final SystemCacheController controller;
+  final bool allSelected;
+  final VoidCallback onCleanRequested;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.55),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '已选择 ${formatCount(controller.selectedCount)} 项',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  '将永久删除 ${formatBytes(controller.selectedBytes)}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: allSelected
+                ? controller.clearRuleSelection
+                : controller.selectAllRules,
+            child: Text(allSelected ? '取消全选' : '全选'),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.icon(
+            onPressed: controller.selectedCount == 0 ? null : onCleanRequested,
+            style: FilledButton.styleFrom(
+              backgroundColor: scheme.error,
+              foregroundColor: scheme.onError,
+              disabledBackgroundColor: scheme.error.withValues(alpha: 0.12),
+            ),
+            icon: const Icon(Icons.delete_forever_rounded, size: 18),
+            label: Text('永久删除 ${formatCount(controller.selectedCount)} 项'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CleaningView extends StatelessWidget {
+  const _CleaningView({required this.controller});
+
+  final SystemCacheController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final progress = controller.cleanProgress;
+    final stage = controller.cleanStage;
+    final total = progress?.total ?? 0;
+    final processed = progress?.processed ?? 0;
+    final stageLabel = switch (stage) {
+      SystemCleanStage.stoppingServices => '正在临时停止 Windows 服务…',
+      SystemCleanStage.restartingServices => '正在恢复 Windows 服务…',
+      SystemCleanStage.deleting => '正在永久删除系统缓存…',
+      null => '正在清理系统缓存…',
+    };
+    final description = switch (stage) {
+      SystemCleanStage.stoppingServices =>
+        '停止 Windows Update、BITS 或传递优化服务，避免缓存文件被占用。',
+      SystemCleanStage.restartingServices => '删除已完成，正在把刚才停止的服务恢复运行。',
+      SystemCleanStage.deleting => '删除的系统缓存不会进入隔离区，也无法撤销。',
+      null => '请稍候…',
+    };
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(28, 8, 28, 28),
+      children: [
+        AnalysisProgressCard(
+          icon: Icons.delete_forever_rounded,
+          title: controller.cleanCancelRequested ? '正在停止清理…' : stageLabel,
+          description: description,
+          progress: stage == SystemCleanStage.deleting && total > 0
+              ? processed / total
+              : null,
+          stats: [
+            AnalysisProgressStat(label: '已处理', value: '$processed / $total'),
+            AnalysisProgressStat(
+              label: '已删除文件',
+              value: formatCount(progress?.deleted ?? 0),
+            ),
+            AnalysisProgressStat(
+              label: '已释放',
+              value: formatBytes(progress?.deletedBytes ?? 0),
+            ),
+          ],
+          currentPath: progress?.currentPath,
+          onCancel: stage == SystemCleanStage.deleting
+              ? controller.cancelCleaning
+              : null,
+          cancelRequested: controller.cleanCancelRequested,
+        ),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: scheme.tertiaryContainer.withValues(alpha: 0.32),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: scheme.tertiary.withValues(alpha: 0.14)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.info_outline_rounded,
+                size: 18,
+                color: scheme.onTertiaryContainer,
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  '请保持此窗口打开，直到服务恢复完成。'
+                  '即使中止清理，Broom 也会尝试重新启动刚才停止的服务。',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onTertiaryContainer,
+                    height: 1.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DoneView extends StatelessWidget {
+  const _DoneView({required this.controller});
+
+  final SystemCacheController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final report = controller.lastReport;
+    if (report == null) return const SizedBox.shrink();
+
+    final title = report.cancelled
+        ? '清理已停止'
+        : report.deletedCount == 0
+        ? '没有文件被删除'
+        : '清理完成';
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(28, 8, 28, 28),
+      children: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(30, 30, 30, 24),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: scheme.outlineVariant.withValues(alpha: 0.55),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: report.cancelled
+                        ? scheme.tertiaryContainer.withValues(alpha: 0.5)
+                        : scheme.primaryContainer.withValues(alpha: 0.55),
+                  ),
+                  child: Icon(
+                    report.cancelled
+                        ? Icons.pause_rounded
+                        : Icons.check_rounded,
+                    size: 34,
+                    color: report.cancelled
+                        ? scheme.onTertiaryContainer
+                        : scheme.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleLarge,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                report.cancelled
+                    ? '已停止继续删除，相关 Windows 服务已尝试恢复运行。'
+                    : '系统缓存已永久删除，不会进入隔离区。',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 22),
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest.withValues(alpha: 0.32),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _DoneStat(
+                        label: '已释放',
+                        value: formatBytes(report.deletedBytes),
+                      ),
+                    ),
+                    Container(
+                      width: 1,
+                      height: 34,
+                      color: scheme.outlineVariant.withValues(alpha: 0.5),
+                    ),
+                    Expanded(
+                      child: _DoneStat(
+                        label: '永久删除',
+                        value: '${formatCount(report.deletedCount)} 个文件',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (report.failureCount > 0) ...[
+                const SizedBox(height: 14),
+                _IssuePanel(
+                  icon: Icons.warning_amber_rounded,
+                  title: '${report.failureCount} 个文件未能删除',
+                  body: '通常是因为文件正被系统占用。可以关闭相关窗口或稍后重试。',
+                  failures: report.failures,
+                  isServiceIssue: false,
+                ),
+              ],
+              if (report.serviceIssues.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                _IssuePanel(
+                  icon: Icons.sync_problem_rounded,
+                  title: '部分 Windows 服务未能恢复',
+                  body: '请手动启动对应服务，或重启 Windows 以恢复。问题详情：',
+                  failures: [
+                    for (final issue in report.serviceIssues)
+                      CleanFailure(path: 'Windows 服务', reason: issue),
+                  ],
+                  isServiceIssue: true,
+                ),
+              ],
+              const SizedBox(height: 22),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: controller.scan,
+                    icon: const Icon(Icons.refresh_rounded, size: 17),
+                    label: const Text('重新扫描'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: () {
+                      controller.returnToIdle();
+                      Navigator.of(context).pop();
+                    },
+                    icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                    label: const Text('返回首页'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _IssuePanel extends StatelessWidget {
+  const _IssuePanel({
+    required this.icon,
+    required this.title,
+    required this.body,
+    required this.failures,
+    required this.isServiceIssue,
+  });
+
+  final IconData icon;
+  final String title;
+  final String body;
+  final List<CleanFailure> failures;
+  final bool isServiceIssue;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: scheme.tertiaryContainer.withValues(alpha: 0.32),
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: scheme.tertiary.withValues(alpha: 0.14)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 17, color: scheme.onTertiaryContainer),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onTertiaryContainer,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            body,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: scheme.onTertiaryContainer.withValues(alpha: 0.9),
+              height: 1.5,
+            ),
+          ),
+          for (final failure in failures.take(3)) ...[
+            const SizedBox(height: 5),
+            Text(
+              '• ${isServiceIssue ? failure.reason : '${fileNameOf(failure.path)}：${failure.reason}'}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: scheme.onTertiaryContainer.withValues(alpha: 0.85),
+              ),
+            ),
+          ],
+          if (failures.length > 3)
+            Padding(
+              padding: const EdgeInsets.only(top: 5),
+              child: Text(
+                '还有 ${failures.length - 3} 条未显示…',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onTertiaryContainer.withValues(alpha: 0.75),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DoneStat extends StatelessWidget {
+  const _DoneStat({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Column(
+      children: [
+        Text(
+          value,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+IconData _ruleIcon(String ruleId) {
+  return switch (ruleId) {
+    'windows.update_cache' => Icons.system_update_alt_rounded,
+    'windows.delivery_optimization' => Icons.hub_outlined,
+    _ => Icons.admin_panel_settings_outlined,
+  };
+}

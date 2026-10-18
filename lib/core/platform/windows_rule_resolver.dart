@@ -9,9 +9,9 @@ class WindowsRuleResolver {
     Map<String, String>? environment,
     this.maxWildcardMatches = 512,
   }) : _environment = {
-          for (final entry in (environment ?? Platform.environment).entries)
-            entry.key.toLowerCase(): entry.value,
-        };
+         for (final entry in (environment ?? Platform.environment).entries)
+           entry.key.toLowerCase(): entry.value,
+       };
 
   final Map<String, String> _environment;
   final int maxWildcardMatches;
@@ -63,8 +63,9 @@ class WindowsRuleResolver {
         final matcher = _wildcardRegExp(segment);
         for (final base in current) {
           try {
-            await for (final entity
-                in Directory(base).list(followLinks: false)) {
+            await for (final entity in Directory(
+              base,
+            ).list(followLinks: false)) {
               if (entity is! Directory) continue;
               if (!matcher.hasMatch(p.windows.basename(entity.path))) continue;
               next.add(entity.path);

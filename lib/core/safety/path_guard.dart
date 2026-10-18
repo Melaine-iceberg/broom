@@ -4,10 +4,10 @@ import 'package:path/path.dart' as p;
 
 class PathGuard {
   PathGuard({required List<String> protectedRoots})
-      : _protectedRoots = protectedRoots
-            .where((root) => root.trim().isNotEmpty)
-            .map((root) => normalize(root).toLowerCase())
-            .toList();
+    : _protectedRoots = protectedRoots
+          .where((root) => root.trim().isNotEmpty)
+          .map((root) => normalize(root).toLowerCase())
+          .toList();
 
   factory PathGuard.forWindows({
     Map<String, String>? environment,
@@ -59,7 +59,9 @@ class PathGuard {
     final rootKey = normalize(root).toLowerCase();
     if (!_isWithinKey(rootKey, pathKey)) return false;
     if (pathKey == rootKey) return false;
-    return !_protectedRoots.any((protected) => _isWithinKey(protected, pathKey));
+    return !_protectedRoots.any(
+      (protected) => _isWithinKey(protected, pathKey),
+    );
   }
 
   static bool _isWithinKey(String rootKey, String candidateKey) {

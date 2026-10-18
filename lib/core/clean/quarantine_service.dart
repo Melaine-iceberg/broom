@@ -26,13 +26,13 @@ class QuarantineService {
     }
     final normalized = PathGuard.normalize(quarantineRoot);
     if (p.windows.rootPrefix(normalized) == normalized) {
-      throw ArgumentError.value(quarantineRoot, 'quarantineRoot', '隔离区不能是磁盘根目录');
+      throw ArgumentError.value(
+        quarantineRoot,
+        'quarantineRoot',
+        '隔离区不能是磁盘根目录',
+      );
     }
-    return QuarantineService._(
-      normalized,
-      guard,
-      clock ?? DateTime.now,
-    );
+    return QuarantineService._(normalized, guard, clock ?? DateTime.now);
   }
 
   QuarantineService._(this.quarantineRoot, this.guard, this._clock);
@@ -62,17 +62,14 @@ class QuarantineService {
     void recordFailure(String path, Object error) {
       failureCount++;
       if (failures.length < _maxFailureDetails) {
-        failures.add(
-          CleanFailure(path: path, reason: _failureReason(error)),
-        );
+        failures.add(CleanFailure(path: path, reason: _failureReason(error)));
       }
     }
 
     void report({bool force = false, String? currentPath}) {
       final now = DateTime.now();
       if (!force &&
-          now.difference(lastReportAt) <
-              const Duration(milliseconds: 120)) {
+          now.difference(lastReportAt) < const Duration(milliseconds: 120)) {
         return;
       }
       lastReportAt = now;
@@ -88,13 +85,13 @@ class QuarantineService {
     }
 
     CleanReport buildReport() => CleanReport(
-          sessionId: sessionId,
-          movedCount: movedCount,
-          movedBytes: movedBytes,
-          failureCount: failureCount,
-          failures: List.unmodifiable(failures),
-          cancelled: cancelled,
-        );
+      sessionId: sessionId,
+      movedCount: movedCount,
+      movedBytes: movedBytes,
+      failureCount: failureCount,
+      failures: List.unmodifiable(failures),
+      cancelled: cancelled,
+    );
 
     try {
       if (items.isEmpty) return buildReport();
@@ -121,9 +118,8 @@ class QuarantineService {
         'failureCount': 0,
       });
 
-      entriesFile = await File(
-        p.windows.join(sessionDir.path, 'entries.jsonl'),
-      ).open(mode: FileMode.write);
+      entriesFile = await File(p.windows.join(sessionDir.path, 'entries.jsonl'))
+          .open(mode: FileMode.write);
 
       var sequence = 0;
       for (final item in items) {
@@ -185,10 +181,7 @@ class QuarantineService {
         }
 
         try {
-          await _moveFile(
-            item.path,
-            p.windows.join(filesDir.path, storedName),
-          );
+          await _moveFile(item.path, p.windows.join(filesDir.path, storedName));
         } on FileSystemException catch (error) {
           recordFailure(item.path, error);
           report(currentPath: item.path);
@@ -285,9 +278,7 @@ class QuarantineService {
     void recordFailure(String path, Object error) {
       failureCount++;
       if (failures.length < _maxFailureDetails) {
-        failures.add(
-          CleanFailure(path: path, reason: _failureReason(error)),
-        );
+        failures.add(CleanFailure(path: path, reason: _failureReason(error)));
       }
     }
 
@@ -318,10 +309,7 @@ class QuarantineService {
         continue;
       }
 
-      if (!guard.allows(
-        path: entry.originalPath,
-        root: entry.rootPath,
-      )) {
+      if (!guard.allows(path: entry.originalPath, root: entry.rootPath)) {
         recordFailure(entry.originalPath, '原路径未通过安全检查');
         pendingCount++;
         pendingBytes += entry.size;
@@ -348,9 +336,8 @@ class QuarantineService {
       }
 
       try {
-        await Directory(
-          p.windows.dirname(entry.originalPath),
-        ).create(recursive: true);
+        await Directory(p.windows.dirname(entry.originalPath))
+            .create(recursive: true);
         await _moveFile(storedPath, entry.originalPath);
       } on FileSystemException catch (error) {
         recordFailure(entry.originalPath, error);
@@ -362,13 +349,12 @@ class QuarantineService {
       restoredCount++;
       restoredBytes += entry.size;
       try {
-        await File(
-          p.windows.join(sessionDir.path, 'restored.jsonl'),
-        ).writeAsString(
-          '${entry.storedName}\n',
-          mode: FileMode.append,
-          flush: true,
-        );
+        await File(p.windows.join(sessionDir.path, 'restored.jsonl'))
+            .writeAsString(
+              '${entry.storedName}\n',
+              mode: FileMode.append,
+              flush: true,
+            );
       } on FileSystemException {
         // If the marker cannot be written, a retry will see the restored
         // original path and skip it as a conflict instead of overwriting.
@@ -382,11 +368,11 @@ class QuarantineService {
       await _writeSessionJson(sessionDir, {
         'schemaVersion': _schemaVersion,
         'id': sessionId,
-        'createdAt':
-            meta['createdAt'] ?? _clock().toUtc().toIso8601String(),
+        'createdAt': meta['createdAt'] ?? _clock().toUtc().toIso8601String(),
         'status': 'partial',
         'entryCount': (meta['entryCount'] as num?)?.toInt() ?? entries.length,
-        'totalBytes': (meta['totalBytes'] as num?)?.toInt() ??
+        'totalBytes':
+            (meta['totalBytes'] as num?)?.toInt() ??
             entries.fold<int>(0, (total, entry) => total + entry.size),
         'pendingCount': pendingCount,
         'pendingBytes': pendingBytes,
@@ -432,8 +418,10 @@ class QuarantineService {
           final entries = await _readEntries(entity);
           if (entries.isEmpty) continue;
           entryCount = entries.length;
-          totalBytes =
-              entries.fold<int>(0, (total, entry) => total + entry.size);
+          totalBytes = entries.fold<int>(
+            0,
+            (total, entry) => total + entry.size,
+          );
           pendingCount = entryCount;
           pendingBytes = totalBytes;
           status = QuarantineStatus.partial;
@@ -443,7 +431,7 @@ class QuarantineService {
 
         final createdAt =
             DateTime.tryParse('${meta['createdAt'] ?? ''}') ??
-                DateTime.fromMillisecondsSinceEpoch(0);
+            DateTime.fromMillisecondsSinceEpoch(0);
         sessions.add(
           QuarantineSessionInfo(
             id: id,
@@ -477,7 +465,8 @@ class QuarantineService {
   String _newSessionId() {
     final now = _clock();
     String two(int value) => value.toString().padLeft(2, '0');
-    final stamp = '${now.year}${two(now.month)}${two(now.day)}'
+    final stamp =
+        '${now.year}${two(now.month)}${two(now.day)}'
         '_${two(now.hour)}${two(now.minute)}${two(now.second)}';
     final suffix = List.generate(
       4,
@@ -549,9 +538,7 @@ class QuarantineService {
     }
   }
 
-  Future<Map<String, dynamic>?> _readSessionJson(
-    Directory sessionDir,
-  ) async {
+  Future<Map<String, dynamic>?> _readSessionJson(Directory sessionDir) async {
     final file = File(p.windows.join(sessionDir.path, 'session.json'));
     try {
       if (!await file.exists()) return null;
@@ -611,12 +598,8 @@ class QuarantineService {
     return entries;
   }
 
-  static Future<Set<String>> _readRestoredNames(
-    Directory sessionDir,
-  ) async {
-    final file = File(
-      p.windows.join(sessionDir.path, 'restored.jsonl'),
-    );
+  static Future<Set<String>> _readRestoredNames(Directory sessionDir) async {
+    final file = File(p.windows.join(sessionDir.path, 'restored.jsonl'));
     if (!await file.exists()) return <String>{};
     try {
       final lines = await file.readAsLines();

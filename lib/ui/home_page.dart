@@ -11,6 +11,8 @@ import 'format.dart';
 import 'large_files_page.dart';
 import 'recycle_bin_page.dart';
 import 'rule_detail_page.dart';
+import 'system_cache_controller.dart';
+import 'system_cache_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({
@@ -18,15 +20,19 @@ class HomePage extends StatefulWidget {
     required this.controller,
     required this.shell,
     required this.analysisRunnerFactory,
+    this.systemCacheController,
     this.analysisInitialDirectory,
     this.analysisExcludedPaths = const [],
+    this.startInSystemCache = false,
   });
 
   final CleanController controller;
   final SystemShell shell;
+  final SystemCacheController? systemCacheController;
   final AnalysisRunner Function() analysisRunnerFactory;
   final String? analysisInitialDirectory;
   final List<String> analysisExcludedPaths;
+  final bool startInSystemCache;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -34,6 +40,17 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   CleanController get controller => widget.controller;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.startInSystemCache && widget.systemCacheController != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _openSystemCache();
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -77,6 +94,9 @@ class _HomePageState extends State<HomePage> {
         return _IdleView(
           controller: controller,
           onUndo: (sessionId) => _undo(context, sessionId),
+          onOpenSystemCache: widget.systemCacheController == null
+              ? null
+              : _openSystemCache,
           onOpenRecycleBin: _openRecycleBin,
           onOpenDuplicateFinder: _openDuplicateFinder,
           onOpenLargeFiles: _openLargeFiles,
@@ -174,6 +194,16 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Future<void> _openSystemCache() {
+    final systemController = widget.systemCacheController;
+    if (systemController == null) return Future<void>.value();
+    return Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SystemCachePage(controller: systemController),
+      ),
+    );
+  }
+
   Future<void> _openRecycleBin() {
     return Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -216,6 +246,7 @@ class _IdleView extends StatelessWidget {
     required this.onOpenRecycleBin,
     required this.onOpenDuplicateFinder,
     required this.onOpenLargeFiles,
+    this.onOpenSystemCache,
   });
 
   final CleanController controller;
@@ -223,6 +254,7 @@ class _IdleView extends StatelessWidget {
   final VoidCallback onOpenRecycleBin;
   final VoidCallback onOpenDuplicateFinder;
   final VoidCallback onOpenLargeFiles;
+  final VoidCallback? onOpenSystemCache;
 
   @override
   Widget build(BuildContext context) {
@@ -248,6 +280,7 @@ class _IdleView extends StatelessWidget {
         ],
         const SizedBox(height: 20),
         _ToolsSection(
+          onOpenSystemCache: onOpenSystemCache,
           onOpenRecycleBin: onOpenRecycleBin,
           onOpenDuplicateFinder: onOpenDuplicateFinder,
           onOpenLargeFiles: onOpenLargeFiles,
@@ -563,11 +596,13 @@ class _ToolsSection extends StatelessWidget {
     required this.onOpenRecycleBin,
     required this.onOpenDuplicateFinder,
     required this.onOpenLargeFiles,
+    this.onOpenSystemCache,
   });
 
   final VoidCallback onOpenRecycleBin;
   final VoidCallback onOpenDuplicateFinder;
   final VoidCallback onOpenLargeFiles;
+  final VoidCallback? onOpenSystemCache;
 
   @override
   Widget build(BuildContext context) {
@@ -599,14 +634,28 @@ class _ToolsSection extends StatelessWidget {
         LayoutBuilder(
           builder: (context, constraints) {
             const gap = 10.0;
-            final wide = constraints.maxWidth >= 860;
-            final width = wide
-                ? (constraints.maxWidth - gap * 2) / 3
-                : constraints.maxWidth;
+            final hasSystemCache = onOpenSystemCache != null;
+            final columns = constraints.maxWidth >= (hasSystemCache ? 720 : 860)
+                ? (hasSystemCache ? 2 : 3)
+                : 1;
+            final width =
+                (constraints.maxWidth - gap * (columns - 1)) / columns;
             return Wrap(
               spacing: gap,
               runSpacing: gap,
               children: [
+                if (onOpenSystemCache != null)
+                  SizedBox(
+                    width: width,
+                    child: _ToolCard(
+                      key: const ValueKey('tool-system-cache'),
+                      icon: Icons.admin_panel_settings_outlined,
+                      risk: CleanRisk.review,
+                      title: '系统级缓存',
+                      description: '清理 Windows 更新与传递优化的下载缓存，需要管理员权限。',
+                      onTap: onOpenSystemCache!,
+                    ),
+                  ),
                 SizedBox(
                   width: width,
                   child: _ToolCard(

@@ -58,8 +58,7 @@ class UndoReport {
   final List<CleanFailure> failures;
   final bool sessionRemoved;
 
-  bool get hasPending =>
-      conflictCount > 0 || failureCount > 0;
+  bool get hasPending => conflictCount > 0 || failureCount > 0;
 }
 
 enum QuarantineStatus { cleaning, ready, partial, restored }

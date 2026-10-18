@@ -21,39 +21,48 @@ void main() {
   });
 
   CleanerRule createRule(List<String> patterns) => CleanerRule(
-        id: 'test.rule',
-        title: 'test',
-        category: 'test',
-        description: 'test',
-        pathPatterns: patterns,
+    id: 'test.rule',
+    title: 'test',
+    category: 'test',
+    description: 'test',
+    pathPatterns: patterns,
+  );
+
+  test(
+    'expands environment variables and wildcard profile directories',
+    () async {
+      final defaultCache = Directory(
+        p.windows.join(
+          temp.path,
+          'User Data',
+          'Default',
+          'Cache',
+          'Cache_Data',
+        ),
+      );
+      final profileCache = Directory(
+        p.windows.join(temp.path, 'User Data', 'Profile 1', 'Cache'),
+      );
+      final noCache = Directory(
+        p.windows.join(temp.path, 'User Data', 'Guest'),
+      );
+      await defaultCache.create(recursive: true);
+      await profileCache.create(recursive: true);
+      await noCache.create(recursive: true);
+
+      final roots = await resolver.resolve(
+        createRule([r'%TESTBASE%\User Data\*\Cache']),
       );
 
-  test('expands environment variables and wildcard profile directories', () async {
-    final defaultCache = Directory(
-      p.windows.join(temp.path, 'User Data', 'Default', 'Cache', 'Cache_Data'),
-    );
-    final profileCache = Directory(
-      p.windows.join(temp.path, 'User Data', 'Profile 1', 'Cache'),
-    );
-    final noCache = Directory(
-      p.windows.join(temp.path, 'User Data', 'Guest'),
-    );
-    await defaultCache.create(recursive: true);
-    await profileCache.create(recursive: true);
-    await noCache.create(recursive: true);
-
-    final roots = await resolver.resolve(
-      createRule([r'%TESTBASE%\User Data\*\Cache']),
-    );
-
-    expect(
-      roots,
-      unorderedEquals([
-        p.windows.normalize(defaultCache.parent.path),
-        p.windows.normalize(profileCache.path),
-      ]),
-    );
-  });
+      expect(
+        roots,
+        unorderedEquals([
+          p.windows.normalize(defaultCache.parent.path),
+          p.windows.normalize(profileCache.path),
+        ]),
+      );
+    },
+  );
 
   test('resolves a non-wildcard directory that exists', () async {
     final shaderCache = Directory(

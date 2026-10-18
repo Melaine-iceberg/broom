@@ -10,6 +10,7 @@
 
 class WindowStateEmitter;
 class SystemShellChannel;
+class SystemAccessChannel;
 
 namespace flutter {
 class EncodableValue;
@@ -59,6 +60,7 @@ class FlutterWindow : public Win32Window {
   WindowStateEmitter* window_state_emitter_ = nullptr;
 
   std::unique_ptr<SystemShellChannel> system_shell_channel_;
+  std::unique_ptr<SystemAccessChannel> system_access_channel_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

@@ -17,7 +17,7 @@ abstract interface class CleanerPlatform {
 
 class WindowsCleanerPlatform implements CleanerPlatform {
   WindowsCleanerPlatform({Map<String, String>? environment})
-      : environment = environment ?? Platform.environment {
+    : environment = environment ?? Platform.environment {
     _resolver = WindowsRuleResolver(environment: this.environment);
   }
 
@@ -58,7 +58,8 @@ class WindowsCleanerPlatform implements CleanerPlatform {
       _resolver.resolve(rule);
 
   String? _lookup(String name) {
-    final value = environment[name] ??
+    final value =
+        environment[name] ??
         environment.entries
             .where((entry) => entry.key.toLowerCase() == name.toLowerCase())
             .map((entry) => entry.value)

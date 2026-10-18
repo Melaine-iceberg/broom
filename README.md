@@ -2,7 +2,7 @@
 
 面向 Windows 桌面的安全、可撤销垃圾清理工具。Broom 只处理由规则明确声明的缓存目录：先扫描预览，再把文件移入隔离区，清理后随时可以撤销。
 
-当前版本 **v2**：在 v1 的 **Windows Safe 级清理 + 预览 + 隔离区撤销** 之上，新增 **Review 级回收站清空** 与 **Info 级只读分析**（重复文件、大文件）。其他平台与清理能力尚未实现，清单见 [docs/roadmap.md](docs/roadmap.md)。
+当前版本 **v3**：在 v2 的 **Review 级回收站清空** 与 **Info 级只读分析** 之上，新增 **管理员模式的系统级缓存清理**（Windows 更新缓存、传递优化缓存）。系统级缓存采用永久删除，不进入隔离区，必须通过 UAC 单独提权并再次确认。其他平台与清理能力尚未实现，清单见 [docs/roadmap.md](docs/roadmap.md)。
 
 ## 如何定义“垃圾”
 
@@ -41,7 +41,8 @@ v1 内置的 Safe 级规则：
 - **跨卷兼容**：同卷优先 `rename`，跨卷退回“复制 + 删除”，删除失败时清理复制出的半成品。
 - **崩溃安全**：移动每个文件前，先把撤销记录追加写入并 `flush`；即使清理中途崩溃，已移动的文件仍可撤销。
 - **可撤销**：撤销前重新做路径守卫检查，不覆盖后来新建的原路径文件；冲突项保留在隔离区，可稍后重试。
-- **无管理员权限**：v1 不涉及系统级目录，不需要提权。
+- **默认不提权**：普通 Safe 扫描与清理以当前用户权限运行；只有独立的系统级缓存工具会通过 UAC 重新启动管理员窗口。
+- **系统级缓存单独处理**：系统级缓存不属于 Safe 规则，使用原生 API 解析的固定目录、逐文件根目录校验与永久删除确认；不会混入普通缓存列表。
 
 ## 使用流程
 
@@ -50,14 +51,25 @@ v1 内置的 Safe 级规则：
 3. 确认后文件移入隔离区。被占用、无权限或移动失败的文件会列出原因，其余文件继续处理。
 4. 清理完成后可“撤销本次清理”；部分撤销（冲突 / 失败）会在首页保留待撤销卡片，可再次尝试。
 
+## V3：系统级缓存（管理员模式）
+
+首页“系统级缓存”工具用于清理 Windows Update 与传递优化的下载缓存。它与 Safe 规则完全分离，属于 `REVIEW · 需确认`：
+
+- **单独提权**：未提权时只显示权限说明，不提供扫描入口。点击“以管理员身份重新启动”后通过 `ShellExecuteExW`（`runas`）启动新的管理员实例，并携带 `--system-cache` 参数；新窗口只打开本页，不自动扫描或删除任何内容。
+- **规范路径**：缓存根目录由 Windows 原生 API 返回——`GetWindowsDirectoryW` 得到 `%WINDIR%\SoftwareDistribution\Download`，`SHGetKnownFolderPath(FOLDERID_ProgramData)` 得到 `%ProgramData%\Microsoft\Windows\DeliveryOptimization\Cache`。不使用环境变量，不接受任意路径输入。
+- **逐文件校验**：每个待删除文件必须位于该规则解析出的根目录内；拒绝根目录本身、越界路径、符号链接与 junction，只删除普通文件。
+- **临时停止服务**：Windows Update 缓存对应 `wuauserv` 与 `bits`，传递优化缓存对应 `dosvc`。停止失败会中止清理；无论完成、失败还是取消，都会在 `finally` 中尝试重新启动已停止的服务，恢复失败会写入报告。
+- **永久删除**：系统缓存体积大，移到同卷隔离区不会释放磁盘空间，因此不进入隔离区、没有撤销。扫描结果默认全部不勾选，必须手动选择规则，并在独立对话框中勾选“我明白系统缓存将被永久删除，且无法撤销”。
+- **边界**：只处理上述两个下载缓存目录，不删除 Windows 更新历史、系统设置、系统还原点或 `Windows.old`，也不强制删除被占用的文件。
+
 ## V2：分析与审阅（Review / Info）
 
-首页“分析与审阅”区域提供三类工具，并明确标注风险等级：
+首页“分析与审阅”区域提供四类工具，并明确标注风险等级：
 
 | 等级 | 含义 | 当前入口 | 数据影响 |
 | --- | --- | --- | --- |
 | `SAFE · 可撤销` | 缓存清理，可随时恢复 | 开始扫描 → Safe 规则 | 移入 Broom 隔离区 |
-| `REVIEW · 需确认` | 可能丢失重要内容，需要独立确认 | 回收站 | 永久删除，无隔离区、无撤销 |
+| `REVIEW · 需确认` | 可能丢失重要内容，需要独立确认 | 回收站、系统级缓存 | 永久删除，无隔离区、无撤销 |
 | `INFO · 只读` | 只分析、不修改任何文件 | 重复文件、大文件分析 | 无 |
 
 ### 回收站（Review）
@@ -84,7 +96,7 @@ v1 内置的 Safe 级规则：
 
 ## Windows 原生桥接
 
-回收站、文件夹选择器与“在资源管理器中显示”通过 `MethodChannel('broom/shell')` 调用原生 Shell API；通道实现位于 `windows/runner/system_shell_channel.*`，不需要额外插件依赖。C++ 侧返回 `HRESULT` / Win32 错误码，Dart 侧会转换为可读的“Windows 错误 0x……”提示。
+回收站、文件夹选择器与“在资源管理器中显示”通过 `MethodChannel('broom/shell')` 调用原生 Shell API；管理员权限、UAC 自重启与系统缓存目录通过 `MethodChannel('broom/system')` 提供。通道实现位于 `windows/runner/system_shell_channel.*` 与 `windows/runner/system_access_channel.*`，不需要额外插件依赖。C++ 侧返回 `HRESULT` / Win32 错误码，Dart 侧会转换为可读的“Windows 错误 0x……”提示；UAC 被用户取消时会映射为“未提权”，不作为错误。
 
 ## 隔离区
 
@@ -107,17 +119,21 @@ lib/
   main.dart                        # 平台检测、依赖装配
   app.dart                         # Material 主题与不支持平台页面
   core/
-    models/                        # 规则、扫描、清理、撤销与分析数据模型
+    models/                        # 规则、扫描、清理、撤销、系统缓存与分析数据模型
     rules/windows_rules.dart       # Windows Safe 规则
-    platform/                      # CleanerPlatform 抽象、Windows 实现、路径解析
+    rules/windows_system_rules.dart # Windows 系统级缓存规则
+    platform/                      # CleanerPlatform、SystemAccess、系统缓存路径解析
     safety/path_guard.dart         # 路径包含与保护规则
     scan/                          # 扫描器与 isolate 扫描服务
     clean/quarantine_service.dart  # 隔离、撤销、会话管理
+    clean/system_services.dart     # Windows 服务停止 / 恢复
+    clean/system_cache_cleaner.dart # 系统缓存永久删除
     analysis/                      # 只读遍历器、重复文件、大文件与 isolate 分析服务
     shell/system_shell.dart        # 回收站 / 文件夹选择 / 定位文件通道
-  ui/                              # 控制器、首页、清理页、回收站与两类分析页
+  ui/                              # 控制器、首页、清理页、回收站、系统缓存与两类分析页
 windows/runner/system_shell_channel.*  # 原生 Shell API 通道
-test/                              # 路径守卫、扫描、隔离区、分析、Shell 通道与页面测试
+windows/runner/system_access_channel.* # 原生提权与系统缓存路径通道
+test/                              # 路径守卫、扫描、隔离区、分析、系统缓存、Shell 通道与页面测试
 docs/roadmap.md                    # 未实现目标与非目标
 ```
 
@@ -143,7 +159,9 @@ flutter build windows --release
 
 ## 已知限制
 
-- 仅支持 Windows；规则清理仍只使用 Safe 级；Review（回收站）与 Info（分析）作为独立工具提供，不参与规则勾选。
+- 仅支持 Windows；规则清理仍只使用 Safe 级；Review（回收站、系统级缓存）与 Info（分析）作为独立工具提供，不参与规则勾选。
+- 系统级缓存只覆盖 Windows Update 的 `SoftwareDistribution\Download` 与传递优化的 `DeliveryOptimization\Cache`，且为永久删除、无撤销；清理期间会临时停止相关 Windows 服务，服务恢复失败需手动启动或重启系统。
+- 提权流程依赖交互式 UAC；自动化测试覆盖通道解析、路径校验、服务状态机与页面流程，真实 UAC 授权需手动验证。
 - 只能按规则整体勾选，不能选择单个文件；扫描范围固定为全部 Safe 规则。
 - 回收站清空覆盖所有磁盘且永久生效，Broom 不提供隔离或撤销。
 - 重复文件与大文件分析只读，不提供清理操作；重复文件默认只分析 ≥ 1 MB 的文件，最多检查 200,000 个文件，大文件列表最多显示 200 项。

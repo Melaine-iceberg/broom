@@ -4,6 +4,7 @@ import 'core/analysis/analysis_service.dart';
 import 'core/shell/system_shell.dart';
 import 'ui/clean_controller.dart';
 import 'ui/home_page.dart';
+import 'ui/system_cache_controller.dart';
 import 'ui/window_title_bar.dart';
 
 class BroomApp extends StatelessWidget {
@@ -11,16 +12,20 @@ class BroomApp extends StatelessWidget {
     super.key,
     required this.controller,
     this.systemShell,
+    this.systemCacheController,
     this.analysisRunnerFactory,
     this.analysisInitialDirectory,
     this.analysisExcludedPaths = const [],
+    this.startInSystemCache = false,
   });
 
   final CleanController controller;
   final SystemShell? systemShell;
+  final SystemCacheController? systemCacheController;
   final AnalysisRunner Function()? analysisRunnerFactory;
   final String? analysisInitialDirectory;
   final List<String> analysisExcludedPaths;
+  final bool startInSystemCache;
 
   @override
   Widget build(BuildContext context) {
@@ -35,9 +40,11 @@ class BroomApp extends StatelessWidget {
       home: HomePage(
         controller: controller,
         shell: systemShell ?? createSystemShell(),
+        systemCacheController: systemCacheController,
         analysisRunnerFactory: analysisRunnerFactory ?? AnalysisService.new,
         analysisInitialDirectory: analysisInitialDirectory,
         analysisExcludedPaths: analysisExcludedPaths,
+        startInSystemCache: startInSystemCache,
       ),
     );
   }

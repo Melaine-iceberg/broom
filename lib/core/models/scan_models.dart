@@ -61,6 +61,5 @@ class ScanResult {
   final bool truncated;
   final bool cancelled;
 
-  int get totalBytes =>
-      items.fold(0, (total, item) => total + item.size);
+  int get totalBytes => items.fold(0, (total, item) => total + item.size);
 }

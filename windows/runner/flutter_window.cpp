@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "system_access_channel.h"
 #include "system_shell_channel.h"
 
 namespace {
@@ -168,6 +169,7 @@ void FlutterWindow::SetUpWindowChannels() {
 
   system_shell_channel_ = std::make_unique<SystemShellChannel>(
       messenger, GetHandle());
+  system_access_channel_ = std::make_unique<SystemAccessChannel>(messenger);
 }
 
 void FlutterWindow::OnDestroy() {
@@ -188,6 +190,7 @@ void FlutterWindow::OnDestroy() {
   }
   window_state_emitter_ = nullptr;
 
+  system_access_channel_.reset();
   system_shell_channel_.reset();
 
   if (flutter_controller_) {

@@ -38,44 +38,57 @@ void main() {
     return file;
   }
 
-  test('finds old files, applies age, and skips excluded directories', () async {
-    final oldFile = await createFile(root, 'old.tmp', 'old-file', age: const Duration(days: 2));
-    final nestedOld = await createFile(
-      root,
-      p.join('nested', 'old.log'),
-      'old-log',
-      age: const Duration(days: 3),
-    );
-    await createFile(root, 'fresh.tmp', 'fresh');
-    final excluded = Directory(p.windows.join(root.path, 'excluded'));
-    await createFile(excluded, 'still-old.tmp', 'excluded', age: const Duration(days: 5));
+  test(
+    'finds old files, applies age, and skips excluded directories',
+    () async {
+      final oldFile = await createFile(
+        root,
+        'old.tmp',
+        'old-file',
+        age: const Duration(days: 2),
+      );
+      final nestedOld = await createFile(
+        root,
+        p.join('nested', 'old.log'),
+        'old-log',
+        age: const Duration(days: 3),
+      );
+      await createFile(root, 'fresh.tmp', 'fresh');
+      final excluded = Directory(p.windows.join(root.path, 'excluded'));
+      await createFile(
+        excluded,
+        'still-old.tmp',
+        'excluded',
+        age: const Duration(days: 5),
+      );
 
-    final scanner = JunkScanner(
-      jobs: [
-        ScanJob(
-          ruleId: 'test.temp',
-          roots: [root.path],
-          minAge: const Duration(hours: 24),
-        ),
-      ],
-      excludedPaths: [excluded.path],
-      clock: () => now,
-    );
-    final progress = <ScanProgress>[];
+      final scanner = JunkScanner(
+        jobs: [
+          ScanJob(
+            ruleId: 'test.temp',
+            roots: [root.path],
+            minAge: const Duration(hours: 24),
+          ),
+        ],
+        excludedPaths: [excluded.path],
+        clock: () => now,
+      );
+      final progress = <ScanProgress>[];
 
-    final result = await scanner.scan(onProgress: progress.add);
+      final result = await scanner.scan(onProgress: progress.add);
 
-    expect(result.cancelled, isFalse);
-    expect(result.truncated, isFalse);
-    expect(
-      result.items.map((item) => item.path),
-      unorderedEquals([oldFile.path, nestedOld.path]),
-    );
-    expect(result.items.every((item) => item.rootPath == root.path), isTrue);
-    expect(result.items.every((item) => item.ruleId == 'test.temp'), isTrue);
-    expect(progress, isNotEmpty);
-    expect(progress.last.foundFiles, 2);
-  });
+      expect(result.cancelled, isFalse);
+      expect(result.truncated, isFalse);
+      expect(
+        result.items.map((item) => item.path),
+        unorderedEquals([oldFile.path, nestedOld.path]),
+      );
+      expect(result.items.every((item) => item.rootPath == root.path), isTrue);
+      expect(result.items.every((item) => item.ruleId == 'test.temp'), isTrue);
+      expect(progress, isNotEmpty);
+      expect(progress.last.foundFiles, 2);
+    },
+  );
 
   test('filters by extension', () async {
     await createFile(root, 'old.tmp', 'old-file', age: const Duration(days: 2));
@@ -88,11 +101,7 @@ void main() {
 
     final scanner = JunkScanner(
       jobs: [
-        ScanJob(
-          ruleId: 'test.dumps',
-          roots: [root.path],
-          extensions: {'dmp'},
-        ),
+        ScanJob(ruleId: 'test.dumps', roots: [root.path], extensions: {'dmp'}),
       ],
       clock: () => now,
     );
@@ -124,7 +133,9 @@ void main() {
     await createFile(root, 'b.tmp', 'b', age: const Duration(days: 2));
 
     final scanner = JunkScanner(
-      jobs: [ScanJob(ruleId: 'test.one', roots: [root.path])],
+      jobs: [
+        ScanJob(ruleId: 'test.one', roots: [root.path]),
+      ],
       maxItems: 1,
       clock: () => now,
     );
@@ -138,7 +149,9 @@ void main() {
     await createFile(root, 'a.tmp', 'a', age: const Duration(days: 2));
 
     final scanner = JunkScanner(
-      jobs: [ScanJob(ruleId: 'test.one', roots: [root.path])],
+      jobs: [
+        ScanJob(ruleId: 'test.one', roots: [root.path]),
+      ],
       clock: () => now,
     );
     final result = await scanner.scan(isCancelled: () => true);

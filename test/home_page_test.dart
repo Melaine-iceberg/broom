@@ -8,9 +8,12 @@ import 'package:broom/core/rules/windows_rules.dart';
 import 'package:broom/core/safety/path_guard.dart';
 import 'package:broom/core/shell/system_shell.dart';
 import 'package:broom/ui/clean_controller.dart';
+import 'package:broom/ui/system_cache_controller.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+
+import 'support/system_cache_fakes.dart';
 
 class _FakeSystemShell implements SystemShell {
   @override
@@ -118,5 +121,56 @@ void main() {
 
     expect(find.text('回收站中有 7 个项目'), findsOneWidget);
     expect(find.text('REVIEW · 需确认'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('auto-opens and exposes the admin system cache tool', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final guard = PathGuard(protectedRoots: const []);
+    final controller = CleanController(
+      platform: _FakePlatform(),
+      guard: guard,
+      quarantine: QuarantineService(
+        quarantineRoot: p.windows.join(r'C:\broom_widget_test', 'quarantine'),
+        guard: guard,
+      ),
+    );
+    addTearDown(controller.dispose);
+    final systemController = SystemCacheController(
+      platform: FakeSystemCachePlatform(resolver: (_) => const []),
+      access: FakeSystemAccess(elevated: false),
+      cleaner: FakeSystemCacheCleaner(),
+      scanServiceFactory: () => FakeScanService(),
+    );
+    addTearDown(systemController.dispose);
+
+    await tester.pumpWidget(
+      BroomApp(
+        controller: controller,
+        systemCacheController: systemController,
+        startInSystemCache: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('需要管理员权限'), findsOneWidget);
+    expect(find.text('系统级缓存'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('返回'));
+    await tester.pumpAndSettle();
+
+    final tool = find.byKey(const ValueKey('tool-system-cache'));
+    expect(tool, findsOneWidget);
+
+    await tester.ensureVisible(tool);
+    await tester.tap(tool);
+    await tester.pumpAndSettle();
+
+    expect(find.text('需要管理员权限'), findsOneWidget);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 }
