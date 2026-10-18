@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:broom/app.dart';
@@ -6,6 +7,7 @@ import 'package:broom/core/models/cleaner_rule.dart';
 import 'package:broom/core/platform/cleaner_platform.dart';
 import 'package:broom/core/rules/windows_rules.dart';
 import 'package:broom/core/safety/path_guard.dart';
+import 'package:broom/core/settings/exclusion_store.dart';
 import 'package:broom/core/shell/system_shell.dart';
 import 'package:broom/ui/clean_controller.dart';
 import 'package:broom/ui/system_cache_controller.dart';
@@ -55,6 +57,35 @@ class _FakePlatform implements CleanerPlatform {
   Future<List<String>> resolveRoots(CleanerRule rule) async => const [];
 }
 
+class _FixedRootsPlatform implements CleanerPlatform {
+  _FixedRootsPlatform({required this.rule, required this.roots});
+
+  final CleanerRule rule;
+  final List<String> roots;
+
+  @override
+  String get displayName => 'Test';
+
+  @override
+  Map<String, String> get environment => const {};
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  String? get quarantineRoot => null;
+
+  @override
+  List<CleanerRule> get rules => [rule];
+
+  @override
+  Future<List<String>> resolveRoots(CleanerRule rule) async => roots;
+}
+
+ExclusionStore _exclusionsStore() => ExclusionStore(
+  filePath: p.windows.join(r'C:\broom_widget_test', 'exclusions.json'),
+);
+
 void main() {
   testWidgets('renders the idle screen and handles an empty scan', (
     tester,
@@ -72,6 +103,7 @@ void main() {
         quarantineRoot: p.windows.join(r'C:\broom_widget_test', 'quarantine'),
         guard: guard,
       ),
+      exclusions: _exclusionsStore(),
     );
     addTearDown(controller.dispose);
 
@@ -112,6 +144,7 @@ void main() {
         quarantineRoot: p.windows.join(r'C:\broom_widget_test', 'quarantine'),
         guard: guard,
       ),
+      exclusions: _exclusionsStore(),
     );
     addTearDown(controller.dispose);
 
@@ -144,6 +177,7 @@ void main() {
         quarantineRoot: p.windows.join(r'C:\broom_widget_test', 'quarantine'),
         guard: guard,
       ),
+      exclusions: _exclusionsStore(),
     );
     addTearDown(controller.dispose);
     final systemController = SystemCacheController(
@@ -192,6 +226,7 @@ void main() {
       platform: _FakePlatform(),
       guard: guard,
       quarantine: FakeQuarantineService([fakeQuarantineEntry('first.txt')]),
+      exclusions: _exclusionsStore(),
     );
     addTearDown(controller.dispose);
     await controller.initialize();
@@ -216,5 +251,58 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Broom'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('marks rules that are partially excluded', (tester) async {
+    tester.view.physicalSize = const Size(1200, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final temp = Directory.systemTemp.createTempSync(
+      'broom_home_exclusions_',
+    );
+    addTearDown(() {
+      if (temp.existsSync()) temp.deleteSync(recursive: true);
+    });
+    final root = Directory(p.windows.join(temp.path, 'cache'));
+    final kept = Directory(p.windows.join(root.path, 'keep'));
+    kept.createSync(recursive: true);
+
+    final exclusions = ExclusionStore(
+      filePath: p.windows.join(temp.path, 'exclusions.json'),
+    );
+    await exclusions.ensureLoaded();
+    await exclusions.add(kept.path);
+
+    final rule = CleanerRule(
+      id: 'test.cache',
+      title: '测试缓存',
+      category: '测试',
+      description: '测试用缓存规则',
+      pathPatterns: const [],
+    );
+    final controller = CleanController(
+      platform: _FixedRootsPlatform(rule: rule, roots: [root.path]),
+      guard: PathGuard(protectedRoots: const []),
+      quarantine: FakeQuarantineService(),
+      exclusions: exclusions,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    await tester.pumpWidget(
+      BroomApp(controller: controller, systemShell: _FakeSystemShell()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('排除列表 · 1'), findsOneWidget);
+    expect(find.text('部分排除'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('open-exclusions')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('排除项'), findsOneWidget);
+    expect(find.text(kept.path), findsOneWidget);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 }

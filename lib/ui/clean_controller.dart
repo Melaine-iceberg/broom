@@ -7,8 +7,11 @@ import '../core/models/scan_models.dart';
 import '../core/platform/cleaner_platform.dart';
 import '../core/safety/path_guard.dart';
 import '../core/scan/scan_service.dart';
+import '../core/settings/exclusion_store.dart';
 
 enum CleanPhase { idle, scanning, preview, cleaning, done }
+
+enum RuleExclusionScope { none, partial, all }
 
 class RuleResult {
   RuleResult({required this.rule, required this.items})
@@ -24,12 +27,14 @@ class CleanController extends ChangeNotifier {
     required this.platform,
     required this.guard,
     required this.quarantine,
+    required this.exclusions,
     ScanService Function()? scanServiceFactory,
   }) : _scanServiceFactory = scanServiceFactory ?? ScanService.new;
 
   final CleanerPlatform platform;
   final PathGuard guard;
   final QuarantineService quarantine;
+  final ExclusionStore exclusions;
   final ScanService Function() _scanServiceFactory;
 
   CleanPhase _phase = CleanPhase.idle;
@@ -39,8 +44,13 @@ class CleanController extends ChangeNotifier {
   CleanReport? _lastReport;
   CleanProgress? _cleanProgress;
   List<QuarantineSessionInfo> _pendingSessions = const [];
+  Map<String, RuleExclusionScope> _ruleExclusionScopes = const {};
   int _scanDirectoryErrors = 0;
   bool _scanTruncated = false;
+  bool _scanStarting = false;
+  bool _exclusionsReady = false;
+  String? _exclusionError;
+  int _scopeRevision = 0;
   String? _notice;
   String? _error;
   bool _undoBusy = false;
@@ -64,6 +74,11 @@ class CleanController extends ChangeNotifier {
     0,
     (total, session) => total + session.pendingCount,
   );
+  Map<String, RuleExclusionScope> get ruleExclusionScopes =>
+      _ruleExclusionScopes;
+  int get exclusionCount => exclusions.paths.length;
+  bool get exclusionsLoaded => _exclusionsReady;
+  String? get exclusionError => _exclusionError;
   int get scanDirectoryErrors => _scanDirectoryErrors;
   bool get scanTruncated => _scanTruncated;
   String? get notice => _notice;
@@ -100,80 +115,96 @@ class CleanController extends ChangeNotifier {
   }
 
   Future<void> initialize() async {
+    await _ensureExclusionsLoaded();
     await _refreshPendingSessions(notify: false);
     _notify();
   }
 
   Future<void> scan() async {
-    if (isBusy) return;
-    _notice = null;
-    _error = null;
-    _phase = CleanPhase.scanning;
-    _scanProgress = ScanProgress(
-      jobIndex: 0,
-      jobCount: 0,
-      ruleId: null,
-      scannedFiles: 0,
-      foundFiles: 0,
-      foundBytes: 0,
-    );
-    _results = const [];
-    _selectedRuleIds = <String>{};
-    _scanDirectoryErrors = 0;
-    _scanTruncated = false;
-    _lastReport = null;
-    _cleanProgress = null;
-    _notify();
-
-    final service = _scanServiceFactory();
-    _scanService = service;
-
+    if (isBusy || _scanStarting) return;
+    _scanStarting = true;
     try {
-      final jobs = await _buildScanJobs();
-      if (jobs.isEmpty) {
-        _phase = CleanPhase.idle;
-        _notice = '没有找到可扫描的缓存目录。';
+      await _ensureExclusionsLoaded();
+      if (_exclusionError != null) {
+        _error = '$_exclusionError 请打开“排除列表”页面重置后重试。';
         _notify();
         return;
       }
 
-      final excludedPaths = <String>[
-        ?platform.quarantineRoot,
-        ...guard.protectedRoots,
-      ];
-
-      final result = await service.scan(
-        jobs: jobs,
-        excludedPaths: excludedPaths,
-        onProgress: (progress) {
-          _scanProgress = progress;
-          _notify();
-        },
+      _notice = null;
+      _error = null;
+      _phase = CleanPhase.scanning;
+      _scanProgress = ScanProgress(
+        jobIndex: 0,
+        jobCount: 0,
+        ruleId: null,
+        scannedFiles: 0,
+        foundFiles: 0,
+        foundBytes: 0,
       );
+      _results = const [];
+      _selectedRuleIds = <String>{};
+      _scanDirectoryErrors = 0;
+      _scanTruncated = false;
+      _lastReport = null;
+      _cleanProgress = null;
+      _notify();
 
-      if (result.cancelled) {
-        _phase = CleanPhase.idle;
-        _notice = '扫描已取消。';
+      final service = _scanServiceFactory();
+      _scanService = service;
+
+      try {
+        final jobs = await _buildScanJobs();
+        if (jobs.isEmpty) {
+          _phase = CleanPhase.idle;
+          _notice = exclusions.paths.isEmpty
+              ? '没有找到可扫描的缓存目录。'
+              : '没有可扫描的缓存目录（可能已被排除列表覆盖）。';
+          _notify();
+          return;
+        }
+
+        final excludedPaths = <String>[
+          ...exclusions.paths,
+          ?platform.quarantineRoot,
+          ...guard.protectedRoots,
+        ];
+
+        final result = await service.scan(
+          jobs: jobs,
+          excludedPaths: excludedPaths,
+          onProgress: (progress) {
+            _scanProgress = progress;
+            _notify();
+          },
+        );
+
+        if (result.cancelled) {
+          _phase = CleanPhase.idle;
+          _notice = '扫描已取消。';
+          _notify();
+          return;
+        }
+
+        _scanDirectoryErrors = result.directoryErrors;
+        _scanTruncated = result.truncated;
+        _results = _groupResults(result.items);
+        _selectedRuleIds = {for (final result in _results) result.rule.id};
+        _phase = CleanPhase.preview;
+        if (_results.isEmpty) {
+          _notice = '没有发现可清理的内容。';
+        }
         _notify();
-        return;
+      } catch (error) {
+        _phase = CleanPhase.idle;
+        _error = '扫描失败：$error';
+        _notify();
+      } finally {
+        _scanService = null;
+        service.dispose();
       }
-
-      _scanDirectoryErrors = result.directoryErrors;
-      _scanTruncated = result.truncated;
-      _results = _groupResults(result.items);
-      _selectedRuleIds = {for (final result in _results) result.rule.id};
-      _phase = CleanPhase.preview;
-      if (_results.isEmpty) {
-        _notice = '没有发现可清理的内容。';
-      }
-      _notify();
-    } catch (error) {
-      _phase = CleanPhase.idle;
-      _error = '扫描失败：$error';
-      _notify();
     } finally {
-      _scanService = null;
-      service.dispose();
+      _scanStarting = false;
     }
   }
 
@@ -293,6 +324,50 @@ class CleanController extends ChangeNotifier {
     _notify();
   }
 
+  Future<String?> addExclusion(String path) =>
+      _changeExclusions(() => exclusions.add(path), '添加');
+
+  Future<String?> removeExclusion(String path) =>
+      _changeExclusions(() => exclusions.remove(path), '移除');
+
+  Future<String?> resetExclusions() async {
+    try {
+      await exclusions.reset();
+      _exclusionsReady = true;
+      _exclusionError = null;
+      await _refreshRuleExclusionScopes(notify: false);
+      _notify();
+      return null;
+    } on ExclusionException catch (error) {
+      return error.message;
+    } catch (error) {
+      return '无法重置排除列表：$error';
+    }
+  }
+
+  Future<void> refreshRuleExclusionScopes() =>
+      _refreshRuleExclusionScopes(notify: true);
+
+  Future<String?> _changeExclusions(
+    Future<void> Function() change,
+    String action,
+  ) async {
+    await _ensureExclusionsLoaded();
+    if (!_exclusionsReady) {
+      return _exclusionError ?? '无法读取排除列表。';
+    }
+    try {
+      await change();
+      await _refreshRuleExclusionScopes(notify: false);
+      _notify();
+      return null;
+    } on ExclusionException catch (error) {
+      return error.message;
+    } catch (error) {
+      return '无法$action排除项：$error';
+    }
+  }
+
   Future<List<ScanJob>> _buildScanJobs() async {
     final jobs = <ScanJob>[];
     final seenRoots = <String>{};
@@ -303,6 +378,7 @@ class CleanController extends ChangeNotifier {
       final safeRoots = <String>[];
       for (final root in resolvedRoots) {
         if (guard.isProtected(root)) continue;
+        if (exclusions.excludes(root)) continue;
         final key = PathGuard.normalize(root).toLowerCase();
         if (!seenRoots.add(key)) continue;
         safeRoots.add(root);
@@ -318,6 +394,73 @@ class CleanController extends ChangeNotifier {
       );
     }
     return jobs;
+  }
+
+  Future<void> _ensureExclusionsLoaded() async {
+    if (_exclusionsReady) return;
+    try {
+      await exclusions.ensureLoaded();
+      _exclusionsReady = true;
+      _exclusionError = null;
+    } catch (_) {
+      _exclusionsReady = false;
+      _exclusionError = exclusions.loadError ?? '无法读取排除列表。';
+    }
+    if (_exclusionsReady) {
+      await _refreshRuleExclusionScopes(notify: false);
+    } else {
+      _ruleExclusionScopes = const {};
+    }
+  }
+
+  Future<void> _refreshRuleExclusionScopes({required bool notify}) async {
+    final revision = ++_scopeRevision;
+    if (!_exclusionsReady) {
+      _ruleExclusionScopes = const {};
+      if (notify) _notify();
+      return;
+    }
+
+    final safeRules = platform.rules.where(
+      (rule) => rule.risk == CleanRisk.safe,
+    );
+    final scopes = <String, RuleExclusionScope>{};
+    if (exclusions.paths.isEmpty) {
+      for (final rule in safeRules) {
+        scopes[rule.id] = RuleExclusionScope.none;
+      }
+      if (revision != _scopeRevision) return;
+      _ruleExclusionScopes = scopes;
+      if (notify) _notify();
+      return;
+    }
+
+    for (final rule in safeRules) {
+      List<String> roots;
+      try {
+        roots = await platform.resolveRoots(rule);
+      } catch (_) {
+        continue;
+      }
+      final candidates = [
+        for (final root in roots)
+          if (!guard.isProtected(root)) root,
+      ];
+      if (candidates.isEmpty) continue;
+      final excludedCount = candidates.where(exclusions.excludes).length;
+      if (excludedCount == candidates.length) {
+        scopes[rule.id] = RuleExclusionScope.all;
+      } else if (excludedCount > 0 ||
+          candidates.any((root) => exclusions.intersects(root))) {
+        scopes[rule.id] = RuleExclusionScope.partial;
+      } else {
+        scopes[rule.id] = RuleExclusionScope.none;
+      }
+    }
+
+    if (revision != _scopeRevision) return;
+    _ruleExclusionScopes = scopes;
+    if (notify) _notify();
   }
 
   List<RuleResult> _groupResults(List<JunkItem> items) {

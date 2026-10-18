@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 
 import '../models/clean_models.dart';
 import '../models/scan_models.dart';
+import '../safety/path_exclusions.dart';
 import '../safety/path_guard.dart';
 
 const _schemaVersion = 1;
@@ -15,6 +16,7 @@ class QuarantineService {
   factory QuarantineService({
     required String quarantineRoot,
     required PathGuard guard,
+    PathExclusionSource? exclusions,
     DateTime Function()? clock,
   }) {
     if (!p.windows.isAbsolute(quarantineRoot)) {
@@ -32,13 +34,24 @@ class QuarantineService {
         '隔离区不能是磁盘根目录',
       );
     }
-    return QuarantineService._(normalized, guard, clock ?? DateTime.now);
+    return QuarantineService._(
+      normalized,
+      guard,
+      exclusions ?? const EmptyPathExclusionSource(),
+      clock ?? DateTime.now,
+    );
   }
 
-  QuarantineService._(this.quarantineRoot, this.guard, this._clock);
+  QuarantineService._(
+    this.quarantineRoot,
+    this.guard,
+    this._exclusions,
+    this._clock,
+  );
 
   final String quarantineRoot;
   final PathGuard guard;
+  final PathExclusionSource _exclusions;
   final DateTime Function() _clock;
   static final Random _random = Random.secure();
 
@@ -128,6 +141,12 @@ class QuarantineService {
           break;
         }
         processed++;
+
+        if (_exclusions.excludes(item.path)) {
+          recordFailure(item.path, '位于排除列表中，已跳过');
+          report(currentPath: item.path);
+          continue;
+        }
 
         if (!guard.allows(path: item.path, root: item.rootPath)) {
           recordFailure(item.path, '未通过路径安全检查');
@@ -299,6 +318,11 @@ class QuarantineService {
       }
       if (storedType != FileSystemEntityType.file) {
         missingCount++;
+        continue;
+      }
+
+      if (_exclusions.excludes(entry.originalPath)) {
+        recordFailure(entry.originalPath, '原路径位于排除列表中，未恢复');
         continue;
       }
 

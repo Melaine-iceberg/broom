@@ -11,6 +11,7 @@ import 'core/platform/cleaner_platform.dart';
 import 'core/platform/system_access.dart';
 import 'core/platform/system_cache_platform.dart';
 import 'core/safety/path_guard.dart';
+import 'core/settings/exclusion_store.dart';
 import 'platform/window_chrome.dart';
 import 'ui/clean_controller.dart';
 import 'ui/system_cache_controller.dart';
@@ -39,14 +40,19 @@ void main(List<String> args) {
     environment: platform.environment,
     additionalProtectedRoots: [quarantineRoot],
   );
+  final exclusions = ExclusionStore(
+    filePath: ExclusionStore.defaultFilePath(quarantineRoot),
+  );
   final quarantine = QuarantineService(
     quarantineRoot: quarantineRoot,
     guard: guard,
+    exclusions: exclusions,
   );
   final controller = CleanController(
     platform: platform,
     guard: guard,
     quarantine: quarantine,
+    exclusions: exclusions,
   );
   unawaited(controller.initialize());
 

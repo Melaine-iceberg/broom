@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:broom/core/clean/quarantine_service.dart';
 import 'package:broom/core/models/scan_models.dart';
+import 'package:broom/core/safety/path_exclusions.dart';
 import 'package:broom/core/safety/path_guard.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -257,5 +258,49 @@ void main() {
       ),
       throwsArgumentError,
     );
+  });
+
+  test('refuses to clean items inside excluded paths', () async {
+    final excludedDir = Directory(p.windows.join(source.path, 'keep'));
+    await excludedDir.create(recursive: true);
+    final file = await createFile(p.join('keep', 'keep.txt'), 'keep-me');
+    final service = QuarantineService(
+      quarantineRoot: p.windows.join(temp.path, 'quarantine'),
+      guard: PathGuard(protectedRoots: const []),
+      exclusions: PathExclusions([excludedDir.path]),
+    );
+
+    final report = await service.clean([await itemFor(file)]);
+
+    expect(report.sessionId, isNull);
+    expect(report.movedCount, 0);
+    expect(report.failureCount, 1);
+    expect(report.failures.single.reason, contains('排除'));
+    expect(await file.readAsString(), 'keep-me');
+    expect(await service.listSessions(), isEmpty);
+  });
+
+  test('refuses to restore into excluded paths', () async {
+    final file = await createFile('keep.txt', 'alpha');
+    final report = await quarantine.clean([await itemFor(file)]);
+
+    final restricted = QuarantineService(
+      quarantineRoot: p.windows.join(temp.path, 'quarantine'),
+      guard: PathGuard(protectedRoots: const []),
+      exclusions: PathExclusions([source.path]),
+    );
+    final blocked = await restricted.undo(report.sessionId!);
+
+    expect(blocked.restoredCount, 0);
+    expect(blocked.failureCount, 1);
+    expect(blocked.failures.single.reason, contains('排除'));
+    expect(await file.exists(), isFalse);
+    expect((await restricted.listSessions()).single.pendingCount, 1);
+
+    final retry = await quarantine.undo(report.sessionId!);
+
+    expect(retry.restoredCount, 1);
+    expect(retry.sessionRemoved, isTrue);
+    expect(await file.readAsString(), 'alpha');
   });
 }

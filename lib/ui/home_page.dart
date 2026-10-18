@@ -7,6 +7,7 @@ import '../core/shell/system_shell.dart';
 import 'analysis_widgets.dart';
 import 'clean_controller.dart';
 import 'duplicate_finder_page.dart';
+import 'exclusions_page.dart';
 import 'format.dart';
 import 'large_files_page.dart';
 import 'quarantine_page.dart';
@@ -101,6 +102,7 @@ class _HomePageState extends State<HomePage> {
           onOpenRecycleBin: _openRecycleBin,
           onOpenDuplicateFinder: _openDuplicateFinder,
           onOpenLargeFiles: _openLargeFiles,
+          onOpenExclusions: _openExclusions,
         );
       case CleanPhase.scanning:
         return _ScanningView(controller: controller);
@@ -251,6 +253,15 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
+
+  Future<void> _openExclusions() {
+    return Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            ExclusionsPage(controller: controller, shell: widget.shell),
+      ),
+    );
+  }
 }
 
 class _IdleView extends StatelessWidget {
@@ -260,6 +271,7 @@ class _IdleView extends StatelessWidget {
     required this.onOpenRecycleBin,
     required this.onOpenDuplicateFinder,
     required this.onOpenLargeFiles,
+    required this.onOpenExclusions,
     this.onOpenSystemCache,
   });
 
@@ -268,6 +280,7 @@ class _IdleView extends StatelessWidget {
   final VoidCallback onOpenRecycleBin;
   final VoidCallback onOpenDuplicateFinder;
   final VoidCallback onOpenLargeFiles;
+  final VoidCallback onOpenExclusions;
   final VoidCallback? onOpenSystemCache;
 
   @override
@@ -296,7 +309,12 @@ class _IdleView extends StatelessWidget {
           onOpenLargeFiles: onOpenLargeFiles,
         ),
         const SizedBox(height: 22),
-        _ScopeSection(rules: controller.platform.rules),
+        _ScopeSection(
+          rules: controller.platform.rules,
+          scopes: controller.ruleExclusionScopes,
+          exclusionCount: controller.exclusionCount,
+          onOpenExclusions: onOpenExclusions,
+        ),
         const SizedBox(height: 14),
         const _SafetyNote(),
       ],
@@ -802,9 +820,17 @@ class _ToolCard extends StatelessWidget {
 }
 
 class _ScopeSection extends StatelessWidget {
-  const _ScopeSection({required this.rules});
+  const _ScopeSection({
+    required this.rules,
+    required this.scopes,
+    required this.exclusionCount,
+    required this.onOpenExclusions,
+  });
 
   final List<CleanerRule> rules;
+  final Map<String, RuleExclusionScope> scopes;
+  final int exclusionCount;
+  final VoidCallback onOpenExclusions;
 
   @override
   Widget build(BuildContext context) {
@@ -816,7 +842,7 @@ class _ScopeSection extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 10),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
@@ -837,15 +863,46 @@ class _ScopeSection extends StatelessWidget {
               const SizedBox(width: 8),
               Text('本次扫描范围', style: theme.textTheme.titleSmall),
               const Spacer(),
-              Text(
-                '全部为 Safe 级',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
+              TextButton.icon(
+                key: const ValueKey('open-exclusions'),
+                onPressed: onOpenExclusions,
+                icon: const Icon(Icons.block_rounded, size: 15),
+                label: Text(
+                  exclusionCount == 0 ? '排除列表' : '排除列表 · $exclusionCount',
+                ),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          if (exclusionCount > 0)
+            Padding(
+              padding: const EdgeInsets.only(left: 2, bottom: 2),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 14,
+                    color: scheme.tertiary,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      '排除优先于规则：被排除的目录及其子目录不会参与扫描。',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           for (final entry in groups.entries)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
@@ -884,8 +941,11 @@ class _ScopeSection extends StatelessWidget {
                       children: [
                         for (final rule in entry.value)
                           Tooltip(
-                            message: rule.description,
-                            child: _RuleChip(rule: rule),
+                            message: _scopeTooltip(rule, scopes[rule.id]),
+                            child: _RuleChip(
+                              rule: rule,
+                              scope: scopes[rule.id] ?? RuleExclusionScope.none,
+                            ),
                           ),
                       ],
                     ),
@@ -897,28 +957,49 @@ class _ScopeSection extends StatelessWidget {
       ),
     );
   }
+
+  String _scopeTooltip(CleanerRule rule, RuleExclusionScope? scope) {
+    return switch (scope) {
+      RuleExclusionScope.all => '${rule.description}\n此规则的所有目录都在排除列表中。',
+      RuleExclusionScope.partial => '${rule.description}\n此规则的部分目录已被排除。',
+      _ => rule.description,
+    };
+  }
 }
 
 class _RuleChip extends StatelessWidget {
-  const _RuleChip({required this.rule});
+  const _RuleChip({required this.rule, required this.scope});
 
   final CleanerRule rule;
+  final RuleExclusionScope scope;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final excluded = scope != RuleExclusionScope.none;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.42),
+        color: excluded
+            ? scheme.tertiaryContainer.withValues(alpha: 0.32)
+            : scheme.surfaceContainerHighest.withValues(alpha: 0.42),
         borderRadius: BorderRadius.circular(9),
+        border: excluded
+            ? Border.all(color: scheme.tertiary.withValues(alpha: 0.2))
+            : null,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(_ruleIcon(rule.id), size: 13, color: scheme.onSurfaceVariant),
+          Icon(
+            _ruleIcon(rule.id),
+            size: 13,
+            color: excluded
+                ? scheme.onTertiaryContainer
+                : scheme.onSurfaceVariant,
+          ),
           const SizedBox(width: 6),
           Text(
             rule.title,
@@ -926,6 +1007,16 @@ class _RuleChip extends StatelessWidget {
               color: scheme.onSurface,
             ),
           ),
+          if (excluded) ...[
+            const SizedBox(width: 6),
+            Text(
+              scope == RuleExclusionScope.all ? '已排除' : '部分排除',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: scheme.onTertiaryContainer,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1858,7 +1949,7 @@ class _DoneView extends StatelessWidget {
                             Expanded(
                               child: Text(
                                 '${report.failureCount} 个文件未能清理，'
-                                '通常是因为文件正被程序占用。',
+                                '可能被程序占用，或已被加入排除列表。',
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: scheme.onTertiaryContainer,
                                 ),
