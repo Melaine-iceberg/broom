@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/models/app_settings.dart';
+import '../core/models/scan_models.dart';
 import '../core/settings/settings_store.dart';
 
 class SettingsController extends ChangeNotifier {
@@ -39,6 +40,17 @@ class SettingsController extends ChangeNotifier {
       _settings.language == AppLanguagePreference.system;
 
   bool isRuleEnabled(String ruleId) => _settings.isRuleEnabled(ruleId);
+
+  bool isCategoryEnabled(String categoryId) =>
+      _settings.isCategoryEnabled(categoryId);
+
+  ScanSettings get scanSettings => ScanSettings(
+    disabledCategoryIds: _settings.disabledCategoryIds,
+    parallelism: _settings.scanParallelism,
+    lowPriority: _settings.scanLowPriority,
+    useNtfsIndex: _settings.useNtfsIndex,
+    itemLimit: _settings.scanItemLimit,
+  );
 
   void load() {
     final store = this.store;
@@ -85,6 +97,57 @@ class SettingsController extends ChangeNotifier {
   Future<String?> resetRuleToggles() {
     if (_settings.disabledRuleIds.isEmpty) return Future.value();
     return _persist(_settings.copyWith(disabledRuleIds: const <String>{}));
+  }
+
+  Future<String?> setCategoryEnabled(String categoryId, bool enabled) {
+    final disabled = Set<String>.of(_settings.disabledCategoryIds);
+    if (enabled) {
+      disabled.remove(categoryId);
+    } else {
+      disabled.add(categoryId);
+    }
+    if (disabled.length == _settings.disabledCategoryIds.length &&
+        disabled.containsAll(_settings.disabledCategoryIds)) {
+      return Future.value();
+    }
+    return _persist(_settings.copyWith(disabledCategoryIds: disabled));
+  }
+
+  Future<String?> resetCategoryToggles() {
+    if (_settings.disabledCategoryIds.isEmpty) return Future.value();
+    return _persist(_settings.copyWith(disabledCategoryIds: const <String>{}));
+  }
+
+  Future<String?> setScanParallelism(int value) {
+    if (value < 0 || value > 16) return Future.value('扫描线程数无效');
+    if (_settings.scanParallelism == value) return Future.value();
+    return _persist(_settings.copyWith(scanParallelism: value));
+  }
+
+  Future<String?> setScanLowPriority(bool enabled) {
+    if (_settings.scanLowPriority == enabled) return Future.value();
+    return _persist(_settings.copyWith(scanLowPriority: enabled));
+  }
+
+  Future<String?> setUseNtfsIndex(bool enabled) {
+    if (_settings.useNtfsIndex == enabled) return Future.value();
+    return _persist(_settings.copyWith(useNtfsIndex: enabled));
+  }
+
+  Future<String?> setScanItemLimit(int? limit) {
+    if (limit != null && limit < 1) return Future.value('扫描结果上限必须大于 0');
+    if (_settings.scanItemLimit == limit) return Future.value();
+    return _persist(
+      limit == null
+          ? _settings.copyWith(clearScanItemLimit: true)
+          : _settings.copyWith(scanItemLimit: limit),
+    );
+  }
+
+  Future<String?> setRuleUpdateUrl(String url) {
+    final trimmed = url.trim();
+    if (_settings.ruleUpdateUrl == trimmed) return Future.value();
+    return _persist(_settings.copyWith(ruleUpdateUrl: trimmed));
   }
 
   void clearErrors() {

@@ -47,23 +47,43 @@ class SettingsStore {
 
       final theme = _parseTheme(decoded['theme']);
       final language = _parseLanguage(decoded['language']);
-      final rawDisabled = decoded['disabledRuleIds'];
-      final disabled = <String>{};
-      if (rawDisabled != null) {
-        if (rawDisabled is! List) {
-          throw const FormatException('规则开关数据无效');
-        }
-        for (final value in rawDisabled) {
-          if (value is! String || value.trim().isEmpty) {
-            throw const FormatException('规则开关数据无效');
-          }
-          disabled.add(value);
-        }
+      final disabled = _parseStringSet(decoded['disabledRuleIds'], '规则开关数据无效');
+      final disabledCategories = _parseStringSet(
+        decoded['disabledCategoryIds'],
+        '扫描类别数据无效',
+      );
+      final parallelism = decoded['scanParallelism'];
+      final lowPriority = decoded['scanLowPriority'];
+      final ntfsIndex = decoded['useNtfsIndex'];
+      final itemLimit = decoded['scanItemLimit'];
+      final updateUrl = decoded['ruleUpdateUrl'];
+      if (parallelism != null &&
+          (parallelism is! int || parallelism < 0 || parallelism > 16)) {
+        throw const FormatException('扫描线程数无效');
+      }
+      if (lowPriority != null && lowPriority is! bool) {
+        throw const FormatException('低优先级设置无效');
+      }
+      if (ntfsIndex != null && ntfsIndex is! bool) {
+        throw const FormatException('NTFS 索引设置无效');
+      }
+      if (itemLimit != null &&
+          (itemLimit is! int || itemLimit < 1 || itemLimit > 100000000)) {
+        throw const FormatException('扫描结果上限无效');
+      }
+      if (updateUrl != null && updateUrl is! String) {
+        throw const FormatException('规则更新地址无效');
       }
       return AppSettings(
         theme: theme,
         language: language,
         disabledRuleIds: Set.unmodifiable(disabled),
+        disabledCategoryIds: Set.unmodifiable(disabledCategories),
+        scanParallelism: parallelism as int? ?? 2,
+        scanLowPriority: lowPriority as bool? ?? true,
+        useNtfsIndex: ntfsIndex as bool? ?? false,
+        scanItemLimit: itemLimit as int?,
+        ruleUpdateUrl: updateUrl as String? ?? '',
       );
     } on FormatException catch (error) {
       throw SettingsException('设置数据无效：${error.message}');
@@ -83,6 +103,12 @@ class SettingsStore {
           'theme': settings.theme.name,
           'language': settings.language.name,
           'disabledRuleIds': settings.disabledRuleIds.toList()..sort(),
+          'disabledCategoryIds': settings.disabledCategoryIds.toList()..sort(),
+          'scanParallelism': settings.scanParallelism,
+          'scanLowPriority': settings.scanLowPriority,
+          'useNtfsIndex': settings.useNtfsIndex,
+          'scanItemLimit': settings.scanItemLimit,
+          'ruleUpdateUrl': settings.ruleUpdateUrl,
         }),
         flush: true,
       );
@@ -90,6 +116,19 @@ class SettingsStore {
     } on FileSystemException catch (error) {
       throw SettingsException('无法保存设置：${error.message}');
     }
+  }
+
+  static Set<String> _parseStringSet(Object? raw, String error) {
+    final values = <String>{};
+    if (raw == null) return values;
+    if (raw is! List) throw FormatException(error);
+    for (final value in raw) {
+      if (value is! String || value.trim().isEmpty) {
+        throw FormatException(error);
+      }
+      values.add(value);
+    }
+    return values;
   }
 
   static AppThemePreference _parseTheme(Object? value) {

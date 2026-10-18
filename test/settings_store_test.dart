@@ -92,6 +92,67 @@ void main() {
     expect(controller.saveError, isNotNull);
   });
 
+  test('round-trips scan engine settings and categories', () async {
+    final store = createStore();
+    await store.save(
+      const AppSettings(
+        disabledCategoryIds: {'browser', 'logs'},
+        scanParallelism: 4,
+        scanLowPriority: false,
+        useNtfsIndex: true,
+        scanItemLimit: 250000,
+        ruleUpdateUrl: 'https://updates.example.test/manifest.json',
+      ),
+    );
+
+    final loaded = store.load();
+    expect(loaded.disabledCategoryIds, {'browser', 'logs'});
+    expect(loaded.isCategoryEnabled('dev'), isTrue);
+    expect(loaded.scanParallelism, 4);
+    expect(loaded.scanLowPriority, isFalse);
+    expect(loaded.useNtfsIndex, isTrue);
+    expect(loaded.scanItemLimit, 250000);
+    expect(loaded.ruleUpdateUrl, isNotEmpty);
+  });
+
+  test('settings default to unlimited results and low-priority scans', () {
+    final settings = createStore().load();
+    expect(settings.scanItemLimit, isNull);
+    expect(settings.scanLowPriority, isTrue);
+    expect(settings.useNtfsIndex, isFalse);
+    expect(settings.disabledCategoryIds, isEmpty);
+    expect(settings.ruleUpdateUrl, isEmpty);
+  });
+
+  test('controller updates scan settings and category filters', () async {
+    final store = createStore();
+    final controller = SettingsController(store: store);
+    addTearDown(controller.dispose);
+    controller.load();
+
+    expect(await controller.setCategoryEnabled('browser', false), isNull);
+    expect(await controller.setScanParallelism(0), isNull);
+    expect(await controller.setScanLowPriority(false), isNull);
+    expect(await controller.setUseNtfsIndex(true), isNull);
+    expect(await controller.setScanItemLimit(1234), isNull);
+    expect(await controller.setRuleUpdateUrl('https://example.test/x'), isNull);
+
+    final saved = store.load();
+    expect(saved.isCategoryEnabled('browser'), isFalse);
+    expect(saved.scanParallelism, 0);
+    expect(saved.scanLowPriority, isFalse);
+    expect(saved.useNtfsIndex, isTrue);
+    expect(saved.scanItemLimit, 1234);
+    expect(saved.ruleUpdateUrl, 'https://example.test/x');
+    expect(controller.scanSettings.itemLimit, 1234);
+    expect(controller.scanSettings.disabledCategoryIds, {'browser'});
+
+    expect(await controller.setScanItemLimit(null), isNull);
+    expect(store.load().scanItemLimit, isNull);
+    expect(await controller.resetCategoryToggles(), isNull);
+    expect(store.load().disabledCategoryIds, isEmpty);
+  });
+
   test('controller persists changes', () async {
     final store = createStore();
     final controller = SettingsController(store: store);
