@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import 'app.dart';
+import 'core/clean/clean_history_store.dart';
 import 'core/clean/file_metadata.dart';
 import 'core/clean/quarantine_retention_service.dart';
 import 'core/clean/quarantine_service.dart';
@@ -23,6 +24,7 @@ import 'core/scan/scan_result_store.dart';
 import 'core/settings/exclusion_store.dart';
 import 'core/settings/quarantine_policy_store.dart';
 import 'core/settings/settings_store.dart';
+import 'core/shell/system_shell.dart';
 import 'platform/window_chrome.dart';
 import 'ui/clean_controller.dart';
 import 'ui/rule_update_controller.dart';
@@ -56,11 +58,23 @@ void main(List<String> args) {
   final exclusions = ExclusionStore(
     filePath: ExclusionStore.defaultFilePath(quarantineRoot),
   );
+  final systemShell = createSystemShell();
   final quarantine = QuarantineService(
     quarantineRoot: quarantineRoot,
     guard: guard,
     metadataAccess: createFileMetadataAccess(),
     exclusions: exclusions,
+    freeSpaceProbe: (path) async {
+      try {
+        return (await systemShell.queryDiskSpace(path)).freeBytes;
+      } catch (_) {
+        // If disk space cannot be queried, cleaning must remain available.
+        return null;
+      }
+    },
+    historyStore: CleanHistoryStore(
+      filePath: CleanHistoryStore.defaultFilePath(quarantineRoot),
+    ),
   );
   final retention = QuarantineRetentionService(
     quarantine: quarantine,
@@ -126,6 +140,7 @@ void main(List<String> args) {
     BroomApp(
       controller: controller,
       settingsController: settings,
+      systemShell: systemShell,
       systemCacheController: systemCacheController,
       quarantineRetention: retention,
       analysisInitialDirectory: _downloadsDirectory(platform.environment),

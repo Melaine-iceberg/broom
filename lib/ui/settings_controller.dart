@@ -24,6 +24,8 @@ class SettingsController extends ChangeNotifier {
 
   bool get loaded => _loaded;
 
+  bool get onboardingCompleted => _settings.onboardingCompleted;
+
   ThemeMode get themeMode => switch (_settings.theme) {
     AppThemePreference.system => ThemeMode.system,
     AppThemePreference.light => ThemeMode.light,
@@ -148,6 +150,11 @@ class SettingsController extends ChangeNotifier {
     final trimmed = url.trim();
     if (_settings.ruleUpdateUrl == trimmed) return Future.value();
     return _persist(_settings.copyWith(ruleUpdateUrl: trimmed));
+  }
+
+  Future<String?> completeOnboarding() {
+    if (_settings.onboardingCompleted) return Future.value();
+    return _persist(_settings.copyWith(onboardingCompleted: true));
   }
 
   /// Restores every preference to its default while keeping the current

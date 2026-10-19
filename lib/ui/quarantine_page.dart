@@ -8,6 +8,7 @@ import '../core/models/quarantine_policy_models.dart';
 import '../core/shell/system_shell.dart';
 import '../l10n/broom_strings.dart';
 import 'analysis_widgets.dart';
+import 'clean_history_page.dart';
 import 'format.dart';
 import 'quarantine_policy_dialog.dart';
 
@@ -17,11 +18,13 @@ class QuarantinePage extends StatefulWidget {
     required this.service,
     required this.shell,
     this.retention,
+    this.ruleTitles = const {},
   });
 
   final QuarantineService service;
   final SystemShell shell;
   final QuarantineRetentionService? retention;
+  final Map<String, String> ruleTitles;
 
   @override
   State<QuarantinePage> createState() => _QuarantinePageState();
@@ -282,6 +285,17 @@ class _QuarantinePageState extends State<QuarantinePage> {
     await _load(showLoading: false);
   }
 
+  Future<void> _openHistory() async {
+    final store = widget.service.historyStore;
+    if (store == null || _busy) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            CleanHistoryPage(store: store, ruleTitles: widget.ruleTitles),
+      ),
+    );
+  }
+
   void _showMessage(String message) {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
@@ -375,6 +389,9 @@ class _QuarantinePageState extends State<QuarantinePage> {
                 busy: _busy,
                 onEditPolicy: widget.retention == null ? null : _editPolicy,
                 onPurgeAll: _sessions.isEmpty ? null : _purgeAll,
+                onOpenHistory: widget.service.historyStore == null
+                    ? null
+                    : _openHistory,
               ),
               if (_loading) ...[
                 const SizedBox(height: 18),
@@ -440,6 +457,7 @@ class QuarantineSessionPage extends StatefulWidget {
 class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
   List<QuarantineEntry> _entries = const [];
   final Set<String> _selected = <String>{};
+  final Map<String, UndoConflictPolicy> _conflictPolicies = {};
   late QuarantineSessionInfo _session;
   bool _loading = true;
   bool _busy = false;
@@ -505,6 +523,14 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
             (entry) => entry.storedName == name && _canSelect(entry),
           ),
         );
+        _conflictPolicies.removeWhere(
+          (name, _) => !entries.any(
+            (entry) =>
+                entry.storedName == name &&
+                entry.restorable &&
+                entry.originalExists,
+          ),
+        );
         _error = null;
         _loading = false;
       });
@@ -524,6 +550,21 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
       }
     });
   }
+
+  void _setConflictPolicy(String storedName, UndoConflictPolicy policy) {
+    setState(() => _conflictPolicies[storedName] = policy);
+  }
+
+  Map<String, UndoConflictPolicy> _selectedConflictPolicies(
+    Set<String>? storedNames,
+  ) => {
+    for (final entry in _entries)
+      if (entry.restorable &&
+          entry.originalExists &&
+          (storedNames == null || storedNames.contains(entry.storedName)))
+        entry.storedName:
+            _conflictPolicies[entry.storedName] ?? UndoConflictPolicy.skip,
+  };
 
   void _toggleAll() {
     final selectable = _entries
@@ -597,16 +638,20 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
   }
 
   Future<void> _restore({Set<String>? storedNames}) async {
-    final conflicts = _entries
-        .where(
-          (entry) =>
-              entry.restorable &&
-              entry.originalExists &&
-              (storedNames == null || storedNames.contains(entry.storedName)),
-        )
-        .length;
-    final policy = await _askConflictPolicy(context, conflicts);
-    if (policy == null || !mounted) return;
+    final policies = _selectedConflictPolicies(storedNames);
+    final overwritePaths = [
+      for (final entry in _entries)
+        if (entry.restorable &&
+            entry.originalExists &&
+            (storedNames == null || storedNames.contains(entry.storedName)) &&
+            policies[entry.storedName] == UndoConflictPolicy.overwrite)
+          entry.originalPath,
+    ];
+    if (overwritePaths.isNotEmpty &&
+        !await _confirmOverwrite(context, overwritePaths)) {
+      return;
+    }
+    if (!mounted) return;
 
     setState(() {
       _busy = true;
@@ -616,7 +661,7 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
       final report = await widget.service.undo(
         widget.session.id,
         storedNames: storedNames,
-        conflictPolicy: policy,
+        conflictPolicies: policies,
       );
       if (!mounted) return;
       await _showRestoreResult(report);
@@ -889,11 +934,23 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
                           separatorBuilder: (_, _) => const SizedBox(height: 8),
                           itemBuilder: (context, index) {
                             final entry = _entries[index];
+                            final isConflict =
+                                entry.restorable && entry.originalExists;
                             return _EntryTile(
                               entry: entry,
                               selected: _selected.contains(entry.storedName),
                               enabled: _canSelect(entry) && !_busy,
                               onToggle: () => _toggle(entry.storedName),
+                              conflictPolicy: isConflict
+                                  ? _conflictPolicies[entry.storedName] ??
+                                        UndoConflictPolicy.skip
+                                  : null,
+                              onConflictPolicyChanged: isConflict && !_busy
+                                  ? (policy) => _setConflictPolicy(
+                                      entry.storedName,
+                                      policy,
+                                    )
+                                  : null,
                             );
                           },
                         ),
@@ -932,6 +989,7 @@ class _SummaryCard extends StatelessWidget {
     required this.busy,
     required this.onEditPolicy,
     required this.onPurgeAll,
+    required this.onOpenHistory,
   });
 
   final int pendingBytes;
@@ -943,6 +1001,7 @@ class _SummaryCard extends StatelessWidget {
   final bool busy;
   final VoidCallback? onEditPolicy;
   final VoidCallback? onPurgeAll;
+  final VoidCallback? onOpenHistory;
 
   @override
   Widget build(BuildContext context) {
@@ -1055,6 +1114,18 @@ class _SummaryCard extends StatelessWidget {
                 ),
             ],
           ),
+          if (onOpenHistory != null) ...[
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                key: const ValueKey('clean-history-button'),
+                onPressed: busy ? null : onOpenHistory,
+                icon: const Icon(Icons.history_rounded, size: 17),
+                label: Text(context.t('清理历史')),
+              ),
+            ),
+          ],
           if (policy case final policy?) ...[
             const SizedBox(height: 14),
             Container(
@@ -1397,7 +1468,8 @@ class _SessionDetailHeader extends StatelessWidget {
             child: Text(
               context.tf(
                 '{count} 个文件 · {bytes} 仍在隔离区。'
-                '冲突文件可选择跳过、保留两者或覆盖；永久释放后无法找回。',
+                '冲突文件可在列表中逐项选择跳过、保留两者或覆盖；'
+                '覆盖前会再次确认，永久释放后无法找回。',
                 {'count': pendingCount, 'bytes': formatBytes(pendingBytes)},
               ),
               style: theme.textTheme.bodySmall?.copyWith(
@@ -1425,12 +1497,16 @@ class _EntryTile extends StatelessWidget {
     required this.selected,
     required this.enabled,
     required this.onToggle,
+    this.conflictPolicy,
+    this.onConflictPolicyChanged,
   });
 
   final QuarantineEntry entry;
   final bool selected;
   final bool enabled;
   final VoidCallback onToggle;
+  final UndoConflictPolicy? conflictPolicy;
+  final ValueChanged<UndoConflictPolicy>? onConflictPolicyChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1536,6 +1612,57 @@ class _EntryTile extends StatelessWidget {
                       style: theme.textTheme.labelSmall?.copyWith(color: color),
                     ),
                   ),
+                  if (conflictPolicy case final policy?) ...[
+                    const SizedBox(height: 3),
+                    PopupMenuButton<UndoConflictPolicy>(
+                      key: ValueKey('conflict-policy-${entry.storedName}'),
+                      enabled: onConflictPolicyChanged != null,
+                      initialValue: policy,
+                      tooltip: context.t('逐项选择冲突处理方式'),
+                      onSelected: onConflictPolicyChanged,
+                      itemBuilder: (_) => [
+                        for (final option in UndoConflictPolicy.values)
+                          PopupMenuItem(
+                            value: option,
+                            child: Text(_conflictPolicyLabel(context, option)),
+                          ),
+                      ],
+                      child: Container(
+                        padding: const EdgeInsets.only(left: 7, right: 2),
+                        decoration: BoxDecoration(
+                          color: onConflictPolicyChanged == null
+                              ? scheme.surfaceContainerHighest.withValues(
+                                  alpha: 0.4,
+                                )
+                              : scheme.tertiaryContainer.withValues(
+                                  alpha: 0.35,
+                                ),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _conflictPolicyLabel(context, policy),
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: onConflictPolicyChanged == null
+                                    ? scheme.onSurfaceVariant
+                                    : scheme.onTertiaryContainer,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Icon(
+                              Icons.arrow_drop_down_rounded,
+                              size: 15,
+                              color: onConflictPolicyChanged == null
+                                  ? scheme.onSurfaceVariant
+                                  : scheme.onTertiaryContainer,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ],
@@ -1813,6 +1940,111 @@ Future<UndoConflictPolicy?> _askConflictPolicy(
     context: context,
     builder: (_) => _ConflictResolutionDialog(conflictCount: conflictCount),
   );
+}
+
+String _conflictPolicyLabel(BuildContext context, UndoConflictPolicy policy) {
+  return switch (policy) {
+    UndoConflictPolicy.skip => context.t('跳过'),
+    UndoConflictPolicy.keepBoth => context.t('保留两者'),
+    UndoConflictPolicy.overwrite => context.t('覆盖'),
+  };
+}
+
+Future<bool> _confirmOverwrite(BuildContext context, List<String> paths) async {
+  var acknowledged = false;
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setState) {
+        final theme = Theme.of(context);
+        final scheme = theme.colorScheme;
+        return AlertDialog(
+          icon: Icon(
+            Icons.warning_amber_rounded,
+            size: 30,
+            color: scheme.error,
+          ),
+          title: Text(
+            context.tf('覆盖 {count} 个原位置文件？', {'count': paths.length}),
+          ),
+          content: SizedBox(
+            width: 460,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    context.t('将用隔离区中的文件替换以下原位置内容，现有内容会被删除：'),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  for (final path in paths.take(6))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Text(
+                        '• ${fileNameOf(path)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurface,
+                        ),
+                      ),
+                    ),
+                  if (paths.length > 6)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Text(
+                        context.tf('还有 {count} 个文件…', {
+                          'count': paths.length - 6,
+                        }),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  CheckboxListTile(
+                    key: const ValueKey('overwrite-confirm-checkbox'),
+                    value: acknowledged,
+                    onChanged: (value) =>
+                        setState(() => acknowledged = value ?? false),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: Text(
+                      context.t('我明白这些文件的原位置内容将被永久覆盖'),
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(context.t('取消')),
+            ),
+            FilledButton(
+              key: const ValueKey('conflict-confirm-button'),
+              onPressed: acknowledged
+                  ? () => Navigator.of(dialogContext).pop(true)
+                  : null,
+              style: FilledButton.styleFrom(
+                backgroundColor: scheme.error,
+                foregroundColor: scheme.onError,
+              ),
+              child: Text(context.t('继续恢复')),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+  return confirmed ?? false;
 }
 
 class _ConflictResolutionDialog extends StatefulWidget {

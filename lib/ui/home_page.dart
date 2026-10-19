@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/analysis/analysis_service.dart';
 import '../core/clean/quarantine_retention_service.dart';
@@ -15,6 +16,7 @@ import 'duplicate_finder_page.dart';
 import 'exclusions_page.dart';
 import 'format.dart';
 import 'large_files_page.dart';
+import 'onboarding_dialog.dart';
 import 'quarantine_page.dart';
 import 'recycle_bin_page.dart';
 import 'rule_detail_page.dart';
@@ -58,14 +60,17 @@ class _HomePageState extends State<HomePage> {
   CleanController get controller => widget.controller;
 
   bool _startupPromptScheduled = false;
+  bool _onboardingScheduled = false;
 
   @override
   void initState() {
     super.initState();
     controller.addListener(_maybeScheduleUnfinishedPrompt);
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _maybeScheduleUnfinishedPrompt(),
-    );
+    widget.settingsController.addListener(_maybeScheduleOnboarding);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybeScheduleOnboarding();
+      _maybeScheduleUnfinishedPrompt();
+    });
     if (widget.startInSystemCache && widget.systemCacheController != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -77,12 +82,75 @@ class _HomePageState extends State<HomePage> {
   @override
   void dispose() {
     controller.removeListener(_maybeScheduleUnfinishedPrompt);
+    widget.settingsController.removeListener(_maybeScheduleOnboarding);
     super.dispose();
+  }
+
+  void _maybeScheduleOnboarding() {
+    if (!mounted || _onboardingScheduled) return;
+    if (widget.startInSystemCache) return;
+    if (!widget.settingsController.loaded) return;
+    if (widget.settingsController.onboardingCompleted) return;
+    _onboardingScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_showOnboarding());
+    });
+  }
+
+  Future<void> _showOnboarding() async {
+    await showOnboardingDialog(context);
+    if (!mounted) return;
+    final error = await widget.settingsController.completeOnboarding();
+    if (error != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.tf('无法保存引导状态：{error}', {'error': error})),
+        ),
+      );
+    }
+    _maybeScheduleUnfinishedPrompt();
+  }
+
+  void _handleRefreshShortcut() {
+    if (controller.isBusy) return;
+    if (controller.phase == CleanPhase.idle ||
+        controller.phase == CleanPhase.preview) {
+      unawaited(controller.scan());
+    }
+  }
+
+  void _handleEscapeShortcut() {
+    switch (controller.phase) {
+      case CleanPhase.scanning:
+        controller.cancelScan();
+        break;
+      case CleanPhase.cleaning:
+        controller.cancelCleaning();
+        break;
+      case CleanPhase.done:
+        controller.returnHome();
+        break;
+      case CleanPhase.idle:
+      case CleanPhase.preview:
+        break;
+    }
+  }
+
+  void _handleBackShortcut() {
+    if (controller.phase == CleanPhase.preview ||
+        controller.phase == CleanPhase.done) {
+      controller.returnHome();
+    }
   }
 
   void _maybeScheduleUnfinishedPrompt() {
     if (!mounted || _startupPromptScheduled) return;
     if (!controller.initialized || widget.startInSystemCache) return;
+    if (widget.settingsController.loaded &&
+        !widget.settingsController.onboardingCompleted) {
+      return;
+    }
     if (controller.unfinishedSessions.isEmpty) return;
     _startupPromptScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -131,35 +199,49 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
-    return ListenableBuilder(
-      listenable: controller,
-      builder: (context, _) {
-        return Scaffold(
-          body: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [scheme.surface, scheme.surfaceContainerLowest],
-              ),
-            ),
-            child: SafeArea(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1080),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(28, 20, 28, 22),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [Expanded(child: _buildBody(context))],
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.f5): _handleRefreshShortcut,
+        const SingleActivator(LogicalKeyboardKey.escape): _handleEscapeShortcut,
+        const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true):
+            _handleBackShortcut,
+      },
+      child: Focus(
+        autofocus: true,
+        child: ListenableBuilder(
+          listenable: controller,
+          builder: (context, _) {
+            return FocusTraversalGroup(
+              policy: ReadingOrderTraversalPolicy(),
+              child: Scaffold(
+                body: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [scheme.surface, scheme.surfaceContainerLowest],
+                    ),
+                  ),
+                  child: SafeArea(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1080),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(28, 20, 28, 22),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [Expanded(child: _buildBody(context))],
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ),
-        );
-      },
+            );
+          },
+        ),
+      ),
     );
   }
 
@@ -185,6 +267,7 @@ class _HomePageState extends State<HomePage> {
       case CleanPhase.preview:
         return _PreviewView(
           controller: controller,
+          shell: widget.shell,
           onCleanRequested: () => _requestClean(context),
         );
       case CleanPhase.cleaning:
@@ -339,6 +422,10 @@ class _HomePageState extends State<HomePage> {
           service: controller.quarantine,
           shell: widget.shell,
           retention: widget.quarantineRetention,
+          ruleTitles: {
+            for (final rule in controller.platform.rules)
+              rule.id: context.strings.ruleTitle(rule),
+          },
         ),
       ),
     );
@@ -408,6 +495,7 @@ class _HomePageState extends State<HomePage> {
           shell: widget.shell,
           retention: widget.quarantineRetention,
           ruleUpdates: widget.ruleUpdates,
+          onShowOnboarding: _showOnboarding,
         ),
       ),
     );
@@ -611,10 +699,13 @@ class _HeroCopy extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 22),
-        FilledButton.icon(
-          onPressed: controller.isBusy ? null : controller.scan,
-          icon: const Icon(Icons.search_rounded, size: 20),
-          label: Text(context.t('开始扫描')),
+        Tooltip(
+          message: context.t('开始扫描（F5）'),
+          child: FilledButton.icon(
+            onPressed: controller.isBusy ? null : controller.scan,
+            icon: const Icon(Icons.search_rounded, size: 20),
+            label: Text(context.t('开始扫描')),
+          ),
         ),
         const SizedBox(height: 12),
         Row(
@@ -1474,27 +1565,42 @@ class _SafetyNote extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
-    return Row(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 2),
-          child: Icon(
-            Icons.lock_outline_rounded,
-            size: 15,
-            color: scheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            context.t(
-              '清理前先预览；清理时文件会移动到隔离区，可随时撤销。'
-              '所有扫描都在本机完成，不会上传任何文件。',
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(
+                Icons.lock_outline_rounded,
+                size: 15,
+                color: scheme.onSurfaceVariant,
+              ),
             ),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-              height: 1.5,
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                context.t(
+                  '清理前先预览；清理时文件会移动到隔离区，可随时撤销。'
+                  '所有扫描都在本机完成，不会上传任何文件。',
+                ),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  height: 1.5,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Padding(
+          padding: const EdgeInsets.only(left: 23),
+          child: Text(
+            context.t('快捷键：F5 扫描或重新扫描 · Esc 取消 · Alt+← 返回 · Ctrl+F 搜索'),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: scheme.onSurfaceVariant.withValues(alpha: 0.8),
             ),
           ),
         ),
@@ -1660,9 +1766,18 @@ class _ScanningView extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 24),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(999),
-                  child: const LinearProgressIndicator(minHeight: 7),
+                Semantics(
+                  label: context.t('扫描进度'),
+                  value: progress != null && progress.jobCount > 0
+                      ? context.tf('第 {current} / {total} 组', {
+                          'current': progress.jobIndex + 1,
+                          'total': progress.jobCount,
+                        })
+                      : null,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(999),
+                    child: const LinearProgressIndicator(minHeight: 7),
+                  ),
                 ),
                 const SizedBox(height: 22),
                 Row(
@@ -1803,9 +1918,12 @@ class _ScanningView extends StatelessWidget {
                 ],
                 const SizedBox(height: 22),
                 Center(
-                  child: TextButton(
-                    onPressed: controller.cancelScan,
-                    child: Text(context.t('取消扫描')),
+                  child: Tooltip(
+                    message: context.t('取消扫描（Esc）'),
+                    child: TextButton(
+                      onPressed: controller.cancelScan,
+                      child: Text(context.t('取消扫描')),
+                    ),
                   ),
                 ),
               ],
@@ -1856,14 +1974,98 @@ class _ProgressStat extends StatelessWidget {
   }
 }
 
-class _PreviewView extends StatelessWidget {
+enum _RuleSort { original, sizeDesc, sizeAsc, name }
+
+class _PreviewView extends StatefulWidget {
   const _PreviewView({
     required this.controller,
     required this.onCleanRequested,
+    required this.shell,
   });
 
   final CleanController controller;
   final VoidCallback onCleanRequested;
+  final SystemShell shell;
+
+  @override
+  State<_PreviewView> createState() => _PreviewViewState();
+}
+
+class _PreviewViewState extends State<_PreviewView> {
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
+  _RuleSort _sort = _RuleSort.original;
+
+  CleanController get controller => widget.controller;
+  VoidCallback get onCleanRequested => widget.onCleanRequested;
+  SystemShell get shell => widget.shell;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocus.dispose();
+    super.dispose();
+  }
+
+  void _focusSearch() {
+    _searchFocus.requestFocus();
+    _searchController.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _searchController.text.length,
+    );
+  }
+
+  String _sortLabel(BuildContext context, _RuleSort sort) {
+    return switch (sort) {
+      _RuleSort.original => context.t('默认顺序'),
+      _RuleSort.sizeDesc => context.t('体积从大到小'),
+      _RuleSort.sizeAsc => context.t('体积从小到大'),
+      _RuleSort.name => context.t('名称 A–Z'),
+    };
+  }
+
+  bool _matchesRule(RuleResult result, String query, BroomStrings strings) {
+    if (query.isEmpty) return true;
+    final fields = [
+      strings.ruleTitle(result.rule),
+      strings.ruleCategory(result.rule),
+      strings.ruleDescription(result.rule),
+      strings.ruleNote(result.rule) ?? '',
+      result.rule.id,
+      ...result.rule.pathPatterns,
+    ];
+    return fields.any((field) => field.toLowerCase().contains(query));
+  }
+
+  List<({String category, List<RuleResult> results})> _visibleGroups(
+    BuildContext context,
+  ) {
+    final query = _searchController.text.trim().toLowerCase();
+    final results = [
+      for (final result in controller.results)
+        if (_matchesRule(result, query, context.strings)) result,
+    ];
+    final groups = _groupResults(results, context.strings);
+    if (_sort == _RuleSort.original) return groups;
+
+    int compare(RuleResult a, RuleResult b) {
+      return switch (_sort) {
+        _RuleSort.original => 0,
+        _RuleSort.sizeDesc => b.totalBytes.compareTo(a.totalBytes),
+        _RuleSort.sizeAsc => a.totalBytes.compareTo(b.totalBytes),
+        _RuleSort.name =>
+          context.strings
+              .ruleTitle(a.rule)
+              .toLowerCase()
+              .compareTo(context.strings.ruleTitle(b.rule).toLowerCase()),
+      };
+    }
+
+    for (final group in groups) {
+      group.results.sort(compare);
+    }
+    return groups;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1878,160 +2080,249 @@ class _PreviewView extends StatelessWidget {
       (total, result) => total + result.totalBytes,
     );
     final allSelected = controller.allItemsSelected;
+    final query = _searchController.text.trim();
+    final visibleGroups = _visibleGroups(context);
+    final visibleRuleCount = visibleGroups.fold<int>(
+      0,
+      (total, group) => total + group.results.length,
+    );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (controller.error case final error?)
-          _InlineBanner(
-            message: error,
-            isError: true,
-            onClose: controller.clearError,
-          ),
-        if (controller.scanRestoredFromPersistence)
-          if (controller.notice case final notice?)
-            _InlineBanner(message: notice, onClose: controller.clearNotice),
-        if (controller.scanPersistenceNotice case final notice?)
-          _InlineBanner(icon: Icons.save_outlined, message: notice),
-        if (controller.scanDirectoryErrors > 0)
-          _InlineBanner(
-            message: context.tf('扫描时遇到 {count} 个路径问题，已跳过。', {
-              'count': formatCount(controller.scanDirectoryErrors),
-            }),
-            action: TextButton(
-              key: const ValueKey('scan-issue-details'),
-              onPressed: () => _showScanIssueDetails(context),
-              child: Text(context.t('查看明细')),
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyF, control: true):
+            _focusSearch,
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (controller.error case final error?)
+            _InlineBanner(
+              message: error,
+              isError: true,
+              onClose: controller.clearError,
             ),
-          ),
-        if (controller.scanTruncated)
-          _InlineBanner(
-            message: controller.scanRestoredFromPersistence
-                ? context.t('上次扫描结果达到设定的数量上限，可能不完整。')
-                : context.t('扫描结果达到设定的数量上限，预览与清理仅包含已找到的部分。'),
-          ),
-        if (controller.lockProbeRunning)
-          _InlineBanner(
-            icon: Icons.lock_outline_rounded,
-            message: context.tf('正在检测被占用的文件…（{checked} / {total}）', {
-              'checked': formatCount(controller.lockProbeChecked),
-              'total': formatCount(controller.lockProbeTotal),
-            }),
-          )
-        else if (controller.possiblyLockedCount > 0)
-          _InlineBanner(
-            icon: Icons.lock_outline_rounded,
-            message: context.tf('有 {count} 个文件可能正被其他程序占用，清理时会跳过并单独报告。', {
-              'count': formatCount(controller.possiblyLockedCount),
-            }),
-          ),
-        if (controller.previewReviewRuleCount > 0)
-          _InlineBanner(
-            icon: Icons.shield_outlined,
-            message: context.tf(
-              '扫描结果包含 {count} 条 Review 规则，默认未勾选。'
-              '勾选后仍需额外确认；文件同样会进入隔离区并可撤销，'
-              '但可能带来重新下载或首次启动变慢。',
-              {'count': controller.previewReviewRuleCount},
-            ),
-          ),
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(context.t('扫描结果'), style: theme.textTheme.titleLarge),
-                  const SizedBox(height: 2),
-                  Text(
-                    controller.results.isEmpty
-                        ? context.t('没有发现可清理的文件')
-                        : context.tf('发现 {count} 个文件 · {bytes}，请选择要清理的内容。', {
-                            'count': formatCount(totalItems),
-                            'bytes': formatBytes(totalBytes),
-                          }),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
+          if (controller.scanRestoredFromPersistence)
+            if (controller.notice case final notice?)
+              _InlineBanner(message: notice, onClose: controller.clearNotice),
+          if (controller.scanPersistenceNotice case final notice?)
+            _InlineBanner(icon: Icons.save_outlined, message: notice),
+          if (controller.scanDirectoryErrors > 0)
+            _InlineBanner(
+              message: context.tf('扫描时遇到 {count} 个路径问题，已跳过。', {
+                'count': formatCount(controller.scanDirectoryErrors),
+              }),
+              action: TextButton(
+                key: const ValueKey('scan-issue-details'),
+                onPressed: () => _showScanIssueDetails(context),
+                child: Text(context.t('查看明细')),
               ),
             ),
-            const SizedBox(width: 12),
-            OutlinedButton.icon(
-              onPressed: controller.scan,
-              icon: const Icon(Icons.refresh_rounded, size: 17),
-              label: Text(context.t('重新扫描')),
+          if (controller.scanTruncated)
+            _InlineBanner(
+              message: controller.scanRestoredFromPersistence
+                  ? context.t('上次扫描结果达到设定的数量上限，可能不完整。')
+                  : context.t('扫描结果达到设定的数量上限，预览与清理仅包含已找到的部分。'),
+            ),
+          if (controller.lockProbeRunning)
+            _InlineBanner(
+              icon: Icons.lock_outline_rounded,
+              message: context.tf('正在检测被占用的文件…（{checked} / {total}）', {
+                'checked': formatCount(controller.lockProbeChecked),
+                'total': formatCount(controller.lockProbeTotal),
+              }),
+            )
+          else if (controller.possiblyLockedCount > 0)
+            _InlineBanner(
+              icon: Icons.lock_outline_rounded,
+              message: context.tf('有 {count} 个文件可能正被其他程序占用，清理时会跳过并单独报告。', {
+                'count': formatCount(controller.possiblyLockedCount),
+              }),
+            ),
+          if (controller.previewReviewRuleCount > 0)
+            _InlineBanner(
+              icon: Icons.shield_outlined,
+              message: context.tf(
+                '扫描结果包含 {count} 条 Review 规则，默认未勾选。'
+                '勾选后仍需额外确认；文件同样会进入隔离区并可撤销，'
+                '但可能带来重新下载或首次启动变慢。',
+                {'count': controller.previewReviewRuleCount},
+              ),
+            ),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(context.t('扫描结果'), style: theme.textTheme.titleLarge),
+                    const SizedBox(height: 2),
+                    Text(
+                      controller.results.isEmpty
+                          ? context.t('没有发现可清理的文件')
+                          : query.isNotEmpty
+                          ? context.tf('筛选后显示 {shown} / {total} 条规则', {
+                              'shown': formatCount(visibleRuleCount),
+                              'total': formatCount(controller.results.length),
+                            })
+                          : context.tf('发现 {count} 个文件 · {bytes}，请选择要清理的内容。', {
+                              'count': formatCount(totalItems),
+                              'bytes': formatBytes(totalBytes),
+                            }),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Tooltip(
+                message: context.t('返回首页（Alt+←）'),
+                child: IconButton(
+                  key: const ValueKey('preview-back'),
+                  onPressed: controller.returnHome,
+                  icon: const Icon(Icons.arrow_back_rounded, size: 20),
+                ),
+              ),
+              const SizedBox(width: 2),
+              Tooltip(
+                message: context.t('F5 重新扫描'),
+                child: OutlinedButton.icon(
+                  onPressed: controller.scan,
+                  icon: const Icon(Icons.refresh_rounded, size: 17),
+                  label: Text(context.t('重新扫描')),
+                ),
+              ),
+            ],
+          ),
+          if (controller.results.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _ScanSummaryCard(
+              controller: controller,
+              onShowIssues: () => _showScanIssueDetails(context),
+            ),
+            const SizedBox(height: 12),
+            _PreviewToolbar(
+              searchController: _searchController,
+              searchFocus: _searchFocus,
+              sort: _sort,
+              sortLabel: _sortLabel(context, _sort),
+              onQueryChanged: () => setState(() {}),
+              onClearQuery: () {
+                _searchController.clear();
+                setState(() {});
+                _searchFocus.requestFocus();
+              },
+              onSortChanged: (sort) => setState(() => _sort = sort),
             ),
           ],
-        ),
-        const SizedBox(height: 14),
-        if (controller.results.isEmpty)
-          Expanded(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 520),
-                child: _SurfaceCard(
-                  padding: const EdgeInsets.fromLTRB(28, 34, 28, 30),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.check_circle_outline_rounded,
-                        size: 44,
-                        color: scheme.primary,
-                      ),
-                      const SizedBox(height: 14),
-                      Text(
-                        context.t('没有发现可清理的内容'),
-                        style: theme.textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        context.t('系统看起来很干净。关闭正在使用的浏览器或开发工具后，可以再扫描一次。'),
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                          height: 1.5,
+          const SizedBox(height: 14),
+          if (controller.results.isEmpty)
+            Expanded(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 520),
+                  child: _SurfaceCard(
+                    padding: const EdgeInsets.fromLTRB(28, 34, 28, 30),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.check_circle_outline_rounded,
+                          size: 44,
+                          color: scheme.primary,
                         ),
-                      ),
-                      const SizedBox(height: 18),
-                      FilledButton.tonalIcon(
-                        onPressed: controller.scan,
-                        icon: const Icon(Icons.refresh_rounded, size: 18),
-                        label: Text(context.t('再扫描一次')),
-                      ),
-                    ],
+                        const SizedBox(height: 14),
+                        Text(
+                          context.t('没有发现可清理的内容'),
+                          style: theme.textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          context.t('系统看起来很干净。关闭正在使用的浏览器或开发工具后，可以再扫描一次。'),
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        Tooltip(
+                          message: context.t('再扫描一次（F5）'),
+                          child: FilledButton.tonalIcon(
+                            onPressed: controller.scan,
+                            icon: const Icon(Icons.refresh_rounded, size: 18),
+                            label: Text(context.t('再扫描一次')),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
+            )
+          else ...[
+            Expanded(
+              child: visibleGroups.isEmpty
+                  ? Center(
+                      key: const ValueKey('preview-filter-empty'),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 460),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.search_off_rounded,
+                              size: 40,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              context.t('没有匹配的规则'),
+                              style: theme.textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              context.t('试试更短的名称、类别或路径模板。'),
+                              textAlign: TextAlign.center,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            TextButton(
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {});
+                              },
+                              child: Text(context.t('清除搜索')),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : ListView(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      children: [
+                        for (final group in visibleGroups)
+                          _ResultGroup(
+                            category: group.category,
+                            results: group.results,
+                            controller: controller,
+                            shell: shell,
+                          ),
+                      ],
+                    ),
             ),
-          )
-        else ...[
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.only(bottom: 6),
-              children: [
-                for (final group in _groupResults(
-                  controller.results,
-                  context.strings,
-                ))
-                  _ResultGroup(
-                    category: group.category,
-                    results: group.results,
-                    controller: controller,
-                  ),
-              ],
+            const SizedBox(height: 12),
+            _CleanActionBar(
+              controller: controller,
+              allSelected: allSelected,
+              onCleanRequested: onCleanRequested,
             ),
-          ),
-          const SizedBox(height: 12),
-          _CleanActionBar(
-            controller: controller,
-            allSelected: allSelected,
-            onCleanRequested: onCleanRequested,
-          ),
+          ],
         ],
-      ],
+      ),
     );
   }
 
@@ -2153,16 +2444,409 @@ IconData _scanIssueIcon(ScanErrorKind kind) {
   };
 }
 
+class _PreviewToolbar extends StatelessWidget {
+  const _PreviewToolbar({
+    required this.searchController,
+    required this.searchFocus,
+    required this.sort,
+    required this.sortLabel,
+    required this.onQueryChanged,
+    required this.onClearQuery,
+    required this.onSortChanged,
+  });
+
+  final TextEditingController searchController;
+  final FocusNode searchFocus;
+  final _RuleSort sort;
+  final String sortLabel;
+  final VoidCallback onQueryChanged;
+  final VoidCallback onClearQuery;
+  final ValueChanged<_RuleSort> onSortChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            key: const ValueKey('preview-search'),
+            controller: searchController,
+            focusNode: searchFocus,
+            onChanged: (_) => onQueryChanged(),
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              labelText: context.t('搜索扫描结果'),
+              hintText: context.t('规则名称、类别或路径模板'),
+              prefixIcon: const Icon(Icons.search_rounded, size: 19),
+              suffixIcon: searchController.text.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: context.t('清除搜索'),
+                      onPressed: onClearQuery,
+                      icon: const Icon(Icons.close_rounded, size: 17),
+                    ),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: scheme.outlineVariant.withValues(alpha: 0.7),
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: scheme.outlineVariant.withValues(alpha: 0.7),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        PopupMenuButton<_RuleSort>(
+          key: const ValueKey('preview-sort'),
+          tooltip: context.t('排序规则'),
+          initialValue: sort,
+          onSelected: onSortChanged,
+          itemBuilder: (context) => [
+            for (final value in _RuleSort.values)
+              PopupMenuItem(
+                value: value,
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 20,
+                      child: value == sort
+                          ? const Icon(Icons.check_rounded, size: 17)
+                          : null,
+                    ),
+                    Text(switch (value) {
+                      _RuleSort.original => context.t('默认顺序'),
+                      _RuleSort.sizeDesc => context.t('体积从大到小'),
+                      _RuleSort.sizeAsc => context.t('体积从小到大'),
+                      _RuleSort.name => context.t('名称 A–Z'),
+                    }),
+                  ],
+                ),
+              ),
+          ],
+          child: Container(
+            height: 48,
+            padding: const EdgeInsets.symmetric(horizontal: 13),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: scheme.outlineVariant.withValues(alpha: 0.7),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.swap_vert_rounded,
+                  size: 18,
+                  color: scheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 6),
+                Text(sortLabel, style: Theme.of(context).textTheme.bodySmall),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.expand_more_rounded,
+                  size: 17,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+const _summaryPalette = <Color>[
+  Color(0xFF2E7D62),
+  Color(0xFF3F6FD8),
+  Color(0xFFB26A00),
+  Color(0xFF7A4FBF),
+  Color(0xFF00838F),
+  Color(0xFFC2185B),
+  Color(0xFF5D6B82),
+  Color(0xFF6D8B3C),
+];
+
+class _ScanSummaryCard extends StatelessWidget {
+  const _ScanSummaryCard({
+    required this.controller,
+    required this.onShowIssues,
+  });
+
+  final CleanController controller;
+  final VoidCallback onShowIssues;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final totals = <String, ({int files, int bytes})>{};
+    for (final result in controller.results) {
+      final category = context.strings.ruleCategory(result.rule);
+      final current = totals[category];
+      totals[category] = (
+        files: (current?.files ?? 0) + result.items.length,
+        bytes: (current?.bytes ?? 0) + result.totalBytes,
+      );
+    }
+    final categories = totals.entries.toList()
+      ..sort((a, b) => b.value.bytes.compareTo(a.value.bytes));
+    final totalBytes = categories.fold<int>(
+      0,
+      (total, entry) => total + entry.value.bytes,
+    );
+    final totalFiles = categories.fold<int>(
+      0,
+      (total, entry) => total + entry.value.files,
+    );
+    final elapsed = controller.scanElapsed;
+    final persistenceLimited = controller.scanPersistenceNotice != null;
+    final resultLimited = controller.scanTruncated || persistenceLimited;
+
+    final totalColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          context.t('可清理总量'),
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          formatBytes(totalBytes),
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          context.tf('{files} 个文件 · 已检查 {scanned} 个文件', {
+            'files': formatCount(totalFiles),
+            'scanned': formatCount(controller.scanScannedFiles),
+          }),
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        if (elapsed != null) ...[
+          const SizedBox(height: 2),
+          Text(
+            context.tf('扫描用时 {duration}', {
+              'duration': formatDuration(elapsed),
+            }),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
+    );
+
+    final distribution = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          context.t('分类体积占比'),
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: SizedBox(
+            height: 9,
+            child: totalBytes <= 0
+                ? ColoredBox(color: scheme.surfaceContainerHighest)
+                : Row(
+                    children: [
+                      for (var index = 0; index < categories.length; index++)
+                        Expanded(
+                          flex: _summaryFlex(
+                            categories[index].value.bytes,
+                            totalBytes,
+                          ),
+                          child: ColoredBox(
+                            color:
+                                _summaryPalette[index % _summaryPalette.length],
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
+        ),
+        const SizedBox(height: 9),
+        Wrap(
+          spacing: 14,
+          runSpacing: 5,
+          children: [
+            for (var index = 0; index < categories.length; index++)
+              Tooltip(
+                message: formatBytes(categories[index].value.bytes),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: _summaryPalette[index % _summaryPalette.length],
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      '${categories[index].key} · '
+                      '${_summaryPercent(categories[index].value.bytes, totalBytes)}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+
+    final status = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              resultLimited
+                  ? Icons.content_cut_rounded
+                  : Icons.check_circle_outline_rounded,
+              size: 16,
+              color: resultLimited ? scheme.tertiary : scheme.primary,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                controller.scanTruncated
+                    ? context.t('结果达到数量上限，可能不完整')
+                    : persistenceLimited
+                    ? context.t('持久化结果可能不完整')
+                    : context.t('结果未截断'),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: resultLimited
+                      ? scheme.tertiary
+                      : scheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 7),
+        Text(
+          context.tf('已跳过 {count} 个无法读取的路径', {
+            'count': formatCount(controller.scanDirectoryErrors),
+          }),
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        if (controller.possiblyLockedCount > 0) ...[
+          const SizedBox(height: 4),
+          Text(
+            context.tf('{count} 个文件可能被占用', {
+              'count': formatCount(controller.possiblyLockedCount),
+            }),
+            style: theme.textTheme.labelSmall?.copyWith(color: scheme.tertiary),
+          ),
+        ],
+        if (controller.scanDirectoryErrors > 0)
+          TextButton(
+            onPressed: onShowIssues,
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(context.t('查看问题明细')),
+          ),
+      ],
+    );
+
+    return Semantics(
+      container: true,
+      label: context.tf('扫描摘要：可清理 {bytes}，跳过 {skipped} 个路径', {
+        'bytes': formatBytes(totalBytes),
+        'skipped': formatCount(controller.scanDirectoryErrors),
+      }),
+      child: _SurfaceCard(
+        padding: const EdgeInsets.fromLTRB(18, 15, 18, 15),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 820) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  totalColumn,
+                  const SizedBox(height: 12),
+                  distribution,
+                  const SizedBox(height: 10),
+                  status,
+                ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(width: 225, child: totalColumn),
+                const SizedBox(width: 22),
+                Expanded(child: distribution),
+                const SizedBox(width: 22),
+                SizedBox(width: 205, child: status),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  static int _summaryFlex(int bytes, int totalBytes) {
+    if (totalBytes <= 0) return 1;
+    return (bytes / totalBytes * 1000).round().clamp(1, 1000).toInt();
+  }
+
+  static String _summaryPercent(int bytes, int totalBytes) {
+    if (totalBytes <= 0) return '0%';
+    final percent = bytes / totalBytes * 100;
+    if (percent > 0 && percent < 1) return '<1%';
+    return '${percent.round()}%';
+  }
+}
+
 class _ResultGroup extends StatelessWidget {
   const _ResultGroup({
     required this.category,
     required this.results,
     required this.controller,
+    required this.shell,
   });
 
   final String category;
   final List<RuleResult> results;
   final CleanController controller;
+  final SystemShell shell;
 
   @override
   Widget build(BuildContext context) {
@@ -2203,7 +2887,11 @@ class _ResultGroup extends StatelessWidget {
             ),
           ),
           for (final result in results)
-            _RuleResultCard(result: result, controller: controller),
+            _RuleResultCard(
+              result: result,
+              controller: controller,
+              shell: shell,
+            ),
         ],
       ),
     );
@@ -2211,10 +2899,15 @@ class _ResultGroup extends StatelessWidget {
 }
 
 class _RuleResultCard extends StatelessWidget {
-  const _RuleResultCard({required this.result, required this.controller});
+  const _RuleResultCard({
+    required this.result,
+    required this.controller,
+    required this.shell,
+  });
 
   final RuleResult result;
   final CleanController controller;
+  final SystemShell shell;
 
   @override
   Widget build(BuildContext context) {
@@ -2256,11 +2949,18 @@ class _RuleResultCard extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(10, 14, 10, 14),
             child: Row(
               children: [
-                Checkbox(
-                  value: selection,
-                  tristate: true,
-                  onChanged: (_) => controller.toggleRule(rule.id),
-                  visualDensity: VisualDensity.compact,
+                MergeSemantics(
+                  child: Semantics(
+                    label: context.tf('选择规则 {name}', {
+                      'name': context.strings.ruleTitle(rule),
+                    }),
+                    child: Checkbox(
+                      value: selection,
+                      tristate: true,
+                      onChanged: (_) => controller.toggleRule(rule.id),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 2),
                 Container(
@@ -2374,6 +3074,7 @@ class _RuleResultCard extends StatelessWidget {
                         builder: (_) => RuleDetailPage(
                           controller: controller,
                           result: result,
+                          shell: shell,
                         ),
                       ),
                     );
@@ -2589,12 +3290,19 @@ class _CleaningView extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 22),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(999),
-                  child: LinearProgressIndicator(
-                    value: value,
-                    minHeight: 8,
-                    backgroundColor: scheme.surfaceContainerHighest,
+                Semantics(
+                  label: context.t('清理进度'),
+                  value: context.tf('{processed} / {total} 项', {
+                    'processed': processed,
+                    'total': total,
+                  }),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(999),
+                    child: LinearProgressIndicator(
+                      value: value,
+                      minHeight: 8,
+                      backgroundColor: scheme.surfaceContainerHighest,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -2666,15 +3374,18 @@ class _CleaningView extends StatelessWidget {
                 ],
                 const SizedBox(height: 20),
                 Center(
-                  child: OutlinedButton.icon(
-                    onPressed: controller.cleanCancelRequested
-                        ? null
-                        : controller.cancelCleaning,
-                    icon: const Icon(Icons.stop_circle_outlined, size: 17),
-                    label: Text(
-                      controller.cleanCancelRequested
-                          ? context.t('正在停止…')
-                          : context.t('停止清理'),
+                  child: Tooltip(
+                    message: context.t('停止清理（Esc）'),
+                    child: OutlinedButton.icon(
+                      onPressed: controller.cleanCancelRequested
+                          ? null
+                          : controller.cancelCleaning,
+                      icon: const Icon(Icons.stop_circle_outlined, size: 17),
+                      label: Text(
+                        controller.cleanCancelRequested
+                            ? context.t('正在停止…')
+                            : context.t('停止清理'),
+                      ),
                     ),
                   ),
                 ),
@@ -2709,6 +3420,8 @@ class _DoneView extends StatelessWidget {
     final noMoves = report.movedCount == 0;
     final title = report.cancelled
         ? context.t('清理已停止')
+        : report.spaceExhausted
+        ? context.t('磁盘空间不足，清理已暂停')
         : noMoves
         ? context.t('没有文件被移动')
         : context.t('清理完成');
@@ -2738,15 +3451,21 @@ class _DoneView extends StatelessWidget {
                       shape: BoxShape.circle,
                       color: report.cancelled
                           ? scheme.tertiaryContainer.withValues(alpha: 0.5)
+                          : report.spaceExhausted
+                          ? scheme.errorContainer.withValues(alpha: 0.45)
                           : scheme.primaryContainer.withValues(alpha: 0.55),
                     ),
                     child: Icon(
                       report.cancelled
                           ? Icons.pause_rounded
+                          : report.spaceExhausted
+                          ? Icons.warning_amber_rounded
                           : Icons.check_rounded,
                       size: 36,
                       color: report.cancelled
                           ? scheme.onTertiaryContainer
+                          : report.spaceExhausted
+                          ? scheme.onErrorContainer
                           : scheme.primary,
                     ),
                   ),
@@ -2763,6 +3482,11 @@ class _DoneView extends StatelessWidget {
                       ? context.t(
                           '已停止清理，已经移动的文件仍保存在隔离区中，'
                           '未处理的文件可以继续清理。',
+                        )
+                      : report.spaceExhausted
+                      ? context.t(
+                          '隔离区所在磁盘空间不足，已停止继续复制文件。'
+                          '已移动的文件仍在隔离区，释放空间后可以继续清理。',
                         )
                       : noMoves
                       ? report.skippedCount > 0
@@ -3006,10 +3730,13 @@ class _DoneView extends StatelessWidget {
                         icon: const Icon(Icons.undo_rounded, size: 18),
                         label: Text(context.t('撤销本次清理')),
                       ),
-                    FilledButton.icon(
-                      onPressed: controller.returnHome,
-                      icon: const Icon(Icons.home_outlined, size: 18),
-                      label: Text(context.t('返回首页')),
+                    Tooltip(
+                      message: context.t('返回首页（Alt+← 或 Esc）'),
+                      child: FilledButton.icon(
+                        onPressed: controller.returnHome,
+                        icon: const Icon(Icons.home_outlined, size: 18),
+                        label: Text(context.t('返回首页')),
+                      ),
                     ),
                   ],
                 ),

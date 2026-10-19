@@ -11,10 +11,13 @@ import 'package:broom/core/safety/path_guard.dart';
 import 'package:broom/core/scan/ntfs_index.dart';
 import 'package:broom/core/scan/scan_service.dart';
 import 'package:broom/core/settings/exclusion_store.dart';
+import 'package:broom/core/settings/settings_store.dart';
 import 'package:broom/core/shell/system_shell.dart';
 import 'package:broom/ui/clean_controller.dart';
+import 'package:broom/ui/settings_controller.dart';
 import 'package:broom/ui/system_cache_controller.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -587,5 +590,132 @@ void main() {
 
     expect(controller.phase, CleanPhase.done);
     expect(find.text('已清理 2 个空缓存目录。'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('supports keyboard scan/back and shows a scan summary', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 1700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const root = r'C:\broom_widget_test\cache';
+    final item = JunkItem(
+      ruleId: 'test.cache',
+      rootPath: root,
+      path: p.windows.join(root, 'cache.tmp'),
+      size: 4096,
+      modified: DateTime(2026, 10, 18),
+    );
+    const rule = CleanerRule(
+      id: 'test.cache',
+      title: '测试缓存',
+      category: '测试',
+      description: '测试用缓存规则',
+      pathPatterns: [],
+    );
+    final controller = CleanController(
+      platform: _FixedRootsPlatform(rule: rule, roots: [root]),
+      guard: PathGuard(protectedRoots: const []),
+      quarantine: FakeQuarantineService(),
+      exclusions: _exclusionsStore(),
+      scanServiceFactory: () => _FixedScanService([item]),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    await tester.pumpWidget(
+      BroomApp(controller: controller, systemShell: _FakeSystemShell()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('快捷键：F5'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.f5);
+    await tester.pumpAndSettle();
+
+    expect(controller.phase, CleanPhase.preview);
+    expect(find.text('可清理总量'), findsOneWidget);
+    expect(find.text('分类体积占比'), findsOneWidget);
+    expect(find.text('已跳过 0 个无法读取的路径'), findsOneWidget);
+    expect(find.textContaining('已检查 1 个文件'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('preview-search')),
+      '不存在的规则',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('没有匹配的规则'), findsOneWidget);
+
+    await tester.enterText(find.byKey(const ValueKey('preview-search')), '');
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+    await tester.pumpAndSettle();
+
+    expect(controller.phase, CleanPhase.idle);
+    expect(find.text('开始扫描'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('shows the first-use guide and persists completion', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 1700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final temp = Directory.systemTemp.createTempSync('broom_onboarding_');
+    addTearDown(() {
+      if (temp.existsSync()) temp.deleteSync(recursive: true);
+    });
+    final settingsStore = SettingsStore(
+      filePath: p.windows.join(temp.path, 'settings.json'),
+    );
+    final settings = SettingsController(store: settingsStore);
+    addTearDown(settings.dispose);
+    settings.load();
+    expect(settings.onboardingCompleted, isFalse);
+
+    final controller = CleanController(
+      platform: _FakePlatform(),
+      guard: PathGuard(protectedRoots: const []),
+      quarantine: FakeQuarantineService(),
+      exclusions: _exclusionsStore(),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    await tester.pumpWidget(
+      BroomApp(
+        controller: controller,
+        settingsController: settings,
+        systemShell: _FakeSystemShell(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('onboarding-dialog')), findsOneWidget);
+    expect(find.text('欢迎使用 Broom'), findsOneWidget);
+    expect(find.text('先扫描，再决定'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('onboarding-next')));
+    await tester.pumpAndSettle();
+    expect(find.text('隔离区不是永久删除'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('onboarding-next')));
+    await tester.pumpAndSettle();
+    expect(find.text('安全边界'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('onboarding-done')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('onboarding-dialog')), findsNothing);
+    expect(settings.onboardingCompleted, isTrue);
+    expect(settingsStore.load().onboardingCompleted, isTrue);
+    expect(find.text('开始扫描'), findsOneWidget);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 }

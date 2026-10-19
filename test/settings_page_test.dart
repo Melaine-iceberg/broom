@@ -135,6 +135,8 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
+    // These scenarios exercise a returning profile, not the first-run guide.
+    await settingsStore.save(AppSettings.defaults);
     final settings = SettingsController(store: settingsStore);
     settings.load();
     addTearDown(settings.dispose);
@@ -295,6 +297,24 @@ void main() {
 
     expect(find.text('排除列表'), findsWidgets);
     expect(find.text('尚未添加排除项'), findsOneWidget);
+  });
+
+  testWidgets('reopens the first-use guide from about', (tester) async {
+    await pumpApp(tester);
+
+    final guide = find.byKey(const ValueKey('settings-onboarding'));
+    await tester.ensureVisible(guide);
+    await tester.tap(guide);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('onboarding-dialog')), findsOneWidget);
+    expect(find.text('欢迎使用 Broom'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('onboarding-skip')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('onboarding-dialog')), findsNothing);
+    expect(find.text('设置'), findsOneWidget);
   });
 
   testWidgets('exports configuration without quarantine data', (tester) async {

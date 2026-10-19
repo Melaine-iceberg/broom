@@ -27,6 +27,7 @@ class SettingsPage extends StatelessWidget {
     required this.shell,
     this.retention,
     this.ruleUpdates,
+    this.onShowOnboarding,
   });
 
   final SettingsController settings;
@@ -34,6 +35,7 @@ class SettingsPage extends StatelessWidget {
   final SystemShell shell;
   final QuarantineRetentionService? retention;
   final RuleUpdateController? ruleUpdates;
+  final VoidCallback? onShowOnboarding;
 
   @override
   Widget build(BuildContext context) {
@@ -454,6 +456,15 @@ class SettingsPage extends StatelessWidget {
                             height: 1.5,
                           ),
                         ),
+                        if (onShowOnboarding != null) ...[
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            key: const ValueKey('settings-onboarding'),
+                            onPressed: onShowOnboarding,
+                            icon: const Icon(Icons.school_outlined, size: 18),
+                            label: Text(strings.t('重新查看首次使用引导')),
+                          ),
+                        ],
                       ],
                     ),
                   ),

@@ -36,6 +36,25 @@ String formatDate(DateTime date) {
   return '${_months[date.month - 1]} ${date.day}, ${date.year}';
 }
 
+String formatDuration(Duration duration) {
+  final locale = Intl.defaultLocale ?? 'zh';
+  final totalSeconds = duration.inSeconds;
+  final minutes = totalSeconds ~/ 60;
+  final seconds = totalSeconds % 60;
+  if (locale.startsWith('zh')) {
+    if (minutes >= 60) {
+      return '${minutes ~/ 60} 小时 ${minutes % 60} 分';
+    }
+    if (minutes > 0) return '$minutes 分 $seconds 秒';
+    return '$totalSeconds 秒';
+  }
+  if (minutes >= 60) {
+    return '${minutes ~/ 60}h ${minutes % 60}m';
+  }
+  if (minutes > 0) return '${minutes}m ${seconds}s';
+  return '${totalSeconds}s';
+}
+
 String formatDateTime(DateTime date) {
   String two(int value) => value.toString().padLeft(2, '0');
   final locale = Intl.defaultLocale ?? 'zh';

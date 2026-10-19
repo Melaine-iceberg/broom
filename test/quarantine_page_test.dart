@@ -1,8 +1,10 @@
 import 'dart:io';
 
 import 'package:broom/app.dart';
+import 'package:broom/core/clean/clean_history_store.dart';
 import 'package:broom/core/clean/quarantine_retention_service.dart';
 import 'package:broom/core/clean/quarantine_service.dart';
+import 'package:broom/core/models/clean_history_models.dart';
 import 'package:broom/core/models/clean_models.dart';
 import 'package:broom/core/models/quarantine_policy_models.dart';
 import 'package:broom/core/settings/quarantine_policy_store.dart';
@@ -13,6 +15,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import 'support/quarantine_fakes.dart';
+
+class _MemoryHistoryStore extends CleanHistoryStore {
+  _MemoryHistoryStore(this.records)
+    : super(filePath: r'C:\Broom\clean_history.json');
+
+  final List<CleanHistoryRecord> records;
+
+  @override
+  Future<List<CleanHistoryRecord>> load() async => records;
+}
 
 class _FakeSystemShell implements SystemShell {
   @override
@@ -252,17 +264,20 @@ void main() {
     await tester.tap(find.text('查看文件'));
     await tester.pumpAndSettle();
 
+    await tester.tap(
+      find.byKey(const ValueKey('conflict-policy-000001_conflict.txt')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保留两者').last);
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('恢复全部'));
     await tester.pumpAndSettle();
 
-    expect(find.text('1 个文件的原位置已有内容'), findsOneWidget);
-    await tester.tap(find.text('保留两者'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('conflict-confirm-button')));
-    await tester.pumpAndSettle();
-
     final request = service.restoreRequests.single;
-    expect(request.policy, UndoConflictPolicy.keepBoth);
+    expect(request.policies, {
+      '000001_conflict.txt': UndoConflictPolicy.keepBoth,
+    });
     expect(request.storedNames, isNull);
     expect(find.textContaining('以新名称恢复'), findsOneWidget);
 
@@ -282,11 +297,17 @@ void main() {
     await tester.tap(find.text('查看文件'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('恢复全部'));
+    await tester.tap(
+      find.byKey(const ValueKey('conflict-policy-000001_conflict.txt')),
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('覆盖原位置文件'));
+    await tester.tap(find.text('覆盖').last);
     await tester.pumpAndSettle();
 
+    await tester.tap(find.text('恢复全部'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('覆盖 1 个原位置文件？'), findsOneWidget);
     final confirm = find.byKey(const ValueKey('conflict-confirm-button'));
     expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
 
@@ -297,8 +318,73 @@ void main() {
     await tester.tap(confirm);
     await tester.pumpAndSettle();
 
-    expect(service.restoreRequests.single.policy, UndoConflictPolicy.overwrite);
+    expect(service.restoreRequests.single.policies, {
+      '000001_conflict.txt': UndoConflictPolicy.overwrite,
+    });
     expect(find.textContaining('覆盖原位置内容'), findsOneWidget);
+  });
+
+  testWidgets('applies conflict choices independently per file', (
+    tester,
+  ) async {
+    final service = FakeQuarantineService([
+      fakeQuarantineEntry('first.txt', originalExists: true),
+      fakeQuarantineEntry('second.txt', sequence: 2, originalExists: true),
+    ]);
+
+    await pumpPage(tester, service);
+    await tester.tap(find.text('查看文件'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('conflict-policy-000001_first.txt')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保留两者').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('恢复全部'));
+    await tester.pumpAndSettle();
+
+    expect(service.restoreRequests.single.policies, {
+      '000001_first.txt': UndoConflictPolicy.keepBoth,
+      '000002_second.txt': UndoConflictPolicy.skip,
+    });
+    expect(find.textContaining('以新名称恢复'), findsOneWidget);
+    expect(find.textContaining('本次已跳过'), findsOneWidget);
+  });
+
+  testWidgets('opens cleaning history from the quarantine summary', (
+    tester,
+  ) async {
+    final service = FakeQuarantineService();
+    service.history = _MemoryHistoryStore([
+      CleanHistoryRecord(
+        sessionId: 'history-session',
+        startedAt: DateTime.utc(2026, 10, 18, 10),
+        completedAt: DateTime.utc(2026, 10, 18, 10, 1),
+        outcome: CleanHistoryOutcome.completed,
+        plannedCount: 2,
+        plannedBytes: 2048,
+        movedCount: 2,
+        movedBytes: 2048,
+        skippedCount: 0,
+        failureCount: 0,
+        remainingCount: 0,
+        rules: const [
+          CleanHistoryRule(ruleId: 'test.rule', fileCount: 2, bytes: 2048),
+        ],
+      ),
+    ]);
+
+    await pumpPage(tester, service);
+    await tester.tap(find.byKey(const ValueKey('clean-history-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('清理历史'), findsOneWidget);
+    expect(find.text('已完成'), findsOneWidget);
+    expect(find.textContaining('计划 2 个文件'), findsOneWidget);
+    expect(find.textContaining('规则 test.rule'), findsOneWidget);
   });
 
   testWidgets('asks for a conflict policy from the session list', (
