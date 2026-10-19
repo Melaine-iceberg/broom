@@ -35,6 +35,7 @@ class CleanReport {
     this.skips = const [],
     this.remainingCount = 0,
     this.removedDirectoryCount = 0,
+    this.spaceExhausted = false,
   });
 
   final String? sessionId;
@@ -56,12 +57,87 @@ class CleanReport {
   /// files moved to quarantine. Undo recreates them from the session records.
   final int removedDirectoryCount;
 
+  /// True when the quarantine volume ran out of space during a cross-volume
+  /// copy. The session stops moving further files so the remaining plan can be
+  /// resumed after the user frees space.
+  final bool spaceExhausted;
+
   bool get resumable => remainingCount > 0;
 
   bool get hasIssues => skippedCount > 0 || failureCount > 0;
 }
 
+/// Result of comparing the space needed for cross-volume copies with the free
+/// space on the quarantine volume.
+class QuarantineSpaceAssessment {
+  const QuarantineSpaceAssessment({
+    required this.requiredBytes,
+    required this.crossVolumeCount,
+    required this.freeBytes,
+    required this.quarantineRoot,
+  });
+
+  /// Bytes needed on the quarantine volume. Same-volume moves use rename and
+  /// therefore require no additional data space.
+  final int requiredBytes;
+  final int crossVolumeCount;
+
+  /// Null when no probe is configured or the query failed. In that case the
+  /// caller cannot prove that space is insufficient, so cleaning proceeds.
+  final int? freeBytes;
+  final String quarantineRoot;
+
+  bool get checked => freeBytes != null;
+
+  bool get sufficient => freeBytes == null || freeBytes! >= requiredBytes;
+}
+
+class QuarantineSpaceException implements Exception {
+  const QuarantineSpaceException({required this.assessment});
+
+  final QuarantineSpaceAssessment assessment;
+
+  @override
+  String toString() {
+    final free = assessment.freeBytes ?? 0;
+    return '隔离区所在磁盘空间不足：跨卷复制需要 '
+        '${_formatByteCount(assessment.requiredBytes)}，'
+        '可用 ${_formatByteCount(free)}。请先释放磁盘空间后重试。';
+  }
+
+  static String _formatByteCount(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    const units = ['KB', 'MB', 'GB', 'TB'];
+    var value = bytes / 1024;
+    var unit = 0;
+    while (value >= 1024 && unit < units.length - 1) {
+      value /= 1024;
+      unit++;
+    }
+    return '${value.toStringAsFixed(value >= 100 ? 0 : 1)} ${units[unit]}';
+  }
+}
+
 enum UndoConflictPolicy { skip, keepBoth, overwrite }
+
+/// One original-path collision encountered during undo. [applied] is true for
+/// conflicts that were resolved immediately (renamed or overwritten); skipped
+/// collisions remain pending in the quarantine.
+class UndoConflict {
+  const UndoConflict({
+    required this.storedName,
+    required this.originalPath,
+    required this.policy,
+    required this.applied,
+    this.reason,
+  });
+
+  final String storedName;
+  final String originalPath;
+  final UndoConflictPolicy policy;
+  final bool applied;
+  final String? reason;
+}
 
 class UndoReport {
   const UndoReport({
@@ -75,6 +151,7 @@ class UndoReport {
     required this.integrityFailureCount,
     required this.failures,
     required this.sessionRemoved,
+    this.conflicts = const [],
     this.metadataFailureCount = 0,
     this.metadataWarnings = const [],
     this.recreatedDirectoryCount = 0,
@@ -92,6 +169,9 @@ class UndoReport {
   final int integrityFailureCount;
   final List<CleanFailure> failures;
   final bool sessionRemoved;
+
+  /// Per-file collision details, including which policy was applied.
+  final List<UndoConflict> conflicts;
   final int metadataFailureCount;
   final List<CleanFailure> metadataWarnings;
   final int recreatedDirectoryCount;

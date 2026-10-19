@@ -1,9 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:broom/core/clean/clean_history_store.dart';
 import 'package:broom/core/clean/file_metadata.dart';
 import 'package:broom/core/clean/quarantine_service.dart';
+import 'package:broom/core/clean/quarantine_session_schema.dart';
 import 'package:crypto/crypto.dart';
+import 'package:broom/core/models/clean_history_models.dart';
 import 'package:broom/core/models/clean_models.dart';
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/safety/path_exclusions.dart';
@@ -963,4 +966,343 @@ try {
     }
     expect(await file.readAsString(), 'locked-content');
   }, skip: Platform.isWindows ? false : 'Windows only');
+
+  test(
+    'assesses cross-volume space and aborts before creating a session',
+    () async {
+      final item = JunkItem(
+        ruleId: 'test.rule',
+        rootPath: r'D:\cache',
+        path: r'D:\cache\large.bin',
+        size: 10 * 1024 * 1024,
+        modified: DateTime(2026, 10, 18),
+      );
+      final probed = <String>[];
+      final service = QuarantineService(
+        quarantineRoot: p.windows.join(temp.path, 'quarantine'),
+        guard: PathGuard(protectedRoots: const []),
+        metadataAccess: metadata,
+        freeSpaceProbe: (path) async {
+          probed.add(path);
+          return 5 * 1024 * 1024;
+        },
+      );
+
+      await expectLater(
+        service.clean([item]),
+        throwsA(
+          isA<QuarantineSpaceException>()
+              .having(
+                (error) => error.assessment.requiredBytes,
+                'requiredBytes',
+                item.size,
+              )
+              .having(
+                (error) => error.assessment.freeBytes,
+                'freeBytes',
+                5 * 1024 * 1024,
+              ),
+        ),
+      );
+      expect(probed, [
+        p.windows.rootPrefix(p.windows.join(temp.path, 'quarantine')),
+      ]);
+      expect(await service.listSessions(), isEmpty);
+      expect(
+        await Directory(p.windows.join(temp.path, 'quarantine')).exists(),
+        isFalse,
+      );
+    },
+  );
+
+  test('skips the preflight for same-volume moves', () async {
+    final file = await createFile('same-volume.tmp', 'alpha');
+    final item = await itemFor(file);
+    var probeCalls = 0;
+    final service = QuarantineService(
+      quarantineRoot: p.windows.join(temp.path, 'quarantine'),
+      guard: PathGuard(protectedRoots: const []),
+      metadataAccess: metadata,
+      freeSpaceProbe: (_) async {
+        probeCalls++;
+        return 0;
+      },
+    );
+
+    final assessment = await service.assessSpace([item]);
+    expect(assessment.requiredBytes, 0);
+    expect(assessment.crossVolumeCount, 0);
+    expect(assessment.sufficient, isTrue);
+
+    final report = await service.clean([item]);
+    expect(probeCalls, 0);
+    expect(report.movedCount, 1);
+    expect(report.sessionId, isNotNull);
+  });
+
+  test('refuses to resume when the remaining plan needs unavailable space', () async {
+    final first = await createFile('first.txt', 'alpha');
+    final second = await createFile('second.txt', 'bravo');
+    var cancel = false;
+    final interrupted = await quarantine.clean(
+      [await itemFor(first), await itemFor(second)],
+      onProgress: (progress) {
+        if (progress.moved >= 1) cancel = true;
+      },
+      isCancelled: () => cancel,
+    );
+    final sessionId = interrupted.sessionId!;
+    expect(interrupted.cancelled, isTrue);
+
+    final sessionDir = Directory(
+      p.windows.join(temp.path, 'quarantine', sessionId),
+    );
+    final planFile = File(p.windows.join(sessionDir.path, 'plan.jsonl'));
+    final existingPlan = await planFile.readAsString();
+    final extra = JunkItem(
+      ruleId: 'test.rule',
+      rootPath: r'D:\cache',
+      path: r'D:\cache\extra.bin',
+      size: 4096,
+      modified: DateTime(2026, 10, 18),
+    );
+    await planFile.writeAsString(
+      '$existingPlan'
+      '${jsonEncode({'originalPath': extra.path, 'rootPath': extra.rootPath, 'ruleId': extra.ruleId, 'size': extra.size, 'modified': extra.modified.toUtc().toIso8601String()})}\n',
+    );
+    final metaFile = File(p.windows.join(sessionDir.path, 'session.json'));
+    final meta =
+        jsonDecode(await metaFile.readAsString()) as Map<String, dynamic>;
+    meta['plannedCount'] = 3;
+    meta['remainingCount'] = 2;
+    await metaFile.writeAsString(jsonEncode(meta));
+
+    final limited = QuarantineService(
+      quarantineRoot: p.windows.join(temp.path, 'quarantine'),
+      guard: PathGuard(protectedRoots: const []),
+      metadataAccess: metadata,
+      freeSpaceProbe: (_) async => 0,
+    );
+
+    await expectLater(
+      limited.resumeClean(sessionId),
+      throwsA(isA<QuarantineSpaceException>()),
+    );
+    expect(await second.exists(), isTrue);
+    expect(await planFile.exists(), isTrue);
+    final session = (await limited.listSessions()).single;
+    expect(session.status, QuarantineStatus.partial);
+    expect(session.remainingCount, 2);
+    expect(session.pendingCount, 1);
+  });
+
+  test(
+    'migrates legacy sessions and refuses unknown schema versions',
+    () async {
+      final first = await createFile('first.txt', 'alpha');
+      final second = await createFile('second.txt', 'bravo');
+      final report = await quarantine.clean([
+        await itemFor(first),
+        await itemFor(second),
+      ]);
+      final metaFile = File(
+        p.windows.join(
+          temp.path,
+          'quarantine',
+          report.sessionId!,
+          'session.json',
+        ),
+      );
+      final v1 =
+          jsonDecode(await metaFile.readAsString()) as Map<String, dynamic>;
+      v1['schemaVersion'] = 1;
+      v1.remove('skippedCount');
+      v1.remove('updatedAt');
+      await metaFile.writeAsString(jsonEncode(v1));
+
+      final sessions = await quarantine.listSessions();
+      expect(sessions.single.id, report.sessionId);
+      expect(sessions.single.status, QuarantineStatus.ready);
+
+      final entries = await quarantine.listEntries(report.sessionId!);
+      final partial = await quarantine.undo(
+        report.sessionId!,
+        storedNames: {entries.first.storedName},
+      );
+      expect(partial.restoredCount, 1);
+
+      final rewritten =
+          jsonDecode(await metaFile.readAsString()) as Map<String, dynamic>;
+      expect(rewritten['schemaVersion'], currentQuarantineSessionSchemaVersion);
+      expect(rewritten['skippedCount'], 0);
+      expect(rewritten['updatedAt'], isA<String>());
+
+      rewritten.remove('schemaVersion');
+      await metaFile.writeAsString(jsonEncode(rewritten));
+      expect(await quarantine.listSessions(), hasLength(1));
+
+      rewritten['schemaVersion'] = 99;
+      await metaFile.writeAsString(jsonEncode(rewritten));
+      expect(await quarantine.listSessions(), isEmpty);
+      await expectLater(
+        quarantine.listEntries(report.sessionId!),
+        throwsA(isA<QuarantineSessionFormatException>()),
+      );
+      await expectLater(
+        quarantine.undo(report.sessionId!),
+        throwsA(isA<QuarantineSessionFormatException>()),
+      );
+      await expectLater(
+        quarantine.purgeSession(report.sessionId!),
+        throwsA(isA<QuarantineSessionFormatException>()),
+      );
+    },
+  );
+
+  test('applies a conflict policy per entry', () async {
+    final first = await createFile('first.txt', 'alpha');
+    final second = await createFile('second.txt', 'bravo');
+    final third = await createFile('third.txt', 'charlie');
+    final report = await quarantine.clean([
+      await itemFor(first),
+      await itemFor(second),
+      await itemFor(third),
+    ]);
+    await first.writeAsString('user-first');
+    await second.writeAsString('user-second');
+    await third.writeAsString('user-third');
+
+    final entries = await quarantine.listEntries(report.sessionId!);
+    final byPath = {
+      for (final entry in entries) entry.originalPath: entry.storedName,
+    };
+    final undo = await quarantine.undo(
+      report.sessionId!,
+      conflictPolicies: {
+        byPath[first.path]!: UndoConflictPolicy.keepBoth,
+        byPath[second.path]!: UndoConflictPolicy.overwrite,
+        byPath[third.path]!: UndoConflictPolicy.skip,
+      },
+    );
+
+    expect(undo.restoredCount, 2);
+    expect(undo.keptBothCount, 1);
+    expect(undo.overwrittenCount, 1);
+    expect(undo.conflictCount, 1);
+    expect(undo.conflicts, hasLength(3));
+    expect(
+      undo.conflicts
+          .firstWhere((conflict) => conflict.originalPath == first.path)
+          .applied,
+      isTrue,
+    );
+    expect(
+      undo.conflicts
+          .firstWhere((conflict) => conflict.originalPath == second.path)
+          .applied,
+      isTrue,
+    );
+    expect(
+      undo.conflicts
+          .firstWhere((conflict) => conflict.originalPath == third.path)
+          .applied,
+      isFalse,
+    );
+    expect(await first.readAsString(), 'user-first');
+    expect(await second.readAsString(), 'bravo');
+    expect(await third.readAsString(), 'user-third');
+    final keptBoth = File(p.windows.join(source.path, 'first (已恢复).txt'));
+    expect(await keptBoth.readAsString(), 'alpha');
+    expect(undo.sessionRemoved, isFalse);
+    expect((await quarantine.listSessions()).single.pendingCount, 1);
+  });
+
+  test(
+    'records cleaning history independently of the session lifecycle',
+    () async {
+      final history = CleanHistoryStore(
+        filePath: p.windows.join(temp.path, 'clean_history.json'),
+      );
+      final service = QuarantineService(
+        quarantineRoot: p.windows.join(temp.path, 'quarantine'),
+        guard: PathGuard(protectedRoots: const []),
+        metadataAccess: metadata,
+        historyStore: history,
+      );
+      final file = await createFile('history.tmp', 'alpha');
+
+      final report = await service.clean([await itemFor(file)]);
+
+      var records = await history.load();
+      expect(records, hasLength(1));
+      expect(records.single.sessionId, report.sessionId);
+      expect(records.single.outcome, CleanHistoryOutcome.completed);
+      expect(records.single.plannedCount, 1);
+      expect(records.single.movedCount, 1);
+      expect(records.single.movedBytes, report.movedBytes);
+      expect(records.single.rules.single.ruleId, 'test.rule');
+
+      await service.purgeSession(report.sessionId!);
+
+      records = await history.load();
+      expect(records, hasLength(1));
+      expect(records.single.sessionId, report.sessionId);
+    },
+  );
+
+  test('updates one history record when a cleanup is resumed', () async {
+    final history = CleanHistoryStore(
+      filePath: p.windows.join(temp.path, 'clean_history.json'),
+    );
+    final service = QuarantineService(
+      quarantineRoot: p.windows.join(temp.path, 'quarantine'),
+      guard: PathGuard(protectedRoots: const []),
+      metadataAccess: metadata,
+      historyStore: history,
+    );
+    final first = await createFile('first.txt', 'alpha');
+    final second = await createFile('second.txt', 'bravo');
+    var cancel = false;
+
+    final interrupted = await service.clean(
+      [await itemFor(first), await itemFor(second)],
+      onProgress: (progress) {
+        if (progress.moved >= 1) cancel = true;
+      },
+      isCancelled: () => cancel,
+    );
+
+    var records = await history.load();
+    expect(records, hasLength(1));
+    expect(records.single.outcome, CleanHistoryOutcome.cancelled);
+    expect(records.single.movedCount, 1);
+    expect(records.single.remainingCount, 1);
+
+    await service.resumeClean(interrupted.sessionId!);
+
+    records = await history.load();
+    expect(records, hasLength(1));
+    expect(records.single.sessionId, interrupted.sessionId);
+    expect(records.single.outcome, CleanHistoryOutcome.completed);
+    expect(records.single.movedCount, 2);
+    expect(records.single.plannedCount, 2);
+    expect(records.single.remainingCount, 0);
+  });
+
+  test('a broken history store never fails a cleanup', () async {
+    final service = QuarantineService(
+      quarantineRoot: p.windows.join(temp.path, 'quarantine'),
+      guard: PathGuard(protectedRoots: const []),
+      metadataAccess: metadata,
+      // The path is a directory, so every history write must fail.
+      historyStore: CleanHistoryStore(filePath: temp.path),
+    );
+    final file = await createFile('history.tmp', 'alpha');
+
+    final report = await service.clean([await itemFor(file)]);
+
+    expect(report.movedCount, 1);
+    expect(report.failureCount, 0);
+    expect(report.sessionId, isNotNull);
+  });
 }

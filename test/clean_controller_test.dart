@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:broom/core/models/clean_models.dart';
 import 'package:broom/core/models/cleaner_rule.dart';
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/platform/cleaner_platform.dart';
@@ -144,11 +145,12 @@ void main() {
     FileLockProbe? lockProbe,
     ScanSettings Function()? scanSettings,
     ScanResultStore? scanResultStore,
+    FakeQuarantineService? quarantine,
   }) {
     return CleanController(
       platform: _TestPlatform(definedRules: rules, rootsByRule: rootsByRule),
       guard: PathGuard(protectedRoots: const []),
-      quarantine: FakeQuarantineService(),
+      quarantine: quarantine ?? FakeQuarantineService(),
       exclusions: exclusions,
       scanServiceFactory: () => scanner,
       lockProbe: lockProbe,
@@ -156,6 +158,48 @@ void main() {
       scanResultStore: scanResultStore,
     );
   }
+
+  test('surfaces a disk space preflight failure before moving files', () async {
+    final exclusions = createStore();
+    final quarantine = FakeQuarantineService()
+      ..cleanError = const QuarantineSpaceException(
+        assessment: QuarantineSpaceAssessment(
+          requiredBytes: 2048,
+          crossVolumeCount: 1,
+          freeBytes: 1024,
+          quarantineRoot: r'C:\Users\Alice\AppData\Local\Broom\quarantine',
+        ),
+      );
+    final item = JunkItem(
+      ruleId: 'test.rule',
+      rootPath: rootA.path,
+      path: p.windows.join(rootA.path, 'a.tmp'),
+      size: 2048,
+      modified: DateTime(2026, 10, 18),
+    );
+    final scanner = _RecordingScanService(items: [item]);
+    final rule = createRule();
+    final controller = createController(
+      exclusions: exclusions,
+      scanner: scanner,
+      rules: [rule],
+      rootsByRule: {
+        rule.id: [rootA.path],
+      },
+      quarantine: quarantine,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    await controller.scan();
+    expect(controller.selectedCount, 1);
+
+    await controller.cleanSelected();
+
+    expect(controller.phase, CleanPhase.preview);
+    expect(controller.error, contains('磁盘空间检查未通过'));
+    expect(controller.error, contains('空间不足'));
+    expect(quarantine.cleanRequest, hasLength(1));
+  });
 
   test(
     'filters excluded roots and forwards exclusions to the scanner',
@@ -641,5 +685,63 @@ void main() {
     expect(second.results.single.items.single.path, item.path);
     expect(second.scanRestoredFromPersistence, isTrue);
     expect(second.selectedCount, 1);
+  });
+
+  test('reports active and excluded roots for the rule detail page', () async {
+    final exclusions = createStore();
+    await exclusions.ensureLoaded();
+    await exclusions.add(rootB.path);
+    final rule = createRule();
+    final controller = createController(
+      exclusions: exclusions,
+      scanner: _RecordingScanService(),
+      rules: [rule],
+      rootsByRule: {
+        rule.id: [rootA.path, rootB.path],
+      },
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    final roots = await controller.inspectRuleRoots(rule);
+
+    expect(controller.rulesVersion, 'builtin');
+    expect(roots, hasLength(2));
+    expect(roots[0].path, rootA.path);
+    expect(roots[0].state, RuleRootState.active);
+    expect(roots[1].path, rootB.path);
+    expect(roots[1].state, RuleRootState.excluded);
+  });
+
+  test('keeps scan counters for the preview summary', () async {
+    final exclusions = createStore();
+    await exclusions.ensureLoaded();
+    final item = JunkItem(
+      ruleId: 'test.rule',
+      rootPath: rootA.path,
+      path: p.windows.join(rootA.path, 'cache.tmp'),
+      size: 42,
+      modified: DateTime(2026, 10, 18),
+    );
+    final scanner = _RecordingScanService(items: [item]);
+    final rule = createRule();
+    final controller = createController(
+      exclusions: exclusions,
+      scanner: scanner,
+      rules: [rule],
+      rootsByRule: {
+        rule.id: [rootA.path],
+      },
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    await controller.scan();
+
+    expect(controller.phase, CleanPhase.preview);
+    expect(controller.scanScannedFiles, 1);
+    expect(controller.scanElapsed, isNotNull);
+    expect(controller.scanDirectoryErrors, 0);
+    expect(controller.scanTruncated, isFalse);
   });
 }

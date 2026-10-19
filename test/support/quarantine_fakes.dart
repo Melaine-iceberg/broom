@@ -1,3 +1,4 @@
+import 'package:broom/core/clean/clean_history_store.dart';
 import 'package:broom/core/clean/quarantine_service.dart';
 import 'package:broom/core/models/clean_models.dart';
 import 'package:broom/core/models/scan_models.dart';
@@ -31,6 +32,7 @@ class FakeQuarantineService implements QuarantineService {
   int remainingCount;
   int undoMetadataFailures = 0;
   final List<String> resumeRequests = [];
+  CleanHistoryStore? history;
 
   @override
   final String quarantineRoot =
@@ -39,8 +41,26 @@ class FakeQuarantineService implements QuarantineService {
   @override
   final PathGuard guard = PathGuard(protectedRoots: const []);
 
+  @override
+  CleanHistoryStore? get historyStore => history;
+
+  @override
+  Future<QuarantineSpaceAssessment> assessSpace(List<JunkItem> items) async =>
+      QuarantineSpaceAssessment(
+        requiredBytes: 0,
+        crossVolumeCount: 0,
+        freeBytes: null,
+        quarantineRoot: quarantineRoot,
+      );
+
   final Map<String, List<QuarantineEntry>> _entriesBySession;
-  final List<({Set<String>? storedNames, UndoConflictPolicy policy})>
+  final List<
+    ({
+      Set<String>? storedNames,
+      UndoConflictPolicy policy,
+      Map<String, UndoConflictPolicy> policies,
+    })
+  >
   restoreRequests = [];
 
   bool get isEmpty => _entriesBySession.isEmpty;
@@ -94,8 +114,13 @@ class FakeQuarantineService implements QuarantineService {
     String sessionId, {
     Set<String>? storedNames,
     UndoConflictPolicy conflictPolicy = UndoConflictPolicy.skip,
+    Map<String, UndoConflictPolicy> conflictPolicies = const {},
   }) async {
-    restoreRequests.add((storedNames: storedNames, policy: conflictPolicy));
+    restoreRequests.add((
+      storedNames: storedNames,
+      policy: conflictPolicy,
+      policies: Map.of(conflictPolicies),
+    ));
     final entries = _entriesBySession[sessionId];
     if (entries == null) throw StateError('找不到隔离区记录');
 
@@ -111,7 +136,8 @@ class FakeQuarantineService implements QuarantineService {
       }
       if (!entry.restorable) continue;
       if (entry.originalExists) {
-        switch (conflictPolicy) {
+        final policy = conflictPolicies[entry.storedName] ?? conflictPolicy;
+        switch (policy) {
           case UndoConflictPolicy.skip:
             conflictCount++;
             continue;
@@ -181,12 +207,17 @@ class FakeQuarantineService implements QuarantineService {
     );
   }
 
+  Object? cleanError;
+  List<JunkItem> cleanRequest = const [];
+
   @override
   Future<CleanReport> clean(
     List<JunkItem> items, {
     void Function(CleanProgress progress)? onProgress,
     bool Function()? isCancelled,
-  }) {
+  }) async {
+    cleanRequest = List.of(items);
+    if (cleanError != null) throw cleanError!;
     throw UnimplementedError();
   }
 

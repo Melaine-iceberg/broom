@@ -40,6 +40,17 @@ class ScanIssueGroup {
   final List<String> samplePaths;
 }
 
+enum RuleRootState { active, protected, excluded }
+
+/// A resolved rule root as seen by the current safety configuration. The rule
+/// detail page uses this to explain where a scan will actually look.
+class RuleRootInspection {
+  const RuleRootInspection({required this.path, required this.state});
+
+  final String path;
+  final RuleRootState state;
+}
+
 class CleanController extends ChangeNotifier {
   CleanController({
     required this.platform,
@@ -78,6 +89,8 @@ class CleanController extends ChangeNotifier {
   Map<String, RuleExclusionScope> _ruleExclusionScopes = const {};
   int _scanDirectoryErrors = 0;
   bool _scanTruncated = false;
+  int _scanScannedFiles = 0;
+  Duration? _scanElapsed;
   bool _scanStarting = false;
   final Map<String, List<JunkItem>> _streamItemsByRule = {};
   final List<JunkItem> _recentScanItems = [];
@@ -138,6 +151,9 @@ class CleanController extends ChangeNotifier {
   String? get exclusionError => _exclusionError;
   int get scanDirectoryErrors => _scanDirectoryErrors;
   bool get scanTruncated => _scanTruncated;
+  int get scanScannedFiles => _scanScannedFiles;
+  Duration? get scanElapsed => _scanElapsed;
+  String get rulesVersion => platform.rulesVersion;
   int get liveFoundCount => _liveFoundCount;
   int get liveFoundBytes => _liveFoundBytes;
   List<JunkItem> get recentScanItems => List.unmodifiable(_recentScanItems);
@@ -341,6 +357,8 @@ class CleanController extends ChangeNotifier {
         (total, item) => total + item.size,
       );
       _scanDirectoryErrors = summary.issueCount;
+      _scanScannedFiles = summary.scannedFiles;
+      _scanElapsed = null;
       _issueCounts
         ..clear()
         ..addAll(summary.errorCounts);
@@ -415,6 +433,8 @@ class CleanController extends ChangeNotifier {
       _resetScanStreamState();
       _scanDirectoryErrors = 0;
       _scanTruncated = false;
+      _scanScannedFiles = 0;
+      _scanElapsed = null;
       _lastReport = null;
       _cleanProgress = null;
       _notify();
@@ -488,6 +508,8 @@ class CleanController extends ChangeNotifier {
 
         _scanDirectoryErrors = result.directoryErrors;
         _scanTruncated = result.truncated;
+        _scanScannedFiles = result.scannedFiles;
+        _scanElapsed = result.elapsed;
         _results = _groupResultsFromStream();
         _resetSelection();
         _selectDefaultItems(notify: false);
@@ -771,6 +793,12 @@ class CleanController extends ChangeNotifier {
       _phase = CleanPhase.done;
       await _refreshPendingSessions(notify: false);
       _notify();
+    } on QuarantineSpaceException catch (error) {
+      _phase = CleanPhase.preview;
+      _cleanProgress = null;
+      _error = trf('清理前磁盘空间检查未通过：{error}', {'error': error});
+      await _refreshPendingSessions(notify: false);
+      _notify();
     } catch (error) {
       _phase = CleanPhase.preview;
       _cleanProgress = null;
@@ -822,6 +850,8 @@ class CleanController extends ChangeNotifier {
     _error = null;
     _persistenceNotice = null;
     _scanRestoredFromPersistence = false;
+    _scanScannedFiles = 0;
+    _scanElapsed = null;
     unawaited(_refreshLastScanSummary(notify: false));
     _notify();
   }
@@ -880,6 +910,26 @@ class CleanController extends ChangeNotifier {
 
   Future<void> refreshRuleExclusionScopes() =>
       _refreshRuleExclusionScopes(notify: true);
+
+  /// Resolves a rule again and reports whether each root currently takes part
+  /// in scanning. This is read-only and is used by the rule detail page.
+  Future<List<RuleRootInspection>> inspectRuleRoots(CleanerRule rule) async {
+    await _ensureExclusionsLoaded();
+    final roots = await platform.resolveRoots(rule);
+    final seen = <String>{};
+    final inspections = <RuleRootInspection>[];
+    for (final root in roots) {
+      final key = PathGuard.normalize(root).toLowerCase();
+      if (!seen.add(key)) continue;
+      final state = guard.isProtected(root)
+          ? RuleRootState.protected
+          : _exclusionsReady && exclusions.excludes(root)
+          ? RuleRootState.excluded
+          : RuleRootState.active;
+      inspections.add(RuleRootInspection(path: root, state: state));
+    }
+    return inspections;
+  }
 
   Future<String?> _changeExclusions(
     Future<void> Function() change,

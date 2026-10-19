@@ -5,15 +5,18 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
+import '../models/clean_history_models.dart';
 import '../models/clean_models.dart';
 import '../models/scan_models.dart';
 import '../platform/filesystem_error.dart';
 import '../platform/windows_path.dart';
 import '../safety/path_exclusions.dart';
 import '../safety/path_guard.dart';
+import 'clean_history_store.dart';
 import 'file_metadata.dart';
+import 'quarantine_session_schema.dart';
 
-const _schemaVersion = 1;
+const _schemaVersion = currentQuarantineSessionSchemaVersion;
 const _maxFailureDetails = 100;
 const _maxAclLength = 64 * 1024;
 const _integrityHashLimitBytes = 32 * 1024 * 1024;
@@ -25,6 +28,8 @@ class QuarantineService {
     required FileMetadataAccess metadataAccess,
     PathExclusionSource? exclusions,
     DateTime Function()? clock,
+    Future<int?> Function(String path)? freeSpaceProbe,
+    CleanHistoryStore? historyStore,
   }) {
     if (!p.windows.isAbsolute(quarantineRoot)) {
       throw ArgumentError.value(
@@ -47,6 +52,8 @@ class QuarantineService {
       metadataAccess,
       exclusions ?? const EmptyPathExclusionSource(),
       clock ?? DateTime.now,
+      freeSpaceProbe,
+      historyStore,
     );
   }
 
@@ -56,6 +63,8 @@ class QuarantineService {
     this._metadata,
     this._exclusions,
     this._clock,
+    this._freeSpaceProbe,
+    this._historyStore,
   );
 
   final String quarantineRoot;
@@ -63,6 +72,10 @@ class QuarantineService {
   final FileMetadataAccess _metadata;
   final PathExclusionSource _exclusions;
   final DateTime Function() _clock;
+  final Future<int?> Function(String path)? _freeSpaceProbe;
+  final CleanHistoryStore? _historyStore;
+
+  CleanHistoryStore? get historyStore => _historyStore;
   static final Random _random = Random.secure();
   static final RegExp _sha256Pattern = RegExp(r'^[0-9a-fA-F]{64}$');
 
@@ -81,6 +94,11 @@ class QuarantineService {
         cancelled: false,
       );
     }
+
+    // Check space before creating the session or touching any file. A
+    // cross-volume move is a copy followed by a delete, so running out of
+    // space midway would leave a partial file in the quarantine.
+    await _ensureSpaceAvailable(items);
 
     final baseDir = Directory(quarantineRoot);
     await baseDir.create(recursive: true);
@@ -103,8 +121,10 @@ class QuarantineService {
         'pendingCount': 0,
         'pendingBytes': 0,
         'failureCount': 0,
+        'skippedCount': 0,
         'plannedCount': items.length,
         'remainingCount': items.length,
+        'updatedAt': createdAt,
       });
     } catch (_) {
       await _deleteSessionDirectory(sessionDir);
@@ -116,8 +136,10 @@ class QuarantineService {
       sessionId: sessionId,
       createdAt: createdAt,
       items: items,
+      planItems: items,
       plannedCount: items.length,
       previousFailureCount: 0,
+      previousSkippedCount: 0,
       onProgress: onProgress,
       isCancelled: isCancelled,
     );
@@ -154,6 +176,7 @@ class QuarantineService {
         ? meta['createdAt'] as String
         : _clock().toUtc().toIso8601String();
     final previousFailureCount = (meta['failureCount'] as num?)?.toInt() ?? 0;
+    final previousSkippedCount = (meta['skippedCount'] as num?)?.toInt() ?? 0;
 
     if (remaining.isEmpty) {
       final removedDirectoryCount = await _tryRemoveEmptyDirectories(
@@ -166,6 +189,18 @@ class QuarantineService {
         plannedCount: plannedCount,
         remainingCount: 0,
         failureCount: previousFailureCount,
+        skippedCount: previousSkippedCount,
+      );
+      await _recordHistory(
+        sessionId: sessionId,
+        createdAt: createdAt,
+        planItems: plan,
+        movedCount: entries.length,
+        movedBytes: entries.fold<int>(0, (total, entry) => total + entry.size),
+        skippedCount: previousSkippedCount,
+        failureCount: previousFailureCount,
+        remainingCount: 0,
+        outcome: CleanHistoryOutcome.completed,
       );
       return CleanReport(
         sessionId: outcome.sessionRemoved ? null : sessionId,
@@ -177,6 +212,8 @@ class QuarantineService {
         removedDirectoryCount: removedDirectoryCount,
       );
     }
+
+    await _ensureSpaceAvailable(remaining);
 
     final restoredNames = await _readRestoredNames(sessionDir);
     final pending = await _pendingEntries(sessionDir, entries, restoredNames);
@@ -193,8 +230,10 @@ class QuarantineService {
         (total, entry) => total + entry.size,
       ),
       'failureCount': previousFailureCount,
+      'skippedCount': previousSkippedCount,
       'plannedCount': plannedCount,
       'remainingCount': remaining.length,
+      'updatedAt': _clock().toUtc().toIso8601String(),
     });
 
     return _runSession(
@@ -202,11 +241,70 @@ class QuarantineService {
       sessionId: sessionId,
       createdAt: createdAt,
       items: remaining,
+      planItems: plan,
       plannedCount: plannedCount,
       previousFailureCount: previousFailureCount,
+      previousSkippedCount: previousSkippedCount,
       onProgress: onProgress,
       isCancelled: isCancelled,
     );
+  }
+
+  /// Estimates whether the quarantine volume can hold the cross-volume copies
+  /// this batch would require. Same-volume moves are renames and need no
+  /// additional data space. When no probe is configured the assessment is
+  /// unknown and [QuarantineSpaceAssessment.sufficient] stays true.
+  Future<QuarantineSpaceAssessment> assessSpace(List<JunkItem> items) async {
+    var requiredBytes = 0;
+    var crossVolumeCount = 0;
+    for (final item in items) {
+      if (!_requiresCopy(item.path)) continue;
+      requiredBytes += item.size;
+      crossVolumeCount++;
+    }
+
+    int? freeBytes;
+    final probe = _freeSpaceProbe;
+    if (probe != null && crossVolumeCount > 0) {
+      try {
+        final value = await probe(_volumeRoot(quarantineRoot));
+        if (value != null && value >= 0) freeBytes = value;
+      } catch (_) {
+        freeBytes = null;
+      }
+    }
+    return QuarantineSpaceAssessment(
+      requiredBytes: requiredBytes,
+      crossVolumeCount: crossVolumeCount,
+      freeBytes: freeBytes,
+      quarantineRoot: quarantineRoot,
+    );
+  }
+
+  Future<void> _ensureSpaceAvailable(List<JunkItem> items) async {
+    final assessment = await assessSpace(items);
+    if (!assessment.sufficient) {
+      throw QuarantineSpaceException(assessment: assessment);
+    }
+  }
+
+  bool _requiresCopy(String sourcePath) {
+    try {
+      final sourceRoot = p.windows
+          .rootPrefix(PathGuard.normalize(sourcePath))
+          .toLowerCase();
+      final quarantineVolume = _volumeRoot(quarantineRoot).toLowerCase();
+      return sourceRoot != quarantineVolume;
+    } catch (_) {
+      // If the volume cannot be determined, assume a copy is needed. That is
+      // the conservative choice for a preflight check.
+      return true;
+    }
+  }
+
+  static String _volumeRoot(String path) {
+    final root = p.windows.rootPrefix(path);
+    return root.isEmpty ? path : root;
   }
 
   Future<CleanReport> _runSession({
@@ -214,8 +312,10 @@ class QuarantineService {
     required String sessionId,
     required String createdAt,
     required List<JunkItem> items,
+    required List<JunkItem> planItems,
     required int plannedCount,
     required int previousFailureCount,
+    required int previousSkippedCount,
     void Function(CleanProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) async {
@@ -223,6 +323,10 @@ class QuarantineService {
     final skips = <CleanFailure>[];
     final filesDir = Directory(p.windows.join(sessionDir.path, 'files'));
     final priorEntries = await _readEntries(sessionDir);
+    final priorEntryBytes = priorEntries.fold<int>(
+      0,
+      (total, entry) => total + entry.size,
+    );
     var sequence = _maxSequence(priorEntries);
     var failureCount = 0;
     var skippedCount = 0;
@@ -231,6 +335,8 @@ class QuarantineService {
     var removedDirectoryCount = 0;
     var processed = 0;
     var cancelled = false;
+    var spaceExhausted = false;
+    var historyRecorded = false;
     var lastReportAt = DateTime.fromMillisecondsSinceEpoch(0);
     RandomAccessFile? entriesFile;
 
@@ -286,7 +392,22 @@ class QuarantineService {
       cancelled: cancelled,
       remainingCount: items.length - processed,
       removedDirectoryCount: removedDirectoryCount,
+      spaceExhausted: spaceExhausted,
     );
+
+    Future<void> recordHistory(CleanHistoryOutcome outcome) async {
+      await _recordHistory(
+        sessionId: sessionId,
+        createdAt: createdAt,
+        planItems: planItems,
+        movedCount: priorEntries.length + movedCount,
+        movedBytes: priorEntryBytes + movedBytes,
+        skippedCount: previousSkippedCount + skippedCount,
+        failureCount: previousFailureCount + failureCount,
+        remainingCount: items.length - processed,
+        outcome: outcome,
+      );
+    }
 
     var sessionRemoved = false;
     try {
@@ -401,6 +522,15 @@ class QuarantineService {
             entryStart,
             destinationPath,
           );
+          if (_isDiskFullError(error)) {
+            // Stop before attempting more copies. The plan stays on disk and
+            // the session becomes partial so cleanup can resume after the user
+            // frees space.
+            recordFailure(item.path, error);
+            spaceExhausted = true;
+            report(force: true, currentPath: item.path);
+            break;
+          }
           recordAttemptError(item.path, error);
           report(currentPath: item.path);
           continue;
@@ -425,8 +555,17 @@ class QuarantineService {
         plannedCount: plannedCount,
         remainingCount: items.length - processed,
         failureCount: previousFailureCount + failureCount,
+        skippedCount: previousSkippedCount + skippedCount,
       );
       sessionRemoved = outcome.sessionRemoved;
+      historyRecorded = true;
+      await recordHistory(
+        cancelled
+            ? CleanHistoryOutcome.cancelled
+            : items.length - processed > 0
+            ? CleanHistoryOutcome.partial
+            : CleanHistoryOutcome.completed,
+      );
       report(force: true);
       return buildReport(sessionRemoved: sessionRemoved);
     } catch (_) {
@@ -444,9 +583,14 @@ class QuarantineService {
           plannedCount: plannedCount,
           remainingCount: items.length - processed,
           failureCount: previousFailureCount + failureCount,
+          skippedCount: previousSkippedCount + skippedCount,
         );
       } on FileSystemException {
         // The plan and entries on disk still allow a later resume.
+      }
+      if (!historyRecorded) {
+        historyRecorded = true;
+        await recordHistory(CleanHistoryOutcome.failed);
       }
       rethrow;
     } finally {
@@ -602,6 +746,7 @@ class QuarantineService {
     required int plannedCount,
     required int remainingCount,
     required int failureCount,
+    required int skippedCount,
   }) async {
     final entries = await _readEntries(sessionDir);
     final restoredNames = await _readRestoredNames(sessionDir);
@@ -632,8 +777,10 @@ class QuarantineService {
         (total, entry) => total + entry.size,
       ),
       'failureCount': failureCount,
+      'skippedCount': skippedCount,
       'plannedCount': plannedCount,
       'remainingCount': remainingCount,
+      'updatedAt': _clock().toUtc().toIso8601String(),
     });
     return (sessionRemoved: false, remainingCount: remainingCount);
   }
@@ -642,8 +789,10 @@ class QuarantineService {
     String sessionId, {
     Set<String>? storedNames,
     UndoConflictPolicy conflictPolicy = UndoConflictPolicy.skip,
+    Map<String, UndoConflictPolicy> conflictPolicies = const {},
   }) async {
     final sessionDir = await _requireSessionDirectory(sessionId);
+    await _requireSessionMeta(sessionDir);
     final entries = await _readEntries(sessionDir);
     final restoredNames = await _readRestoredNames(sessionDir);
     final restoredAfter = <String>{...restoredNames};
@@ -668,6 +817,7 @@ class QuarantineService {
     var directoryFailureCount = 0;
     final metadataWarnings = <CleanFailure>[];
     final directoryWarnings = <CleanFailure>[];
+    final conflicts = <UndoConflict>[];
 
     void recordFailure(String path, Object error) {
       failureCount++;
@@ -812,29 +962,78 @@ class QuarantineService {
         continue;
       }
       if (targetType != FileSystemEntityType.notFound) {
-        switch (conflictPolicy) {
+        // Per-file decisions win; the batch policy remains the fallback for
+        // callers that restore a whole session from a single action.
+        final effectivePolicy =
+            conflictPolicies[entry.storedName] ?? conflictPolicy;
+        switch (effectivePolicy) {
           case UndoConflictPolicy.skip:
             conflictCount++;
+            conflicts.add(
+              UndoConflict(
+                storedName: entry.storedName,
+                originalPath: entry.originalPath,
+                policy: effectivePolicy,
+                applied: false,
+                reason: '原位置已有文件，已跳过',
+              ),
+            );
             continue;
           case UndoConflictPolicy.keepBoth:
             final destinationPath = await _availableRestorePath(
               entry.originalPath,
             );
             if (destinationPath == null) {
+              conflicts.add(
+                UndoConflict(
+                  storedName: entry.storedName,
+                  originalPath: entry.originalPath,
+                  policy: effectivePolicy,
+                  applied: false,
+                  reason: '无法为冲突文件生成可用的新名称',
+                ),
+              );
               recordFailure(entry.originalPath, '无法为冲突文件生成可用的新名称');
               continue;
             }
             if (_exclusions.excludes(destinationPath) ||
                 !guard.allows(path: destinationPath, root: entry.rootPath)) {
+              conflicts.add(
+                UndoConflict(
+                  storedName: entry.storedName,
+                  originalPath: entry.originalPath,
+                  policy: effectivePolicy,
+                  applied: false,
+                  reason: '恢复路径未通过安全检查',
+                ),
+              );
               recordFailure(destinationPath, '恢复路径未通过安全检查');
               continue;
             }
             try {
               await _moveFile(storedPath, destinationPath);
             } on FileSystemException catch (error) {
+              conflicts.add(
+                UndoConflict(
+                  storedName: entry.storedName,
+                  originalPath: entry.originalPath,
+                  policy: effectivePolicy,
+                  applied: false,
+                  reason: _failureReason(error),
+                ),
+              );
               recordFailure(entry.originalPath, error);
               continue;
             }
+            conflicts.add(
+              UndoConflict(
+                storedName: entry.storedName,
+                originalPath: entry.originalPath,
+                policy: effectivePolicy,
+                applied: true,
+                reason: '已保存为 $destinationPath',
+              ),
+            );
             await restoreMetadata(destinationPath, entry);
             recordRestored(entry);
             keptBothCount++;
@@ -842,6 +1041,15 @@ class QuarantineService {
             continue;
           case UndoConflictPolicy.overwrite:
             if (targetType != FileSystemEntityType.file) {
+              conflicts.add(
+                UndoConflict(
+                  storedName: entry.storedName,
+                  originalPath: entry.originalPath,
+                  policy: effectivePolicy,
+                  applied: false,
+                  reason: '原位置不是普通文件，无法覆盖',
+                ),
+              );
               recordFailure(entry.originalPath, '原位置不是普通文件，无法覆盖');
               continue;
             }
@@ -849,15 +1057,42 @@ class QuarantineService {
             // changed since the initial validation above.
             if (_exclusions.excludes(entry.originalPath) ||
                 !guard.allows(path: entry.originalPath, root: entry.rootPath)) {
+              conflicts.add(
+                UndoConflict(
+                  storedName: entry.storedName,
+                  originalPath: entry.originalPath,
+                  policy: effectivePolicy,
+                  applied: false,
+                  reason: '原路径未通过安全检查',
+                ),
+              );
               recordFailure(entry.originalPath, '原路径未通过安全检查');
               continue;
             }
             try {
               await _replaceFile(storedPath, entry.originalPath);
             } on FileSystemException catch (error) {
+              conflicts.add(
+                UndoConflict(
+                  storedName: entry.storedName,
+                  originalPath: entry.originalPath,
+                  policy: effectivePolicy,
+                  applied: false,
+                  reason: _failureReason(error),
+                ),
+              );
               recordFailure(entry.originalPath, error);
               continue;
             }
+            conflicts.add(
+              UndoConflict(
+                storedName: entry.storedName,
+                originalPath: entry.originalPath,
+                policy: effectivePolicy,
+                applied: true,
+                reason: '已覆盖原位置内容',
+              ),
+            );
             await restoreMetadata(entry.originalPath, entry);
             recordRestored(entry);
             overwrittenCount++;
@@ -904,6 +1139,10 @@ class QuarantineService {
         'pendingCount': pendingCount,
         'pendingBytes': pendingBytes,
         'failureCount': failureCount,
+        'skippedCount': (meta['skippedCount'] as num?)?.toInt() ?? 0,
+        'plannedCount': (meta['plannedCount'] as num?)?.toInt() ?? 0,
+        'remainingCount': (meta['remainingCount'] as num?)?.toInt() ?? 0,
+        'updatedAt': _clock().toUtc().toIso8601String(),
       });
     }
 
@@ -918,6 +1157,7 @@ class QuarantineService {
       integrityFailureCount: integrityFailureCount,
       failures: List.unmodifiable(failures),
       sessionRemoved: pendingCount == 0,
+      conflicts: List.unmodifiable(conflicts),
       metadataFailureCount: metadataFailureCount,
       metadataWarnings: List.unmodifiable(metadataWarnings),
       recreatedDirectoryCount: recreatedDirectoryCount,
@@ -928,6 +1168,7 @@ class QuarantineService {
 
   Future<List<QuarantineEntry>> listEntries(String sessionId) async {
     final sessionDir = await _requireSessionDirectory(sessionId);
+    await _requireSessionMeta(sessionDir);
     final entries = await _readEntries(sessionDir);
     final restoredNames = await _readRestoredNames(sessionDir);
     final filesDir = p.windows.join(sessionDir.path, 'files');
@@ -989,6 +1230,7 @@ class QuarantineService {
 
   Future<QuarantinePurgeReport> purgeSession(String sessionId) async {
     final sessionDir = await _requireSessionDirectory(sessionId);
+    await _requireSessionMeta(sessionDir);
     final failures = <CleanFailure>[];
     var failureCount = 0;
     var removedCount = 0;
@@ -1098,8 +1340,15 @@ class QuarantineService {
         final id = p.windows.basename(entity.path);
         if (!_isValidSessionId(id)) continue;
 
-        final info = await _readSessionInfo(entity);
-        if (info != null) sessions.add(info);
+        try {
+          final info = await _readSessionInfo(entity);
+          if (info != null) sessions.add(info);
+        } on QuarantineSessionFormatException {
+          // Sessions from an unsupported format are not listed or processed.
+          // They remain on disk untouched so a newer Broom build can still
+          // open them.
+          continue;
+        }
       }
     } on FileSystemException {
       return sessions;
@@ -1291,6 +1540,13 @@ class QuarantineService {
 
   static String _failureReason(Object error) => describeFilesystemError(error);
 
+  static bool _isDiskFullError(Object error) {
+    if (error is! FileSystemException) return false;
+    final code = error.osError?.errorCode;
+    // ERROR_DISK_FULL (112), ERROR_HANDLE_DISK_FULL (39) and POSIX ENOSPC.
+    return code == 112 || code == 39 || code == 28;
+  }
+
   static bool _isSkippableError(Object error) {
     if (isFileLockConflict(error)) return true;
     if (error is FileSystemException) {
@@ -1466,7 +1722,19 @@ class QuarantineService {
       // moves. A locked source will also be cleaned up safely below.
     }
 
-    await source.copy(destination);
+    try {
+      await source.copy(destination);
+    } on FileSystemException {
+      // A failed copy can leave a truncated destination (for example when the
+      // disk fills up). Remove it so the quarantine never reports a partial
+      // file as restorable.
+      try {
+        await _deleteFile(destinationPath);
+      } on FileSystemException {
+        // Best effort; the caller reports the original copy failure.
+      }
+      rethrow;
+    }
     try {
       await _deleteFile(sourcePath);
     } catch (_) {
@@ -1519,17 +1787,84 @@ class QuarantineService {
     }
   }
 
+  /// History is informational and deliberately best-effort; a failure to
+  /// write it must not turn a successful cleanup into an error.
+  Future<void> _recordHistory({
+    required String sessionId,
+    required String createdAt,
+    required List<JunkItem> planItems,
+    required int movedCount,
+    required int movedBytes,
+    required int skippedCount,
+    required int failureCount,
+    required int remainingCount,
+    required CleanHistoryOutcome outcome,
+  }) async {
+    final store = _historyStore;
+    if (store == null) return;
+    try {
+      final grouped = <String, ({int count, int bytes})>{};
+      for (final item in planItems) {
+        final current = grouped[item.ruleId];
+        grouped[item.ruleId] = current == null
+            ? (count: 1, bytes: item.size)
+            : (count: current.count + 1, bytes: current.bytes + item.size);
+      }
+      final rules = [
+        for (final entry in grouped.entries)
+          CleanHistoryRule(
+            ruleId: entry.key,
+            fileCount: entry.value.count,
+            bytes: entry.value.bytes,
+          ),
+      ]..sort((a, b) => b.bytes.compareTo(a.bytes));
+      final completedAt = _clock().toUtc();
+      await store.upsert(
+        CleanHistoryRecord(
+          sessionId: sessionId,
+          startedAt: DateTime.tryParse(createdAt)?.toUtc() ?? completedAt,
+          completedAt: completedAt,
+          outcome: outcome,
+          plannedCount: planItems.length,
+          plannedBytes: planItems.fold<int>(
+            0,
+            (total, item) => total + item.size,
+          ),
+          movedCount: movedCount,
+          movedBytes: movedBytes,
+          skippedCount: skippedCount,
+          failureCount: failureCount,
+          remainingCount: remainingCount,
+          rules: List.unmodifiable(rules),
+        ),
+      );
+    } catch (_) {
+      // See the method contract above.
+    }
+  }
+
   Future<Map<String, dynamic>?> _readSessionJson(Directory sessionDir) async {
     final file = File(p.windows.join(sessionDir.path, 'session.json'));
     try {
       if (!await file.exists()) return null;
       final value = jsonDecode(await file.readAsString());
-      return value is Map<String, dynamic> ? value : null;
+      if (value is! Map<String, dynamic>) return null;
+      // Migration errors propagate: callers that touch a single session must
+      // refuse an unknown format instead of guessing at its contents.
+      return migrateQuarantineSessionJson(value);
     } on FormatException {
       return null;
     } on FileSystemException {
       return null;
     }
+  }
+
+  Future<Map<String, dynamic>> _requireSessionMeta(Directory sessionDir) async {
+    final meta = await _readSessionJson(sessionDir);
+    if (meta == null) {
+      throw StateError('隔离区记录格式无效');
+    }
+    return meta;
   }
 
   static Future<void> _writeSessionJson(
