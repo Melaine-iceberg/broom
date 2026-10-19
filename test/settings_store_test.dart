@@ -24,12 +24,34 @@ void main() {
   SettingsStore createStore() =>
       SettingsStore(filePath: p.windows.join(temp.path, 'settings.json'));
 
-  test('returns defaults when no settings file exists', () {
+  test('returns defaults and marks a fresh profile when no file exists', () {
     final settings = createStore().load();
 
     expect(settings.theme, AppThemePreference.system);
     expect(settings.language, AppLanguagePreference.zh);
     expect(settings.disabledRuleIds, isEmpty);
+    expect(settings.onboardingCompleted, isFalse);
+  });
+
+  test('persists first-run guide completion', () async {
+    final controller = SettingsController(store: createStore());
+    addTearDown(controller.dispose);
+    controller.load();
+
+    expect(controller.onboardingCompleted, isFalse);
+    expect(await controller.completeOnboarding(), isNull);
+    expect(controller.onboardingCompleted, isTrue);
+    expect(createStore().load().onboardingCompleted, isTrue);
+  });
+
+  test('treats older settings files without the guide flag as returning', () {
+    final file = File(p.windows.join(temp.path, 'settings.json'));
+    file.parent.createSync(recursive: true);
+    file.writeAsStringSync(
+      jsonEncode({'schemaVersion': 1, 'theme': 'system', 'language': 'zh'}),
+    );
+
+    expect(createStore().load().onboardingCompleted, isTrue);
   });
 
   test('migrates v1 settings and writes the v2 envelope on save', () async {
@@ -152,6 +174,7 @@ void main() {
     expect(loaded.theme, AppThemePreference.dark);
     expect(loaded.language, AppLanguagePreference.en);
     expect(loaded.disabledRuleIds, {'dev.npm', 'browser.chrome'});
+    expect(loaded.onboardingCompleted, isTrue);
   });
 
   test('rejects unknown schema and invalid values', () async {

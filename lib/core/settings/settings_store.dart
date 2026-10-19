@@ -33,7 +33,11 @@ class SettingsStore {
   AppSettings load() {
     try {
       final file = File(filePath);
-      if (!file.existsSync()) return AppSettings.defaults;
+      if (!file.existsSync()) {
+        // A missing settings file marks a fresh profile. Existing settings
+        // files without the flag are treated as returning users.
+        return AppSettings.defaults.copyWith(onboardingCompleted: false);
+      }
 
       final decoded = jsonDecode(file.readAsStringSync());
       if (decoded is! Map<String, dynamic>) {
