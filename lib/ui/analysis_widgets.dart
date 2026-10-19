@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/models/cleaner_rule.dart';
 import '../l10n/broom_strings.dart';
 import 'format.dart';
+import 'glass_ui.dart';
 
 class RiskBadge extends StatelessWidget {
   const RiskBadge({super.key, required this.risk});
@@ -11,47 +12,12 @@ class RiskBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final (:label, :background, :foreground, :border) = switch (risk) {
-      CleanRisk.safe => (
-        label: context.t('SAFE · 可撤销'),
-        background: scheme.primaryContainer.withValues(alpha: 0.35),
-        foreground: scheme.onPrimaryContainer,
-        border: scheme.primary.withValues(alpha: 0.16),
-      ),
-      CleanRisk.review => (
-        label: context.t('REVIEW · 需确认'),
-        background: scheme.tertiaryContainer.withValues(alpha: 0.45),
-        foreground: scheme.onTertiaryContainer,
-        border: scheme.tertiary.withValues(alpha: 0.18),
-      ),
-      CleanRisk.info => (
-        label: context.t('INFO · 只读'),
-        background: scheme.secondaryContainer.withValues(alpha: 0.4),
-        foreground: scheme.onSecondaryContainer,
-        border: scheme.secondary.withValues(alpha: 0.16),
-      ),
+    final (:label, :color) = switch (risk) {
+      CleanRisk.safe => (label: context.t('可撤销'), color: BroomColors.accent),
+      CleanRisk.review => (label: context.t('需确认'), color: BroomColors.amber),
+      CleanRisk.info => (label: context.t('只读'), color: BroomColors.violet),
     };
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: border),
-      ),
-      child: Text(
-        label,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: foreground,
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.25,
-          height: 1.2,
-        ),
-      ),
-    );
+    return StatusPill(label: label, color: color, dense: true);
   }
 }
 
@@ -68,21 +34,20 @@ class ReadOnlyHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.only(top: 1),
-          child: Icon(icon, size: 16, color: scheme.onSurfaceVariant),
+          child: Icon(icon, size: 13, color: BroomColors.inkFaint(context)),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 7),
         Expanded(
           child: Text(
             message,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: BroomColors.inkFaint(context),
               height: 1.5,
             ),
           ),
@@ -108,42 +73,42 @@ class AnalysisBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final foreground = isError
-        ? scheme.onErrorContainer
-        : scheme.onSurfaceVariant;
+    final foreground = isError ? scheme.error : BroomColors.inkMuted(context);
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+      padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
       decoration: BoxDecoration(
         color: isError
-            ? scheme.errorContainer.withValues(alpha: 0.62)
-            : scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(12),
+            ? scheme.error.withValues(alpha: 0.09)
+            : BroomColors.card(context),
+        borderRadius: BorderRadius.circular(11),
         border: Border.all(
           color: isError
-              ? scheme.error.withValues(alpha: 0.2)
-              : scheme.outlineVariant.withValues(alpha: 0.5),
+              ? scheme.error.withValues(alpha: 0.24)
+              : BroomColors.hairline(context),
         ),
       ),
       child: Row(
         children: [
           Icon(
             isError ? Icons.error_outline_rounded : Icons.info_outline_rounded,
-            size: 18,
+            size: 15,
             color: foreground,
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 9),
           Expanded(
             child: Text(
               message,
-              style: theme.textTheme.bodySmall?.copyWith(color: foreground),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: foreground,
+                height: 1.45,
+              ),
             ),
           ),
           if (onClose != null)
             IconButton(
               onPressed: onClose,
-              icon: const Icon(Icons.close_rounded, size: 17),
-              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.close_rounded, size: 15),
               tooltip: context.t('关闭'),
             ),
         ],

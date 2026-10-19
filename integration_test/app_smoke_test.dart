@@ -36,7 +36,7 @@ void main() {
     await tester.ensureVisible(find.byKey(const ValueKey('open-settings')));
     await tester.tap(find.byKey(const ValueKey('open-settings')));
     await tester.pumpAndSettle();
-    expect(find.text('设置'), findsOneWidget);
+    expect(find.text('设置'), findsWidgets);
 
     await tester.tap(find.byTooltip('返回'));
     await tester.pumpAndSettle();

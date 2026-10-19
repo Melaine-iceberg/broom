@@ -907,11 +907,9 @@ class _RuleInfoPanel extends StatelessWidget {
         ? context.t('应用内置规则目录')
         : context.tf('已验证的规则目录更新 · 版本 {version}', {'version': version});
     final riskText = switch (rule.risk) {
-      CleanRisk.safe => context.t('Safe 级：可重建的缓存，默认勾选；清理后仍会进入隔离区，可恢复。'),
-      CleanRisk.review => context.t(
-        'Review 级：默认不勾选，提交前需要额外确认；可能影响离线数据或首次启动速度。',
-      ),
-      CleanRisk.info => context.t('Info 级：只读分析，不会删除文件。'),
+      CleanRisk.safe => context.t('安全：可重建的缓存，默认勾选；清理后仍会进入隔离区，可恢复。'),
+      CleanRisk.review => context.t('需确认：默认不勾选，提交前需要额外确认；可能影响离线数据或首次启动速度。'),
+      CleanRisk.info => context.t('只读：只读分析，不会删除文件。'),
     };
     final consequence = switch (rule.risk) {
       CleanRisk.safe => context.t(

@@ -5,6 +5,7 @@ import '../core/models/clean_history_models.dart';
 import '../l10n/broom_strings.dart';
 import 'analysis_widgets.dart';
 import 'format.dart';
+import 'glass_ui.dart';
 
 class CleanHistoryPage extends StatefulWidget {
   const CleanHistoryPage({
@@ -164,15 +165,9 @@ class _HistoryCard extends StatelessWidget {
       ),
     };
 
-    return Container(
+    return GlassCard(
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.55),
-        ),
-      ),
+      radius: 16,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -374,31 +369,37 @@ class _EmptyHistory extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.55),
-        ),
-      ),
-      child: Column(
-        children: [
-          Icon(Icons.history_rounded, size: 42, color: scheme.primary),
-          const SizedBox(height: 12),
-          Text(context.t('还没有清理历史'), style: theme.textTheme.titleMedium),
-          const SizedBox(height: 5),
-          Text(
-            context.t('完成一次清理后，这里会保留一条记录；恢复或永久释放隔离区不会删除历史。'),
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-              height: 1.5,
-            ),
+    return SizedBox(
+      width: double.infinity,
+      child: GlassCard(
+        radius: 18,
+        padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 24),
+        child: Center(
+          child: Column(
+            children: [
+              const IconTile(icon: Icons.history_rounded, size: 46, radius: 14),
+              const SizedBox(height: 13),
+              Text(
+                context.t('还没有清理历史'),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 6),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                child: Text(
+                  context.t('完成一次清理后，这里会保留一条记录；恢复或永久释放隔离区不会删除历史。'),
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: BroomColors.inkMuted(context),
+                    height: 1.55,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

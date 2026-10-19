@@ -12,10 +12,13 @@ import '../core/models/scan_models.dart';
 import '../core/shell/system_shell.dart';
 import '../l10n/broom_strings.dart';
 import 'analysis_widgets.dart';
+import 'app_sidebar.dart';
 import 'clean_controller.dart';
+import 'clean_history_page.dart';
 import 'duplicate_finder_page.dart';
 import 'exclusions_page.dart';
 import 'format.dart';
+import 'glass_ui.dart';
 import 'large_files_page.dart';
 import 'onboarding_dialog.dart';
 import 'quarantine_page.dart';
@@ -61,6 +64,10 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   CleanController get controller => widget.controller;
+
+  final GlobalKey<NavigatorState> _contentNavigator =
+      GlobalKey<NavigatorState>();
+  AppSection _section = AppSection.clean;
 
   bool _startupPromptScheduled = false;
   bool _onboardingScheduled = false;
@@ -116,7 +123,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _handleRefreshShortcut() {
-    if (controller.isBusy) return;
+    if (_section != AppSection.clean || controller.isBusy) return;
     if (controller.phase == CleanPhase.idle ||
         controller.phase == CleanPhase.preview) {
       unawaited(controller.scan());
@@ -124,6 +131,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _handleEscapeShortcut() {
+    if (_section != AppSection.clean) return;
     switch (controller.phase) {
       case CleanPhase.scanning:
         controller.cancelScan();
@@ -141,6 +149,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _handleBackShortcut() {
+    if (_section != AppSection.clean) return;
     if (controller.phase == CleanPhase.preview ||
         controller.phase == CleanPhase.done) {
       controller.returnHome();
@@ -200,8 +209,6 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.f5): _handleRefreshShortcut,
@@ -211,38 +218,103 @@ class _HomePageState extends State<HomePage> {
       },
       child: Focus(
         autofocus: true,
-        child: ListenableBuilder(
-          listenable: controller,
-          builder: (context, _) {
-            return FocusTraversalGroup(
-              policy: ReadingOrderTraversalPolicy(),
-              child: Scaffold(
-                body: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [scheme.surface, scheme.surfaceContainerLowest],
-                    ),
-                  ),
-                  child: SafeArea(
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 1080),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(28, 20, 28, 22),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [Expanded(child: _buildBody(context))],
+        child: FocusTraversalGroup(
+          policy: ReadingOrderTraversalPolicy(),
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            body: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final expandedSidebar = constraints.maxWidth >= 1000;
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ListenableBuilder(
+                          listenable: controller,
+                          builder: (context, _) => AppSidebar(
+                            section: _section,
+                            expanded: expandedSidebar,
+                            quarantineCount: controller.pendingSessions.length,
+                            showHistory:
+                                controller.quarantine.historyStore != null,
+                            onSelected: _navigateTo,
                           ),
                         ),
-                      ),
-                    ),
-                  ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: GlassSurface(
+                            radius: 22,
+                            blur: 22,
+                            color: BroomColors.panel(context),
+                            padding: EdgeInsets.zero,
+                            child: Stack(
+                              children: [
+                                const Positioned.fill(
+                                  child: AmbientGlow(
+                                    alignment: Alignment.topCenter,
+                                    radius: 1.7,
+                                    opacity: 0.2,
+                                  ),
+                                ),
+                                Positioned.fill(
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(22),
+                                    child: Navigator(
+                                      key: _contentNavigator,
+                                      onGenerateInitialRoutes:
+                                          (navigator, initialRoute) => [
+                                            MaterialPageRoute<void>(
+                                              settings: const RouteSettings(
+                                                name: 'home',
+                                              ),
+                                              builder: (_) => _buildCleanHost(),
+                                            ),
+                                          ],
+                                      onGenerateRoute: (settings) =>
+                                          MaterialPageRoute<void>(
+                                            settings: settings,
+                                            builder: (_) => _buildCleanHost(),
+                                          ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ),
-            );
-          },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCleanHost() {
+    return Material(
+      color: Colors.transparent,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 18, 24, 16),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1120),
+              child: ListenableBuilder(
+                listenable: controller,
+                builder: (context, _) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [Expanded(child: _buildBody(context))],
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -261,7 +333,6 @@ class _HomePageState extends State<HomePage> {
           onOpenDuplicateFinder: _openDuplicateFinder,
           onOpenLargeFiles: _openLargeFiles,
           onOpenExclusions: _openExclusions,
-          onOpenSettings: _openSettings,
           isRuleEnabled: widget.settingsController.isRuleEnabled,
           settingsController: widget.settingsController,
         );
@@ -323,7 +394,7 @@ class _HomePageState extends State<HomePage> {
                       ),
                       child: Text(
                         strings.tf(
-                          '所选内容包含 {count} 条 Review 规则。它们默认不会勾选，'
+                          '所选内容包含 {count} 条需确认规则。它们默认不会勾选，'
                           '清理后仍会进入隔离区并可撤销；但离线数据需要重新下载，'
                           '首次构建或启动也可能变慢。',
                           {'count': reviewCount},
@@ -345,7 +416,7 @@ class _HomePageState extends State<HomePage> {
                       controlAffinity: ListTileControlAffinity.leading,
                       dense: true,
                       title: Text(
-                        strings.t('我了解 Review 规则的影响，并仍要清理所选内容'),
+                        strings.t('我了解需确认规则的影响，并仍要清理所选内容'),
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
@@ -418,10 +489,76 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Future<void> _openQuarantine() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => QuarantinePage(
+  Future<void> _navigateTo(AppSection target) async {
+    if (target == AppSection.clean) {
+      final navigator = _contentNavigator.currentState;
+      final hadToolPage = navigator?.canPop() ?? false;
+      if (_section != AppSection.clean) {
+        setState(() => _section = AppSection.clean);
+      }
+      navigator?.popUntil((route) => route.isFirst);
+      if (!hadToolPage &&
+          (controller.phase == CleanPhase.preview ||
+              controller.phase == CleanPhase.done)) {
+        controller.returnHome();
+      }
+      return;
+    }
+    if (_section == target) return;
+
+    final page = _buildSectionPage(target);
+    final navigator = _contentNavigator.currentState;
+    if (page == null || navigator == null) return;
+
+    setState(() => _section = target);
+    await navigator.pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => page),
+      (route) => route.isFirst,
+    );
+    if (!mounted || _section != target) return;
+
+    setState(() => _section = AppSection.clean);
+    switch (target) {
+      case AppSection.quarantine:
+        await controller.refreshQuarantine();
+      case AppSection.settings:
+        await controller.refreshRuleExclusionScopes();
+      case AppSection.clean:
+      case AppSection.systemCache:
+      case AppSection.recycleBin:
+      case AppSection.duplicates:
+      case AppSection.largeFiles:
+      case AppSection.history:
+        break;
+    }
+  }
+
+  Widget? _buildSectionPage(AppSection target) {
+    switch (target) {
+      case AppSection.clean:
+        return null;
+      case AppSection.systemCache:
+        final cacheController = widget.systemCacheController;
+        if (cacheController == null) return null;
+        return SystemCachePage(controller: cacheController);
+      case AppSection.recycleBin:
+        return RecycleBinPage(shell: widget.shell);
+      case AppSection.duplicates:
+        return DuplicateFinderPage(
+          shell: widget.shell,
+          runnerFactory: widget.analysisRunnerFactory,
+          initialDirectory: widget.analysisInitialDirectory,
+          excludedPaths: widget.analysisExcludedPaths,
+        );
+      case AppSection.largeFiles:
+        return LargeFilesPage(
+          shell: widget.shell,
+          runnerFactory: widget.analysisRunnerFactory,
+          initialDirectory: widget.analysisInitialDirectory,
+          excludedPaths: widget.analysisExcludedPaths,
+        );
+      case AppSection.quarantine:
+        return QuarantinePage(
           service: controller.quarantine,
           shell: widget.shell,
           retention: widget.quarantineRetention,
@@ -429,70 +566,19 @@ class _HomePageState extends State<HomePage> {
             for (final rule in controller.platform.rules)
               rule.id: context.strings.ruleTitle(rule),
           },
-        ),
-      ),
-    );
-    if (!mounted) return;
-    await controller.refreshQuarantine();
-  }
-
-  Future<void> _openSystemCache() {
-    final systemController = widget.systemCacheController;
-    if (systemController == null) return Future<void>.value();
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => SystemCachePage(controller: systemController),
-      ),
-    );
-  }
-
-  Future<void> _openRecycleBin() {
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => RecycleBinPage(shell: widget.shell),
-      ),
-    );
-  }
-
-  Future<void> _openDuplicateFinder() {
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => DuplicateFinderPage(
-          shell: widget.shell,
-          runnerFactory: widget.analysisRunnerFactory,
-          initialDirectory: widget.analysisInitialDirectory,
-          excludedPaths: widget.analysisExcludedPaths,
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openLargeFiles() {
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => LargeFilesPage(
-          shell: widget.shell,
-          runnerFactory: widget.analysisRunnerFactory,
-          initialDirectory: widget.analysisInitialDirectory,
-          excludedPaths: widget.analysisExcludedPaths,
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openExclusions() {
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) =>
-            ExclusionsPage(controller: controller, shell: widget.shell),
-      ),
-    );
-  }
-
-  Future<void> _openSettings() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => SettingsPage(
+        );
+      case AppSection.history:
+        final store = controller.quarantine.historyStore;
+        if (store == null) return null;
+        return CleanHistoryPage(
+          store: store,
+          ruleTitles: {
+            for (final rule in controller.platform.rules)
+              rule.id: context.strings.ruleTitle(rule),
+          },
+        );
+      case AppSection.settings:
+        return SettingsPage(
           settings: widget.settingsController,
           cleanController: controller,
           shell: widget.shell,
@@ -500,11 +586,27 @@ class _HomePageState extends State<HomePage> {
           ruleUpdates: widget.ruleUpdates,
           onShowOnboarding: _showOnboarding,
           logger: widget.logger,
-        ),
+        );
+    }
+  }
+
+  Future<void> _openQuarantine() => _navigateTo(AppSection.quarantine);
+
+  Future<void> _openSystemCache() => _navigateTo(AppSection.systemCache);
+
+  Future<void> _openRecycleBin() => _navigateTo(AppSection.recycleBin);
+
+  Future<void> _openDuplicateFinder() => _navigateTo(AppSection.duplicates);
+
+  Future<void> _openLargeFiles() => _navigateTo(AppSection.largeFiles);
+
+  Future<void> _openExclusions() {
+    return _contentNavigator.currentState!.push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            ExclusionsPage(controller: controller, shell: widget.shell),
       ),
     );
-    if (!mounted) return;
-    await controller.refreshRuleExclusionScopes();
   }
 }
 
@@ -516,7 +618,6 @@ class _IdleView extends StatelessWidget {
     required this.onOpenDuplicateFinder,
     required this.onOpenLargeFiles,
     required this.onOpenExclusions,
-    required this.onOpenSettings,
     required this.isRuleEnabled,
     required this.settingsController,
     this.onOpenSystemCache,
@@ -528,16 +629,34 @@ class _IdleView extends StatelessWidget {
   final VoidCallback onOpenDuplicateFinder;
   final VoidCallback onOpenLargeFiles;
   final VoidCallback onOpenExclusions;
-  final VoidCallback onOpenSettings;
   final bool Function(String ruleId) isRuleEnabled;
   final SettingsController settingsController;
   final VoidCallback? onOpenSystemCache;
 
   @override
   Widget build(BuildContext context) {
+    final rules = controller.platform.rules;
+    final categoryKeys = <String>{};
+    for (final rule in rules) {
+      categoryKeys.add(ruleCategoryKey(rule));
+    }
+    final enabledCategoryCount = categoryKeys
+        .where(settingsController.isCategoryEnabled)
+        .length;
+
     return ListView(
       padding: const EdgeInsets.only(bottom: 24),
       children: [
+        PageHeading(
+          title: context.t('清理'),
+          subtitle: context.t('扫描缓存和临时文件，预览确认后再移入隔离区。'),
+          trailing: StatusPill(
+            label: context.t('本地运行'),
+            icon: Icons.shield_outlined,
+            dense: true,
+          ),
+        ),
+        const SizedBox(height: 16),
         if (controller.error case final error?)
           _InlineBanner(
             message: error,
@@ -546,23 +665,38 @@ class _IdleView extends StatelessWidget {
           ),
         if (controller.notice case final notice?)
           _InlineBanner(message: notice, onClose: controller.clearNotice),
-        _Hero(controller: controller, onOpenSettings: onOpenSettings),
-        if (controller.pendingSessions.isNotEmpty) ...[
-          const SizedBox(height: 14),
-          _QuarantineCard(controller: controller, onOpen: onOpenQuarantine),
-        ],
-        if (controller.lastScanSummary != null) ...[
-          const SizedBox(height: 14),
-          _LastScanCard(controller: controller),
-        ],
-        const SizedBox(height: 20),
-        _ToolsSection(
-          onOpenSystemCache: onOpenSystemCache,
-          onOpenRecycleBin: onOpenRecycleBin,
-          onOpenDuplicateFinder: onOpenDuplicateFinder,
-          onOpenLargeFiles: onOpenLargeFiles,
+        _ScanHero(
+          controller: controller,
+          enabledCategories: enabledCategoryCount,
+          totalCategories: categoryKeys.length,
+          exclusionCount: controller.exclusionCount,
         ),
-        const SizedBox(height: 22),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final lastScan = _LastScanCard(controller: controller);
+            final quarantine = _QuarantineCard(
+              controller: controller,
+              onOpen: onOpenQuarantine,
+            );
+            if (constraints.maxWidth < 700) {
+              return Column(
+                children: [lastScan, const SizedBox(height: 10), quarantine],
+              );
+            }
+            return IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: lastScan),
+                  const SizedBox(width: 12),
+                  Expanded(child: quarantine),
+                ],
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 24),
         ListenableBuilder(
           listenable: settingsController,
           builder: (context, _) => _ScopeSection(
@@ -574,263 +708,200 @@ class _IdleView extends StatelessWidget {
             settings: settingsController,
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 24),
+        _ToolsSection(
+          onOpenSystemCache: onOpenSystemCache,
+          onOpenRecycleBin: onOpenRecycleBin,
+          onOpenDuplicateFinder: onOpenDuplicateFinder,
+          onOpenLargeFiles: onOpenLargeFiles,
+        ),
+        const SizedBox(height: 16),
         const _SafetyNote(),
       ],
     );
   }
 }
 
-class _Hero extends StatelessWidget {
-  const _Hero({required this.controller, required this.onOpenSettings});
+class _ScanHero extends StatelessWidget {
+  const _ScanHero({
+    required this.controller,
+    required this.enabledCategories,
+    required this.totalCategories,
+    required this.exclusionCount,
+  });
 
   final CleanController controller;
-  final VoidCallback onOpenSettings;
+  final int enabledCategories;
+  final int totalCategories;
+  final int exclusionCount;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final dark = BroomColors.isDark(context);
 
-    return Container(
-      padding: const EdgeInsets.all(30),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(26),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            scheme.primaryContainer.withValues(alpha: 0.92),
-            scheme.secondaryContainer.withValues(alpha: 0.55),
-            scheme.surfaceContainerLow,
-          ],
-        ),
-        border: Border.all(color: scheme.primary.withValues(alpha: 0.12)),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final wide = constraints.maxWidth >= 720;
-          final copy = _HeroCopy(
-            controller: controller,
-            onOpenSettings: onOpenSettings,
-          );
-          final artwork = const SizedBox(
-            width: 236,
-            height: 196,
-            child: _HeroArtwork(),
-          );
-
-          if (!wide) {
-            return Column(
+    return GlassCard(
+      key: const ValueKey('scan-hero'),
+      radius: 20,
+      padding: EdgeInsets.zero,
+      tint: dark ? const Color(0x122F7BFF) : const Color(0xCCEDF4FF),
+      borderColor: scheme.primary.withValues(alpha: dark ? 0.24 : 0.18),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(22, 18, 20, 16),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final wide = constraints.maxWidth >= 620;
+            return Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                copy,
-                const SizedBox(height: 16),
-                Center(child: artwork),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          StatusPill(
+                            label: controller.isBusy
+                                ? context.t('处理中')
+                                : context.t('准备就绪'),
+                            color: BroomColors.accent,
+                            dense: true,
+                          ),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              context.tf('{count} 个类别已启用', {
+                                'count': enabledCategories,
+                              }),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: BroomColors.inkFaint(context),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        context.t('扫描缓存与临时文件'),
+                        style: theme.textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        context.t('先扫描预览，确认后再移入隔离区。清理过程中不会直接删除任何文件。'),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: BroomColors.inkMuted(context),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Tooltip(
+                        message: context.t('开始扫描（F5）'),
+                        child: FilledButton.icon(
+                          onPressed: controller.isBusy ? null : controller.scan,
+                          icon: const Icon(Icons.search_rounded, size: 17),
+                          label: Text(context.t('开始扫描')),
+                        ),
+                      ),
+                      const SizedBox(height: 11),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.verified_user_outlined,
+                            size: 13,
+                            color: BroomColors.inkFaint(context),
+                          ),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              context.t('不会触碰文档、照片、程序和系统文件'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: BroomColors.inkFaint(context),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                if (wide) ...[
+                  const SizedBox(width: 20),
+                  Container(
+                    width: 1,
+                    height: 132,
+                    color: BroomColors.hairline(context),
+                  ),
+                  const SizedBox(width: 20),
+                  SizedBox(
+                    width: 164,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _HomeMetric(
+                          label: context.t('扫描规则'),
+                          value: context.tf('{count} 条', {
+                            'count': controller.platform.rules.length,
+                          }),
+                        ),
+                        const SizedBox(height: 10),
+                        _HomeMetric(
+                          label: context.t('启用类别'),
+                          value: '$enabledCategories / $totalCategories',
+                        ),
+                        const SizedBox(height: 10),
+                        _HomeMetric(
+                          label: context.t('排除目录'),
+                          value: context.tf('{count} 个', {
+                            'count': exclusionCount,
+                          }),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             );
-          }
-          return Row(
-            children: [
-              Expanded(child: copy),
-              const SizedBox(width: 24),
-              artwork,
-            ],
-          );
-        },
+          },
+        ),
       ),
     );
   }
 }
 
-class _HeroCopy extends StatelessWidget {
-  const _HeroCopy({required this.controller, required this.onOpenSettings});
+class _HomeMetric extends StatelessWidget {
+  const _HomeMetric({required this.label, required this.value});
 
-  final CleanController controller;
-  final VoidCallback onOpenSettings;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(
-              Icons.monitor_outlined,
-              size: 14,
-              color: scheme.onPrimaryContainer.withValues(alpha: 0.8),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              context.t('WINDOWS · SAFE + REVIEW 级清理'),
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: scheme.onPrimaryContainer.withValues(alpha: 0.8),
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.8,
-              ),
-            ),
-            const Spacer(),
-            IconButton(
-              key: const ValueKey('open-settings'),
-              onPressed: onOpenSettings,
-              tooltip: context.t('设置'),
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.settings_outlined, size: 20),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Text(
-          context.t('把没用的缓存，\n轻轻扫走。'),
-          style: theme.textTheme.headlineMedium?.copyWith(
-            fontSize: 36,
-            color: scheme.onSurface,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Text(
-          context.t(
-            '先扫描预览：Safe 缓存默认勾选，Review 缓存需手动选择。\n'
-            '所有内容都会先移入隔离区，随时可以撤销。',
-          ),
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: scheme.onSurfaceVariant,
-            height: 1.6,
-          ),
-        ),
-        const SizedBox(height: 22),
-        Tooltip(
-          message: context.t('开始扫描（F5）'),
-          child: FilledButton.icon(
-            onPressed: controller.isBusy ? null : controller.scan,
-            icon: const Icon(Icons.search_rounded, size: 20),
-            label: Text(context.t('开始扫描')),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.verified_user_outlined,
-              size: 15,
-              color: scheme.onSurfaceVariant,
-            ),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Text(
-                context.t('不会触碰文档、照片、程序和系统文件'),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _HeroArtwork extends StatelessWidget {
-  const _HeroArtwork();
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        Container(
-          width: 186,
-          height: 186,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: scheme.surface.withValues(alpha: 0.55),
-            border: Border.all(color: scheme.primary.withValues(alpha: 0.12)),
-          ),
-        ),
-        Container(
-          width: 128,
-          height: 128,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: scheme.primary.withValues(alpha: 0.11),
-          ),
-        ),
-        Icon(Icons.cleaning_services_rounded, size: 54, color: scheme.primary),
-        Positioned(
-          top: 8,
-          right: 8,
-          child: _FloatingTag(
-            icon: Icons.folder_open_outlined,
-            label: context.t('临时文件'),
-          ),
-        ),
-        Positioned(
-          bottom: 22,
-          left: 0,
-          child: _FloatingTag(
-            icon: Icons.public_rounded,
-            label: context.t('浏览器缓存'),
-          ),
-        ),
-        Positioned(
-          bottom: 4,
-          right: 28,
-          child: _FloatingTag(
-            icon: Icons.restore_rounded,
-            label: context.t('可撤销'),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _FloatingTag extends StatelessWidget {
-  const _FloatingTag({required this.icon, required this.label});
-
-  final IconData icon;
   final String label;
+  final String value;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: scheme.surface.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.7)),
-        boxShadow: [
-          BoxShadow(
-            color: scheme.shadow.withValues(alpha: 0.06),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: scheme.primary),
-          const SizedBox(width: 5),
-          Text(
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
             label,
             style: theme.textTheme.labelSmall?.copyWith(
-              fontWeight: FontWeight.w600,
+              color: BroomColors.inkMuted(context),
             ),
           ),
-        ],
-      ),
+        ),
+        Text(
+          value,
+          style: theme.textTheme.labelLarge?.copyWith(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: BroomColors.ink(context),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -847,53 +918,43 @@ class _QuarantineCard extends StatelessWidget {
     final scheme = theme.colorScheme;
     final sessions = controller.pendingSessions.length;
     final unfinished = controller.unfinishedSessions.length;
+    final hasItems = controller.pendingFileCount > 0 || sessions > 0;
+    final accent = unfinished > 0 ? BroomColors.amber : BroomColors.accent;
 
-    return Material(
+    return GlassCard(
       key: const ValueKey('quarantine-card'),
-      color: scheme.tertiaryContainer.withValues(alpha: 0.42),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: scheme.tertiary.withValues(alpha: 0.16)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onOpen,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          child: Row(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: scheme.surface.withValues(alpha: 0.65),
-                  borderRadius: BorderRadius.circular(11),
+      padding: const EdgeInsets.fromLTRB(15, 14, 13, 14),
+      onTap: onOpen,
+      tint: unfinished > 0
+          ? scheme.tertiaryContainer.withValues(
+              alpha: BroomColors.isDark(context) ? 0.18 : 0.35,
+            )
+          : null,
+      child: Row(
+        children: [
+          IconTile(icon: Icons.inventory_2_outlined, size: 36, color: accent),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  hasItems
+                      ? context.tf('隔离区暂存了 {bytes}', {
+                          'bytes': formatBytes(controller.pendingBytes),
+                        })
+                      : context.t('隔离区为空'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-                child: Icon(
-                  Icons.inventory_2_outlined,
-                  size: 20,
-                  color: scheme.onTertiaryContainer,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.tf('隔离区暂存了 {bytes}', {
-                        'bytes': formatBytes(controller.pendingBytes),
-                      }),
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      context.tf(
-                        '{files} 个文件 · {sessions} 次清理{unfinished}。'
-                        '磁盘空间尚未释放，恢复或永久释放后才会改变。',
-                        {
+                const SizedBox(height: 3),
+                Text(
+                  hasItems
+                      ? context.tf('{files} 个文件 · {sessions} 次清理{unfinished}', {
                           'files': formatCount(controller.pendingFileCount),
                           'sessions': sessions,
                           'unfinished': unfinished > 0
@@ -901,20 +962,24 @@ class _QuarantineCard extends StatelessWidget {
                                   'count': unfinished,
                                 })
                               : '',
-                        },
-                      ),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
+                        })
+                      : context.t('清理的文件会先暂存在这里，可随时恢复。'),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: BroomColors.inkMuted(context),
+                    height: 1.4,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              OutlinedButton(onPressed: onOpen, child: Text(context.t('管理'))),
-            ],
+              ],
+            ),
           ),
-        ),
+          const SizedBox(width: 8),
+          if (hasItems)
+            OutlinedButton(onPressed: onOpen, child: Text(context.t('管理')))
+          else
+            TextButton(onPressed: onOpen, child: Text(context.t('打开'))),
+        ],
       ),
     );
   }
@@ -928,93 +993,73 @@ class _LastScanCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final summary = controller.lastScanSummary!;
+    final summary = controller.lastScanSummary;
     final stale = controller.lastScanStale;
 
-    return Material(
+    return GlassCard(
       key: const ValueKey('last-scan-card'),
-      color: scheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.55)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: scheme.primaryContainer.withValues(alpha: 0.45),
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: Icon(
-                Icons.history_rounded,
-                size: 19,
-                color: scheme.primary,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          context.tf('上次扫描 · {time}', {
-                            'time': formatDateTime(
-                              summary.completedAt.toLocal(),
-                            ),
-                          }),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleSmall,
-                        ),
+      padding: const EdgeInsets.fromLTRB(15, 14, 13, 14),
+      child: Row(
+        children: [
+          const IconTile(
+            icon: Icons.history_rounded,
+            size: 36,
+            color: BroomColors.sky,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      summary == null ? context.t('上次扫描') : context.t('上次扫描结果'),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: BroomColors.inkMuted(context),
                       ),
-                      if (stale) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: scheme.tertiaryContainer.withValues(
-                              alpha: 0.5,
-                            ),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            context.t('规则已变化'),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: scheme.onTertiaryContainer,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    context.tf('{count} 个文件 · {bytes} · {issues} 个扫描问题', {
-                      'count': formatCount(summary.foundFiles),
-                      'bytes': formatBytes(summary.foundBytes),
-                      'issues': formatCount(summary.issueCount),
-                    }),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
                     ),
+                    if (stale) ...[
+                      const SizedBox(width: 6),
+                      StatusPill(
+                        label: context.t('规则已变化'),
+                        color: BroomColors.amber,
+                        dense: true,
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  summary == null
+                      ? context.t('还没有扫描记录')
+                      : formatBytes(summary.foundBytes),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  summary == null
+                      ? context.t('完成扫描后，可在这里快速回到结果。')
+                      : context.tf('{count} 个文件 · {time}', {
+                          'count': formatCount(summary.foundFiles),
+                          'time': formatDateTime(summary.completedAt.toLocal()),
+                        }),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: BroomColors.inkFaint(context),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
+          ),
+          if (summary != null) ...[
+            const SizedBox(width: 8),
             OutlinedButton(
               key: const ValueKey('restore-last-scan'),
               onPressed: controller.restoringLastScan
@@ -1022,14 +1067,14 @@ class _LastScanCard extends StatelessWidget {
                   : controller.restoreLastScan,
               child: controller.restoringLastScan
                   ? const SizedBox(
-                      width: 16,
-                      height: 16,
+                      width: 14,
+                      height: 14,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : Text(context.t('查看结果')),
+                  : Text(context.t('查看')),
             ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -1050,38 +1095,19 @@ class _ToolsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Icon(
-              Icons.dashboard_customize_outlined,
-              size: 18,
-              color: scheme.primary,
-            ),
-            const SizedBox(width: 8),
-            Text(context.t('分析与审阅'), style: theme.textTheme.titleSmall),
-            const Spacer(),
-            Text(
-              context.t('按风险等级区分'),
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-          ],
+        SectionLabel(
+          icon: Icons.grid_view_rounded,
+          title: context.t('工具'),
+          subtitle: context.t('系统缓存与只读文件分析'),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 11),
         LayoutBuilder(
           builder: (context, constraints) {
             const gap = 10.0;
-            final hasSystemCache = onOpenSystemCache != null;
-            final columns = constraints.maxWidth >= (hasSystemCache ? 720 : 860)
-                ? (hasSystemCache ? 2 : 3)
-                : 1;
+            final columns = constraints.maxWidth >= 620 ? 2 : 1;
             final width =
                 (constraints.maxWidth - gap * (columns - 1)) / columns;
             return Wrap(
@@ -1096,9 +1122,7 @@ class _ToolsSection extends StatelessWidget {
                       icon: Icons.admin_panel_settings_outlined,
                       risk: CleanRisk.review,
                       title: context.t('系统级缓存'),
-                      description: context.t(
-                        '清理 Windows 更新、传递优化与 Windows.old，需要管理员权限。',
-                      ),
+                      description: context.t('Windows 更新、传递优化与旧系统文件，需要管理员权限。'),
                       onTap: onOpenSystemCache!,
                     ),
                   ),
@@ -1120,7 +1144,7 @@ class _ToolsSection extends StatelessWidget {
                     icon: Icons.content_copy_rounded,
                     risk: CleanRisk.info,
                     title: context.t('重复文件'),
-                    description: context.t('按内容比对找出相同的文件，结果只读、不自动选择。'),
+                    description: context.t('按内容比对重复文件，结果只读、不自动选择。'),
                     onTap: onOpenDuplicateFinder,
                   ),
                 ),
@@ -1131,7 +1155,7 @@ class _ToolsSection extends StatelessWidget {
                     icon: Icons.sd_storage_rounded,
                     risk: CleanRisk.info,
                     title: context.t('大文件分析'),
-                    description: context.t('按体积从大到小列出文件，帮你定位空间去向。'),
+                    description: context.t('按体积列出大文件，快速定位空间去向。'),
                     onTap: onOpenLargeFiles,
                   ),
                 ),
@@ -1163,79 +1187,60 @@ class _ToolCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
 
-    return Material(
-      color: scheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.55)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 15, 12, 15),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: scheme.surface.withValues(alpha: 0.72),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, size: 20, color: scheme.primary),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    return GlassCard(
+      padding: const EdgeInsets.fromLTRB(13, 12, 11, 12),
+      radius: 14,
+      onTap: onTap,
+      child: Row(
+        children: [
+          IconTile(icon: icon, size: 34, radius: 10),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                    Flexible(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
                         ),
-                        const SizedBox(width: 8),
-                        RiskBadge(risk: risk),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      description,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                        height: 1.45,
                       ),
                     ),
+                    const SizedBox(width: 7),
+                    RiskBadge(risk: risk),
                   ],
                 ),
-              ),
-              const SizedBox(width: 4),
-              Icon(
-                Icons.chevron_right_rounded,
-                size: 19,
-                color: scheme.onSurfaceVariant,
-              ),
-            ],
+                const SizedBox(height: 3),
+                Text(
+                  description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: BroomColors.inkMuted(context),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+          const SizedBox(width: 4),
+          Icon(
+            Icons.chevron_right_rounded,
+            size: 17,
+            color: BroomColors.inkFaint(context),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _ScopeSection extends StatelessWidget {
+class _ScopeSection extends StatefulWidget {
   const _ScopeSection({
     required this.rules,
     required this.scopes,
@@ -1253,96 +1258,125 @@ class _ScopeSection extends StatelessWidget {
   final SettingsController settings;
 
   @override
+  State<_ScopeSection> createState() => _ScopeSectionState();
+}
+
+class _ScopeSectionState extends State<_ScopeSection> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final strings = context.strings;
+    final rules = widget.rules;
+    final exclusionCount = widget.exclusionCount;
     final groups = <String, List<CleanerRule>>{};
     for (final rule in rules) {
       groups.putIfAbsent(strings.ruleCategory(rule), () => []).add(rule);
     }
+    final enabledCategories = groups.values
+        .where(
+          (categoryRules) => widget.settings.isCategoryEnabled(
+            ruleCategoryKey(categoryRules.first),
+          ),
+        )
+        .length;
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.55),
-        ),
-      ),
+    return GlassCard(
+      radius: 18,
+      padding: EdgeInsets.fromLTRB(16, 15, 16, _expanded ? 8 : 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(
-                Icons.travel_explore_rounded,
-                size: 18,
-                color: scheme.primary,
-              ),
-              const SizedBox(width: 8),
-              Text(context.t('本次扫描范围'), style: theme.textTheme.titleSmall),
-              const Spacer(),
-              TextButton.icon(
-                key: const ValueKey('open-exclusions'),
-                onPressed: onOpenExclusions,
-                icon: const Icon(Icons.block_rounded, size: 15),
-                label: Text(
-                  exclusionCount == 0
-                      ? context.t('排除列表')
-                      : '${context.t('排除列表')} · $exclusionCount',
-                ),
-                style: TextButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
+          SectionLabel(
+            icon: Icons.tune_rounded,
+            title: context.t('本次扫描范围'),
+            subtitle: context.t('只扫描勾选的类别；排除项优先于所有规则。'),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextButton.icon(
+                  key: const ValueKey('open-exclusions'),
+                  onPressed: widget.onOpenExclusions,
+                  icon: const Icon(Icons.block_rounded, size: 14),
+                  label: Text(
+                    exclusionCount == 0
+                        ? context.t('排除列表')
+                        : '${context.t('排除列表')} · $exclusionCount',
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 2),
+                TextButton.icon(
+                  key: const ValueKey('scope-toggle'),
+                  onPressed: () => setState(() => _expanded = !_expanded),
+                  icon: AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 160),
+                    child: const Icon(Icons.expand_more_rounded, size: 16),
+                  ),
+                  label: Text(_expanded ? context.t('收起') : context.t('展开')),
+                ),
+              ],
+            ),
           ),
           if (exclusionCount > 0)
             Padding(
-              padding: const EdgeInsets.only(left: 2, bottom: 2),
+              padding: const EdgeInsets.only(top: 6, left: 2),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
                     Icons.info_outline_rounded,
-                    size: 14,
-                    color: scheme.tertiary,
+                    size: 13,
+                    color: BroomColors.amber,
                   ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      context.t('排除优先于规则：被排除的目录及其子目录不会参与扫描。'),
+                      context.t('排除优先：被排除的目录及其子目录不会参与扫描。'),
                       style: theme.textTheme.labelSmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
+                        color: BroomColors.inkMuted(context),
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.only(left: 2, bottom: 4),
-            child: Text(
-              context.t('勾选类别决定本次扫描范围；关闭的类别不会解析目录或访问磁盘。'),
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: scheme.onSurfaceVariant,
+          if (_expanded) ...[
+            const SizedBox(height: 9),
+            for (final entry in groups.entries)
+              _buildCategoryRow(
+                context,
+                theme,
+                scheme,
+                strings,
+                entry.key,
+                entry.value,
               ),
-            ),
-          ),
-          for (final entry in groups.entries)
-            _buildCategoryRow(
-              context,
-              theme,
-              scheme,
-              strings,
-              entry.key,
-              entry.value,
+          ] else
+            Padding(
+              padding: const EdgeInsets.only(top: 9, left: 2),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.checklist_rounded,
+                    size: 14,
+                    color: BroomColors.inkFaint(context),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    context.tf('已启用 {enabled} / {total} 个类别 · 共 {rules} 条规则', {
+                      'enabled': enabledCategories,
+                      'total': groups.length,
+                      'rules': rules.length,
+                    }),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: BroomColors.inkMuted(context),
+                    ),
+                  ),
+                ],
+              ),
             ),
         ],
       ),
@@ -1358,90 +1392,92 @@ class _ScopeSection extends StatelessWidget {
     List<CleanerRule> categoryRules,
   ) {
     final categoryKey = ruleCategoryKey(categoryRules.first);
-    final enabled = settings.isCategoryEnabled(categoryKey);
+    final enabled = widget.settings.isCategoryEnabled(categoryKey);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 178,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 26,
-                    height: 26,
-                    child: Checkbox(
-                      key: ValueKey('scan-category-$categoryKey'),
-                      value: enabled,
-                      visualDensity: VisualDensity.compact,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      onChanged: (value) => settings.setCategoryEnabled(
-                        categoryKey,
-                        value ?? false,
-                      ),
+            width: 158,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 26,
+                  height: 26,
+                  child: Checkbox(
+                    key: ValueKey('scan-category-$categoryKey'),
+                    value: enabled,
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    onChanged: (value) => widget.settings.setCategoryEnabled(
+                      categoryKey,
+                      value ?? false,
                     ),
                   ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    _categoryIcon(categoryLabel),
-                    size: 15,
-                    color: scheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          categoryLabel,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: enabled
-                                ? scheme.onSurfaceVariant
-                                : scheme.onSurfaceVariant.withValues(
-                                    alpha: 0.55,
-                                  ),
-                            fontWeight: FontWeight.w600,
-                          ),
+                ),
+                const SizedBox(width: 3),
+                Icon(
+                  _categoryIcon(categoryLabel),
+                  size: 14,
+                  color: enabled
+                      ? BroomColors.inkMuted(context)
+                      : BroomColors.inkFaint(context),
+                ),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        categoryLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: enabled
+                              ? BroomColors.ink(context)
+                              : BroomColors.inkFaint(context),
+                          fontWeight: FontWeight.w500,
                         ),
-                        if (!enabled)
-                          Text(
-                            context.t('本次跳过'),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: scheme.onSurfaceVariant.withValues(
-                                alpha: 0.6,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
+                      ),
+                      Text(
+                        enabled
+                            ? context.tf('{count} 条规则', {
+                                'count': categoryRules.length,
+                              })
+                            : context.t('本次跳过'),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: BroomColors.inkFaint(context),
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
           Expanded(
             child: Opacity(
-              opacity: enabled ? 1 : 0.45,
+              opacity: enabled ? 1 : 0.4,
               child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
+                spacing: 6,
+                runSpacing: 6,
                 children: [
                   for (final rule in categoryRules)
                     Tooltip(
                       message: _scopeTooltip(
                         strings,
                         rule,
-                        scopes[rule.id],
-                        isRuleEnabled(rule.id),
+                        widget.scopes[rule.id],
+                        widget.isRuleEnabled(rule.id),
                       ),
                       child: _RuleChip(
                         rule: rule,
-                        scope: scopes[rule.id] ?? RuleExclusionScope.none,
-                        enabled: isRuleEnabled(rule.id),
+                        scope:
+                            widget.scopes[rule.id] ?? RuleExclusionScope.none,
+                        enabled: widget.isRuleEnabled(rule.id),
                       ),
                     ),
                 ],
@@ -1469,7 +1505,7 @@ class _ScopeSection extends StatelessWidget {
       _ => strings.ruleDescription(rule),
     };
     final withRisk = rule.risk == CleanRisk.review
-        ? '$description\n${strings.t('Review 级规则默认不勾选，需要在预览中手动选择。')}'
+        ? '$description\n${strings.t('需确认规则默认不勾选，需要在预览中手动选择。')}'
         : description;
     if (enabled) return withRisk;
     return '$withRisk\n${strings.t('此规则已在设置中关闭。')}';
@@ -1490,68 +1526,69 @@ class _RuleChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final excluded = scope != RuleExclusionScope.none;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4.5),
       decoration: BoxDecoration(
         color: excluded
-            ? scheme.tertiaryContainer.withValues(alpha: 0.32)
-            : scheme.surfaceContainerHighest.withValues(alpha: 0.42),
-        borderRadius: BorderRadius.circular(9),
-        border: excluded
-            ? Border.all(color: scheme.tertiary.withValues(alpha: 0.2))
-            : null,
+            ? BroomColors.amber.withValues(alpha: 0.12)
+            : (BroomColors.isDark(context)
+                  ? const Color(0x0AFFFFFF)
+                  : const Color(0x66FFFFFF)),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(
+          color: excluded
+              ? BroomColors.amber.withValues(alpha: 0.24)
+              : BroomColors.hairline(context),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
             _ruleIcon(rule.id),
-            size: 13,
-            color: excluded
-                ? scheme.onTertiaryContainer
-                : scheme.onSurfaceVariant,
+            size: 11.5,
+            color: excluded ? BroomColors.amber : BroomColors.inkMuted(context),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 5),
           Text(
             context.strings.ruleTitle(rule),
             style: theme.textTheme.labelSmall?.copyWith(
-              color: enabled ? scheme.onSurface : scheme.onSurfaceVariant,
+              fontSize: 10.6,
+              color: enabled
+                  ? BroomColors.ink(context)
+                  : BroomColors.inkFaint(context),
             ),
           ),
           if (rule.risk == CleanRisk.review) ...[
-            const SizedBox(width: 6),
-            Text(
-              'REVIEW',
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: scheme.tertiary,
-                fontWeight: FontWeight.w700,
-                fontSize: 9,
-                letterSpacing: 0.3,
-              ),
+            const SizedBox(width: 5),
+            Icon(
+              Icons.shield_outlined,
+              size: 10,
+              color: BroomColors.amber.withValues(alpha: 0.9),
             ),
           ],
           if (excluded) ...[
-            const SizedBox(width: 6),
+            const SizedBox(width: 5),
             Text(
               scope == RuleExclusionScope.all
                   ? context.t('已排除')
                   : context.t('部分排除'),
               style: theme.textTheme.labelSmall?.copyWith(
-                color: scheme.onTertiaryContainer,
+                color: BroomColors.amber,
                 fontWeight: FontWeight.w600,
+                fontSize: 9.6,
               ),
             ),
           ],
           if (!enabled) ...[
-            const SizedBox(width: 6),
+            const SizedBox(width: 5),
             Text(
               context.t('已关闭'),
               style: theme.textTheme.labelSmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
+                color: BroomColors.inkFaint(context),
+                fontSize: 9.6,
               ),
             ),
           ],
@@ -1567,48 +1604,47 @@ class _SafetyNote extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Icon(
-                Icons.lock_outline_rounded,
-                size: 15,
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                context.t(
-                  '清理前先预览；清理时文件会移动到隔离区，可随时撤销。'
-                  '所有扫描都在本机完成，不会上传任何文件。',
-                ),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                  height: 1.5,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: Icon(
+                  Icons.lock_outline_rounded,
+                  size: 13,
+                  color: BroomColors.inkFaint(context),
                 ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Padding(
-          padding: const EdgeInsets.only(left: 23),
-          child: Text(
-            context.t('快捷键：F5 扫描或重新扫描 · Esc 取消 · Alt+← 返回 · Ctrl+F 搜索'),
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: scheme.onSurfaceVariant.withValues(alpha: 0.8),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  context.t('清理前先预览；文件会移动到隔离区，可随时撤销。所有扫描都在本机完成，不会上传任何内容。'),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: BroomColors.inkFaint(context),
+                    height: 1.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Padding(
+            padding: const EdgeInsets.only(left: 20),
+            child: Text(
+              context.t('快捷键：F5 扫描或重新扫描 · Esc 取消 · Alt+← 返回 · Ctrl+F 搜索'),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: BroomColors.inkFaint(context).withValues(alpha: 0.8),
+                fontSize: 10.5,
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -1632,22 +1668,20 @@ class _InlineBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final foreground = isError
-        ? scheme.onErrorContainer
-        : scheme.onSurfaceVariant;
+    final foreground = isError ? scheme.error : BroomColors.inkMuted(context);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
       decoration: BoxDecoration(
         color: isError
-            ? scheme.errorContainer.withValues(alpha: 0.65)
-            : scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(12),
+            ? scheme.error.withValues(alpha: 0.09)
+            : BroomColors.card(context),
+        borderRadius: BorderRadius.circular(11),
         border: Border.all(
           color: isError
-              ? scheme.error.withValues(alpha: 0.2)
-              : scheme.outlineVariant.withValues(alpha: 0.5),
+              ? scheme.error.withValues(alpha: 0.24)
+              : BroomColors.hairline(context),
         ),
       ),
       child: Row(
@@ -1656,22 +1690,24 @@ class _InlineBanner extends StatelessWidget {
             isError
                 ? Icons.error_outline_rounded
                 : (icon ?? Icons.info_outline_rounded),
-            size: 18,
+            size: 15,
             color: foreground,
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 9),
           Expanded(
             child: Text(
               message,
-              style: theme.textTheme.bodySmall?.copyWith(color: foreground),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: foreground,
+                height: 1.45,
+              ),
             ),
           ),
           ?action,
           if (onClose != null)
             IconButton(
               onPressed: onClose,
-              icon: const Icon(Icons.close_rounded, size: 17),
-              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.close_rounded, size: 15),
               tooltip: context.t('关闭'),
             ),
         ],
@@ -2127,39 +2163,17 @@ class _PreviewViewState extends State<_PreviewView> {
                   ? context.t('上次扫描结果达到设定的数量上限，可能不完整。')
                   : context.t('扫描结果达到设定的数量上限，预览与清理仅包含已找到的部分。'),
             ),
-          if (controller.lockProbeRunning)
-            _InlineBanner(
-              icon: Icons.lock_outline_rounded,
-              message: context.tf('正在检测被占用的文件…（{checked} / {total}）', {
-                'checked': formatCount(controller.lockProbeChecked),
-                'total': formatCount(controller.lockProbeTotal),
-              }),
-            )
-          else if (controller.possiblyLockedCount > 0)
-            _InlineBanner(
-              icon: Icons.lock_outline_rounded,
-              message: context.tf('有 {count} 个文件可能正被其他程序占用，清理时会跳过并单独报告。', {
-                'count': formatCount(controller.possiblyLockedCount),
-              }),
-            ),
-          if (controller.previewReviewRuleCount > 0)
-            _InlineBanner(
-              icon: Icons.shield_outlined,
-              message: context.tf(
-                '扫描结果包含 {count} 条 Review 规则，默认未勾选。'
-                '勾选后仍需额外确认；文件同样会进入隔离区并可撤销，'
-                '但可能带来重新下载或首次启动变慢。',
-                {'count': controller.previewReviewRuleCount},
-              ),
-            ),
           Row(
             children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(context.t('扫描结果'), style: theme.textTheme.titleLarge),
-                    const SizedBox(height: 2),
+                    Text(
+                      context.t('扫描结果'),
+                      style: theme.textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: 3),
                     Text(
                       controller.results.isEmpty
                           ? context.t('没有发现可清理的文件')
@@ -2180,25 +2194,29 @@ class _PreviewViewState extends State<_PreviewView> {
                 ),
               ),
               const SizedBox(width: 8),
-              Tooltip(
-                message: context.t('返回首页（Alt+←）'),
-                child: IconButton(
-                  key: const ValueKey('preview-back'),
-                  onPressed: controller.returnHome,
-                  icon: const Icon(Icons.arrow_back_rounded, size: 20),
-                ),
+              OutlinedButton.icon(
+                key: const ValueKey('preview-back'),
+                onPressed: controller.returnHome,
+                icon: const Icon(Icons.arrow_back_rounded, size: 16),
+                label: Text(context.t('返回概览')),
               ),
-              const SizedBox(width: 2),
+              const SizedBox(width: 6),
               Tooltip(
                 message: context.t('F5 重新扫描'),
                 child: OutlinedButton.icon(
                   onPressed: controller.scan,
-                  icon: const Icon(Icons.refresh_rounded, size: 17),
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
                   label: Text(context.t('重新扫描')),
                 ),
               ),
             ],
           ),
+          if (controller.lockProbeRunning ||
+              controller.possiblyLockedCount > 0 ||
+              controller.previewReviewRuleCount > 0) ...[
+            const SizedBox(height: 10),
+            _PreviewNotices(controller: controller),
+          ],
           if (controller.results.isNotEmpty) ...[
             const SizedBox(height: 12),
             _ScanSummaryCard(
@@ -2573,15 +2591,92 @@ class _PreviewToolbar extends StatelessWidget {
 }
 
 const _summaryPalette = <Color>[
-  Color(0xFF2E7D62),
-  Color(0xFF3F6FD8),
-  Color(0xFFB26A00),
-  Color(0xFF7A4FBF),
-  Color(0xFF00838F),
-  Color(0xFFC2185B),
-  Color(0xFF5D6B82),
-  Color(0xFF6D8B3C),
+  Color(0xFF2F7BFF),
+  Color(0xFF7C5CFF),
+  Color(0xFF19A7C9),
+  Color(0xFFF0A72E),
+  Color(0xFFE45C8A),
+  Color(0xFF5B708F),
+  Color(0xFF8A63D2),
+  Color(0xFF3E9BB8),
 ];
+
+class _PreviewNotices extends StatelessWidget {
+  const _PreviewNotices({required this.controller});
+
+  final CleanController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      radius: 11,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (controller.lockProbeRunning)
+            _PreviewNotice(
+              icon: Icons.lock_outline_rounded,
+              color: BroomColors.accent,
+              text: context.tf('正在检测被占用的文件…（{checked} / {total}）', {
+                'checked': formatCount(controller.lockProbeChecked),
+                'total': formatCount(controller.lockProbeTotal),
+              }),
+            )
+          else if (controller.possiblyLockedCount > 0)
+            _PreviewNotice(
+              icon: Icons.lock_outline_rounded,
+              color: BroomColors.amber,
+              text: context.tf('{count} 个文件可能正被占用，清理时会跳过', {
+                'count': formatCount(controller.possiblyLockedCount),
+              }),
+            ),
+          if (controller.previewReviewRuleCount > 0) ...[
+            if (controller.lockProbeRunning ||
+                controller.possiblyLockedCount > 0)
+              const SizedBox(height: 6),
+            _PreviewNotice(
+              icon: Icons.shield_outlined,
+              color: BroomColors.violet,
+              text: context.tf('扫描结果包含 {count} 条需确认规则，默认未勾选。', {
+                'count': controller.previewReviewRuleCount,
+              }),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PreviewNotice extends StatelessWidget {
+  const _PreviewNotice({
+    required this.icon,
+    required this.color,
+    required this.text,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 13, color: color),
+        const SizedBox(width: 7),
+        Expanded(
+          child: Text(
+            text,
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: BroomColors.inkMuted(context)),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 class _ScanSummaryCard extends StatelessWidget {
   const _ScanSummaryCard({
@@ -3186,7 +3281,7 @@ class _CleanActionBar extends StatelessWidget {
                       const SizedBox(width: 4),
                       Flexible(
                         child: Text(
-                          context.tf('已选 {count} 条 Review 规则，提交前需要额外确认', {
+                          context.tf('已选 {count} 条需确认规则，提交前需要额外确认', {
                             'count': controller.selectedReviewRuleCount,
                           }),
                           style: theme.textTheme.labelSmall?.copyWith(

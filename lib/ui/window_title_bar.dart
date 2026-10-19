@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../l10n/broom_strings.dart';
 import '../platform/window_chrome.dart';
+import 'glass_ui.dart';
 
-/// Places the custom title bar above every route of the Windows app.
+/// Places the aurora backdrop and the custom title bar above every route.
 class BroomWindowFrame extends StatelessWidget {
   const BroomWindowFrame({super.key, required this.child});
 
@@ -13,28 +14,30 @@ class BroomWindowFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!WindowChrome.instance.isSupported) {
-      return child;
-    }
-
-    final scheme = Theme.of(context).colorScheme;
-    return ColoredBox(
-      color: scheme.surface,
-      child: Column(
-        children: [
-          const WindowTitleBar(),
-          Expanded(child: child),
-        ],
-      ),
+    final supported = WindowChrome.instance.isSupported;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const LiquidBackdrop(),
+        if (!supported)
+          child
+        else
+          Column(
+            children: [
+              const WindowTitleBar(),
+              Expanded(child: child),
+            ],
+          ),
+      ],
     );
   }
 }
 
-/// A draggable title bar that replaces the native Windows caption.
+/// A draggable title bar matching the translucent desktop shell.
 class WindowTitleBar extends StatelessWidget {
   const WindowTitleBar({super.key});
 
-  static const double barHeight = 46;
+  static const double barHeight = 48;
 
   @override
   Widget build(BuildContext context) {
@@ -43,92 +46,81 @@ class WindowTitleBar extends StatelessWidget {
 
     return SizedBox(
       height: barHeight,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: scheme.surface,
-          border: Border(
-            bottom: BorderSide(
-              color: scheme.outlineVariant.withValues(alpha: 0.45),
-            ),
-          ),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: MouseRegion(
-                cursor: SystemMouseCursors.basic,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onPanStart: (_) =>
-                      unawaited(WindowChrome.instance.startDragging()),
-                  onDoubleTap: () =>
-                      unawaited(WindowChrome.instance.toggleMaximize()),
-                  onSecondaryTapUp: (_) =>
-                      unawaited(WindowChrome.instance.showSystemMenu()),
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 16, right: 12),
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final showTagline = constraints.maxWidth >= 360;
-                        return Row(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(6),
-                              child: Image.asset(
-                                'assets/icon/app_icon.png',
-                                width: 22,
-                                height: 22,
-                                cacheWidth: 96,
-                                filterQuality: FilterQuality.medium,
-                                excludeFromSemantics: true,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Icon(
-                                    Icons.cleaning_services_rounded,
-                                    size: 18,
-                                    color: scheme.primary,
-                                  );
-                                },
-                              ),
+      child: Row(
+        children: [
+          Expanded(
+            child: MouseRegion(
+              cursor: SystemMouseCursors.basic,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onPanStart: (_) =>
+                    unawaited(WindowChrome.instance.startDragging()),
+                onDoubleTap: () =>
+                    unawaited(WindowChrome.instance.toggleMaximize()),
+                onSecondaryTapUp: (_) =>
+                    unawaited(WindowChrome.instance.showSystemMenu()),
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 18, right: 12),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final showTagline = constraints.maxWidth >= 340;
+                      return Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: Image.asset(
+                              'assets/icon/app_icon.png',
+                              width: 22,
+                              height: 22,
+                              cacheWidth: 96,
+                              filterQuality: FilterQuality.medium,
+                              excludeFromSemantics: true,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Icon(
+                                  Icons.cleaning_services_rounded,
+                                  size: 18,
+                                  color: scheme.primary,
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 9),
+                          Text(
+                            'Broom',
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -0.1,
+                              color: BroomColors.ink(context),
+                            ),
+                          ),
+                          if (showTagline) ...[
+                            const SizedBox(width: 10),
+                            Container(
+                              width: 1,
+                              height: 11,
+                              color: BroomColors.hairlineStrong(context),
                             ),
                             const SizedBox(width: 10),
                             Text(
-                              'Broom',
-                              style: theme.textTheme.labelLarge?.copyWith(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: -0.1,
-                                color: scheme.onSurface,
+                              context.t('本地安全清理'),
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: BroomColors.inkFaint(context),
+                                letterSpacing: 0.1,
                               ),
                             ),
-                            if (showTagline) ...[
-                              const SizedBox(width: 10),
-                              Container(
-                                width: 1,
-                                height: 12,
-                                color: scheme.outlineVariant.withValues(
-                                  alpha: 0.8,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Text(
-                                context.t('Windows 安全清理'),
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: scheme.onSurfaceVariant,
-                                  letterSpacing: 0.2,
-                                ),
-                              ),
-                            ],
                           ],
-                        );
-                      },
-                    ),
+                        ],
+                      );
+                    },
                   ),
                 ),
               ),
             ),
-            const _WindowControls(),
-          ],
-        ),
+          ),
+          const _WindowControls(),
+          const SizedBox(width: 6),
+        ],
       ),
     );
   }
@@ -197,22 +189,28 @@ class _WindowButtonState extends State<_WindowButton> {
   bool _hovered = false;
   bool _pressed = false;
 
-  Color _backgroundColor(ColorScheme scheme) {
+  Color _backgroundColor(BuildContext context) {
     if (widget.isCloseButton) {
       if (_pressed) return _closePressed;
       if (_hovered) return _closeHover;
       return Colors.transparent;
     }
-    if (_pressed) return scheme.onSurface.withValues(alpha: 0.12);
-    if (_hovered) return scheme.onSurface.withValues(alpha: 0.07);
+    if (_pressed) {
+      return BroomColors.isDark(context)
+          ? const Color(0x1FFFFFFF)
+          : const Color(0x14000000);
+    }
+    if (_hovered) {
+      return BroomColors.isDark(context)
+          ? const Color(0x12FFFFFF)
+          : const Color(0x0D000000);
+    }
     return Colors.transparent;
   }
 
-  Color _foregroundColor(ColorScheme scheme) {
-    if (widget.isCloseButton && _hovered) {
-      return Colors.white;
-    }
-    return _hovered ? scheme.onSurface : scheme.onSurfaceVariant;
+  Color _foregroundColor(BuildContext context) {
+    if (widget.isCloseButton && _hovered) return Colors.white;
+    return _hovered ? BroomColors.ink(context) : BroomColors.inkMuted(context);
   }
 
   void _setHovered(bool hovered) {
@@ -230,8 +228,6 @@ class _WindowButtonState extends State<_WindowButton> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
     return Semantics(
       button: true,
       label: widget.label,
@@ -247,18 +243,24 @@ class _WindowButtonState extends State<_WindowButton> {
           onTapCancel: () => _setPressed(false),
           onTapUp: (_) => _setPressed(false),
           onTap: widget.onPressed,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 90),
-            curve: Curves.easeOut,
-            width: WindowTitleBar.barHeight,
-            height: WindowTitleBar.barHeight,
-            color: _backgroundColor(scheme),
-            alignment: Alignment.center,
-            child: CustomPaint(
-              size: const Size(12, 12),
-              painter: _WindowGlyphPainter(
-                glyph: widget.glyph,
-                color: _foregroundColor(scheme),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 90),
+              curve: Curves.easeOut,
+              width: 40,
+              height: 30,
+              decoration: BoxDecoration(
+                color: _backgroundColor(context),
+                borderRadius: BorderRadius.circular(7),
+              ),
+              alignment: Alignment.center,
+              child: CustomPaint(
+                size: const Size(12, 12),
+                painter: _WindowGlyphPainter(
+                  glyph: widget.glyph,
+                  color: _foregroundColor(context),
+                ),
               ),
             ),
           ),

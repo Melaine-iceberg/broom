@@ -247,18 +247,18 @@ void main() {
     await tester.pumpWidget(BroomApp(controller: controller));
 
     expect(find.text('Broom'), findsOneWidget);
-    expect(find.text('Windows 安全清理'), findsOneWidget);
+    expect(find.text('本地安全清理'), findsOneWidget);
     expect(find.byKey(const ValueKey('window-minimize')), findsOneWidget);
     expect(find.byKey(const ValueKey('window-maximize')), findsOneWidget);
     expect(find.byKey(const ValueKey('window-close')), findsOneWidget);
     expect(find.text('开始扫描'), findsOneWidget);
     expect(find.text('本次扫描范围'), findsOneWidget);
-    expect(find.text('分析与审阅'), findsOneWidget);
+    expect(find.text('工具'), findsWidgets);
     expect(find.byKey(const ValueKey('tool-recycle-bin')), findsOneWidget);
     expect(find.byKey(const ValueKey('tool-duplicate-files')), findsOneWidget);
     expect(find.byKey(const ValueKey('tool-large-files')), findsOneWidget);
-    expect(find.text('REVIEW · 需确认'), findsOneWidget);
-    expect(find.text('INFO · 只读'), findsNWidgets(2));
+    expect(find.text('需确认'), findsOneWidget);
+    expect(find.text('只读'), findsNWidgets(2));
 
     await tester.tap(find.text('开始扫描'));
     await tester.pump();
@@ -296,7 +296,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('回收站中有 7 个项目'), findsOneWidget);
-    expect(find.text('REVIEW · 需确认'), findsOneWidget);
+    expect(find.text('需确认'), findsWidgets);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('auto-opens and exposes the admin system cache tool', (
@@ -383,7 +383,7 @@ void main() {
     await tester.tap(find.descendant(of: card, matching: find.text('管理')));
     await tester.pumpAndSettle();
 
-    expect(find.text('隔离区'), findsOneWidget);
+    expect(find.text('隔离区'), findsWidgets);
     expect(find.text('查看文件'), findsOneWidget);
 
     await tester.tap(find.byTooltip('返回'));
@@ -422,7 +422,7 @@ void main() {
     await tester.tap(find.text('查看隔离区'));
     await tester.pumpAndSettle();
 
-    expect(find.text('隔离区'), findsOneWidget);
+    expect(find.text('隔离区'), findsWidgets);
 
     await tester.tap(find.byTooltip('返回'));
     await tester.pumpAndSettle();
@@ -472,6 +472,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('排除列表 · 1'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('scope-toggle')));
+    await tester.pumpAndSettle();
     expect(find.text('部分排除'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('open-exclusions')));
@@ -584,8 +587,8 @@ void main() {
 
     expect(controller.phase, CleanPhase.preview);
     expect(controller.selectedCount, 0);
-    expect(find.textContaining('扫描结果包含 1 条 Review 规则'), findsOneWidget);
-    expect(find.text('REVIEW · 需确认'), findsWidgets);
+    expect(find.textContaining('扫描结果包含 1 条需确认规则'), findsOneWidget);
+    expect(find.text('需确认'), findsWidgets);
 
     await tester.ensureVisible(find.byType(Checkbox).first);
     await tester.tap(find.byType(Checkbox).first);

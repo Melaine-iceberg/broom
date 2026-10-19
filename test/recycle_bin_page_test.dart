@@ -70,7 +70,7 @@ void main() {
     final shell = _FakeSystemShell();
     await _pumpPage(tester, shell);
 
-    expect(find.text('REVIEW · 需确认'), findsOneWidget);
+    expect(find.text('需确认'), findsOneWidget);
     expect(find.text('回收站中有 3 个项目'), findsOneWidget);
     expect(find.textContaining('1.5 MB'), findsWidgets);
 

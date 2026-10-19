@@ -70,7 +70,7 @@ void main() {
     expect(find.text('以管理员身份重新启动'), findsOneWidget);
     expect(find.text('Windows 更新缓存'), findsOneWidget);
     expect(find.text('扫描系统缓存'), findsNothing);
-    expect(find.text('REVIEW · 需确认'), findsOneWidget);
+    expect(find.text('需确认'), findsOneWidget);
 
     await tester.tap(find.text('以管理员身份重新启动'));
     await tester.pumpAndSettle();

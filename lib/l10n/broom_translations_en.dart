@@ -112,6 +112,10 @@ const translationsEn = <String, String>{
   '把没用的缓存，\n轻轻扫走。': 'Sweep away\nunneeded caches.',
   '先扫描预览，再把 Safe 级缓存移入隔离区。\n随时可以撤销，不用担心误删。': 'Scan and preview first, then move safe caches to quarantine.\nUndo anytime without worrying about mistakes.',
   '开始扫描': 'Scan now',
+  '本地运行': 'Local',
+  '{count} 个类别已启用': '{count} categories enabled',
+  '{count} 个文件 · {time}':
+      '{count, plural, one{# file} other{# files}} · {time}',
   '不会触碰文档、照片、程序和系统文件':
       'Never touches documents, photos, programs, or system files',
   '临时文件': 'Temp files',
@@ -128,12 +132,19 @@ const translationsEn = <String, String>{
   '查看所有磁盘的回收站占用，确认后可永久清空。': 'See recycle bin usage on all drives and empty it permanently after confirmation.',
   '重复文件': 'Duplicate files',
   '按内容比对找出相同的文件，结果只读、不自动选择。': 'Find identical files by content. Results are read-only and never auto-selected.',
+  '按内容比对重复文件，结果只读、不自动选择。':
+      'Find duplicate files by content. Read-only; nothing is auto-selected.',
   '大文件分析': 'Large file analysis',
   '按体积从大到小列出文件，帮你定位空间去向。':
       'List files by size to find what uses the most space.',
-
   // Home: scan scope
   '本次扫描范围': 'Scan scope',
+  '只扫描勾选的类别；排除项优先于所有规则。':
+      'Only checked categories are scanned; exclusions always take precedence.',
+  '展开': 'Expand',
+  '收起': 'Collapse',
+  '已启用 {enabled} / {total} 个类别 · 共 {rules} 条规则':
+      '{enabled} of {total} categories enabled · {rules} rules',
   '排除优先于规则：被排除的目录及其子目录不会参与扫描。': 'Exclusions take precedence: excluded folders and their subfolders are skipped.',
   '{description}\n此规则的所有目录都在排除列表中。':
       '{description}\nAll folders for this rule are excluded.',
@@ -143,6 +154,7 @@ const translationsEn = <String, String>{
   '部分排除': 'Partly excluded',
   '此规则已在设置中关闭。': 'This rule is disabled in settings.',
   '清理前先预览；清理时文件会移动到隔离区，可随时撤销。所有扫描都在本机完成，不会上传任何文件。': 'Preview before cleaning; files are moved to quarantine and can be undone. Everything runs locally, and no files are uploaded.',
+  '清理前先预览；文件会移动到隔离区，可随时撤销。所有扫描都在本机完成，不会上传任何内容。': 'Preview before cleaning; files move to quarantine and can be undone. All scans run locally and never upload content.',
 
   // Home: scanning, preview and cleaning
   '正在扫描': 'Scanning',
@@ -617,8 +629,9 @@ const translationsEn = <String, String>{
   // Scan engine settings
   '扫描引擎': 'Scan engine',
   '扫描类别、并行线程、低优先级与 NTFS 索引都在本机生效。扫描结果默认不限制数量；NTFS 索引在权限不足或非 NTFS 卷上会自动回退。': 'Categories, parallel workers, low priority, and the NTFS index run locally. Result count is unlimited by default; the NTFS index falls back automatically without sufficient privileges or on non-NTFS volumes.',
+  '并行线程、低优先级与 NTFS 索引均在本机生效；索引不可用时自动回退。': 'Parallel workers, low-priority I/O, and the NTFS index are applied locally; scans fall back automatically when the index is unavailable.',
   '扫描类别': 'Scan categories',
-  '{count} 条规则': '{count} rules',
+  '{count} 条规则': '{count, plural, one{# rule} other{# rules}}',
   '并行扫描线程': 'Parallel workers',
   '自动': 'Auto',
   '低优先级扫描': 'Low-priority scan',
@@ -896,4 +909,52 @@ const translationsEn = <String, String>{
   '当前无法重置保留策略。': 'The retention policy could not be reset.',
   '已恢复默认配置。隔离区文件与历史记录未受影响。': 'Default configuration restored. Quarantine files and history are unaffected.',
   '配置未能全部重置：{errors}': 'The configuration was not fully reset: {errors}',
+
+  // Desktop shell refresh.
+  '本地安全清理': 'Local cleanup',
+  '准备就绪': 'Ready',
+  '处理中': 'Working',
+  '清理': 'Clean',
+  '记录': 'Records',
+  '工具': 'Tools',
+  '仅在本机处理': 'Stays on this device',
+  '系统缓存': 'System cache',
+  '大文件': 'Large files',
+  '扫描规则': 'Rules',
+  '启用类别': 'Categories',
+  '排除目录': 'Exclusions',
+  '{count} 条': '{count}',
+  '{count} 个': '{count}',
+  '扫描缓存与临时文件': 'Scan caches and temporary files',
+  '扫描缓存和临时文件，预览确认后再移入隔离区。': 'Scan caches and temporary files, review the results, then move confirmed items to quarantine.',
+  '先扫描预览，确认后再移入隔离区。清理过程中不会直接删除任何文件。': 'Preview every result before moving files to quarantine. Nothing is deleted outright.',
+  '上次扫描结果': 'Last scan',
+  '还没有扫描记录': 'No scans yet',
+  '完成扫描后，可在这里快速回到结果。': 'Your latest result will appear here after a scan.',
+  '隔离区为空': 'Quarantine is empty',
+  '清理的文件会先暂存在这里，可随时恢复。':
+      'Cleaned files are kept here first and can be restored at any time.',
+  '打开': 'Open',
+  '只读分析': 'Read-only analysis',
+  '系统缓存与只读文件分析': 'System caches and read-only analysis',
+  '只读分析不会移动文件': 'Read-only analysis never moves files',
+  '只读分析：Broom 只读取文件内容进行比对，不会删除、移动或修改任何文件。是否保留重复项由你自行决定，分析结果也不会自动勾选。': 'Read-only analysis: Broom only reads file contents for comparison. Nothing is deleted, moved, or modified. Keeping duplicates is entirely your choice, and results are never auto-selected.',
+  '只读分析：Broom 只读取文件的大小与位置，不会删除、移动或修改任何文件。如需清理，请先在文件资源管理器中确认文件用途。': 'Read-only analysis: Broom only reads file size and location. Nothing is deleted, moved, or modified. Confirm a file\'s purpose in File Explorer before cleaning it yourself.',
+  '需确认': 'Confirm',
+  '只读': 'Read-only',
+  '需确认规则默认不勾选，需要在预览中手动选择。': 'Confirm rules are not selected by default and must be chosen in the preview.',
+  '所选内容包含 {count} 条需确认规则。它们默认不会勾选，清理后仍会进入隔离区并可撤销；但离线数据需要重新下载，首次构建或启动也可能变慢。': 'The selection contains {count} confirm rules. They are not selected by default. Cleaned files still enter quarantine and can be undone, but offline data may need to be downloaded again and the first build or launch may be slower.',
+  '我了解需确认规则的影响，并仍要清理所选内容': 'I understand the effect of confirm rules and still want to clean the selection',
+  '扫描结果包含 {count} 条需确认规则，默认未勾选。勾选后仍需额外确认；文件同样会进入隔离区并可撤销，但可能带来重新下载或首次启动变慢。': 'The scan contains {count} confirm rules, unselected by default. Selecting one still requires extra confirmation. Files enter quarantine and can be undone, but may cause re-downloads or a slower first launch.',
+  '已选 {count} 条需确认规则，提交前需要额外确认':
+      '{count} confirm rules are selected and will require extra confirmation.',
+  '关闭的规则不会参与扫描，也不会出现在清理结果中。需确认规则默认扫描但不预选，需要在预览中手动勾选。排除列表仍然优先于所有规则。': 'Disabled rules are not scanned and never appear in results. Confirm rules are scanned but not preselected; choose them manually in the preview. Exclusions always take priority over rules.',
+  '安全：可重建的缓存，默认勾选；清理后仍会进入隔离区，可恢复。': 'Safe: rebuildable caches, selected by default. Files enter quarantine and can be restored.',
+  '需确认：默认不勾选，提交前需要额外确认；可能影响离线数据或首次启动速度。': 'Confirm: not selected by default and requires extra confirmation. May affect offline data or first-launch speed.',
+  '只读：只读分析，不会删除文件。': 'Read-only: analysis only, never deletes files.',
+  '系统级缓存不会经过隔离区，也没有撤销入口；Windows.old 还会失去系统回滚能力。如正在安装 Windows 更新，建议完成后再清理。': 'System caches bypass quarantine and cannot be undone. Windows.old also removes the ability to roll back Windows. Finish any pending Windows update before cleaning.',
+  '清空后无法恢复，文件不会进入隔离区，也没有撤销入口。': 'Emptying the recycle bin cannot be undone. Files bypass quarantine and there is no undo.',
+  'Windows 更新、传递优化与旧系统文件，需要管理员权限。': 'Windows Update, Delivery Optimization, and previous Windows installations. Requires administrator rights.',
+  '按体积列出大文件，快速定位空间去向。': 'List large files by size to see where space went.',
+  '返回概览': 'Back to overview',
 };

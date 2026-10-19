@@ -120,7 +120,7 @@ class _DuplicateFinderPageState extends State<DuplicateFinderPage> {
                     const SizedBox(height: 10),
                     ReadOnlyHint(
                       message: context.t(
-                        'Info 级只读分析：Broom 只读取文件内容进行比对，不会删除、移动或修改任何文件。'
+                        '只读分析：Broom 只读取文件内容进行比对，不会删除、移动或修改任何文件。'
                         '是否保留重复项由你自行决定，分析结果也不会自动勾选。',
                       ),
                     ),

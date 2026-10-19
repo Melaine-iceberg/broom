@@ -349,7 +349,7 @@ void main() {
     expect(find.text('不会匹配相邻目录。'), findsOneWidget);
     expect(find.text('正例 1 个 · 反例 1 个'), findsOneWidget);
     expect(find.text('内置样例由规则审计测试逐条校验。'), findsOneWidget);
-    expect(find.text('SAFE · 可撤销'), findsWidgets);
+    expect(find.text('可撤销'), findsWidgets);
   });
 
   testWidgets('searches, filters, sorts, reveals and explains the rule', (

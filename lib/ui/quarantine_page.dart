@@ -10,6 +10,7 @@ import '../l10n/broom_strings.dart';
 import 'analysis_widgets.dart';
 import 'clean_history_page.dart';
 import 'format.dart';
+import 'glass_ui.dart';
 import 'quarantine_policy_dialog.dart';
 
 class QuarantinePage extends StatefulWidget {
@@ -1008,26 +1009,11 @@ class _SummaryCard extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(26, 26, 26, 24),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            scheme.primaryContainer.withValues(alpha: 0.7),
-            scheme.surfaceContainerLow,
-          ],
-        ),
-        border: Border.all(color: scheme.primary.withValues(alpha: 0.14)),
-        boxShadow: [
-          BoxShadow(
-            color: scheme.shadow.withValues(alpha: 0.035),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
-          ),
-        ],
+    return GlassCard(
+      radius: 22,
+      padding: const EdgeInsets.fromLTRB(26, 24, 26, 22),
+      tint: BroomColors.accent.withValues(
+        alpha: BroomColors.isDark(context) ? 0.06 : 0.05,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1035,19 +1021,7 @@ class _SummaryCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: scheme.surface.withValues(alpha: 0.7),
-                  borderRadius: BorderRadius.circular(13),
-                ),
-                child: Icon(
-                  Icons.restore_rounded,
-                  size: 23,
-                  color: scheme.primary,
-                ),
-              ),
+              const IconTile(icon: Icons.restore_rounded, size: 44, radius: 13),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -1268,10 +1242,10 @@ class _SessionCard extends StatelessWidget {
     final partial = session.status == QuarantineStatus.partial;
 
     return Material(
-      color: scheme.surfaceContainerLow,
+      color: BroomColors.card(context),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.55)),
+        side: BorderSide(color: BroomColors.hairline(context)),
       ),
       clipBehavior: Clip.antiAlias,
       child: Padding(
@@ -1450,11 +1424,9 @@ class _SessionDetailHeader extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 15, 14, 15),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
+        color: BroomColors.card(context),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.55),
-        ),
+        border: Border.all(color: BroomColors.hairline(context)),
       ),
       child: Row(
         children: [
@@ -1535,13 +1507,13 @@ class _EntryTile extends StatelessWidget {
     return Material(
       color: selected
           ? scheme.primaryContainer.withValues(alpha: 0.22)
-          : scheme.surfaceContainerLow,
+          : BroomColors.card(context),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(13),
         side: BorderSide(
           color: selected
               ? scheme.primary.withValues(alpha: 0.2)
-              : scheme.outlineVariant.withValues(alpha: 0.5),
+              : BroomColors.hairline(context),
         ),
       ),
       clipBehavior: Clip.antiAlias,
@@ -1700,11 +1672,9 @@ class _SessionActionBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
+        color: BroomColors.card(context),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.55),
-        ),
+        border: Border.all(color: BroomColors.hairline(context)),
       ),
       child: Wrap(
         alignment: WrapAlignment.spaceBetween,
@@ -1766,31 +1736,37 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.55),
-        ),
-      ),
-      child: Column(
-        children: [
-          Icon(Icons.restore_rounded, size: 42, color: scheme.primary),
-          const SizedBox(height: 12),
-          Text(context.t('没有待处理的清理'), style: theme.textTheme.titleMedium),
-          const SizedBox(height: 5),
-          Text(
-            context.t('完成一次清理后，文件会暂存在这里。你可以随时恢复它们，或永久释放空间。'),
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-              height: 1.5,
-            ),
+    return SizedBox(
+      width: double.infinity,
+      child: GlassCard(
+        radius: 18,
+        padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 24),
+        child: Center(
+          child: Column(
+            children: [
+              const IconTile(icon: Icons.restore_rounded, size: 46, radius: 14),
+              const SizedBox(height: 13),
+              Text(
+                context.t('没有待处理的清理'),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 6),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                child: Text(
+                  context.t('完成一次清理后，文件会暂存在这里。你可以随时恢复它们，或永久释放空间。'),
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: BroomColors.inkMuted(context),
+                    height: 1.55,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -2348,11 +2324,9 @@ class _ResumeProgressCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 12, 10),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
+        color: BroomColors.card(context),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.55),
-        ),
+        border: Border.all(color: BroomColors.hairline(context)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

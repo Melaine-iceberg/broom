@@ -135,7 +135,7 @@ void main() {
       ),
     );
 
-    expect(find.text('INFO · 只读'), findsOneWidget);
+    expect(find.text('只读'), findsOneWidget);
     expect(find.textContaining('不会删除、移动或修改'), findsOneWidget);
 
     await tester.tap(find.text('开始分析'));

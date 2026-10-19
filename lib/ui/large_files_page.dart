@@ -120,7 +120,7 @@ class _LargeFilesPageState extends State<LargeFilesPage> {
                     const SizedBox(height: 10),
                     ReadOnlyHint(
                       message: context.t(
-                        'Info 级只读分析：Broom 只读取文件的大小与位置，不会删除、移动或修改任何文件。'
+                        '只读分析：Broom 只读取文件的大小与位置，不会删除、移动或修改任何文件。'
                         '如需清理，请先在文件资源管理器中确认文件用途。',
                       ),
                     ),

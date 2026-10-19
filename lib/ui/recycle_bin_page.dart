@@ -5,6 +5,7 @@ import '../core/shell/system_shell.dart';
 import '../l10n/broom_strings.dart';
 import 'analysis_widgets.dart';
 import 'format.dart';
+import 'glass_ui.dart';
 
 class RecycleBinPage extends StatefulWidget {
   const RecycleBinPage({super.key, required this.shell});
@@ -124,7 +125,7 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 880),
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(28, 8, 28, 28),
+            padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
             children: [
               if (_error case final error?) ...[
                 AnalysisBanner(
@@ -132,16 +133,16 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                   isError: true,
                   onClose: () => setState(() => _error = null),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
               ],
               const _ReviewWarning(),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               _RecycleBinCard(
                 snapshot: _snapshot,
                 loading: _loading,
                 emptying: _emptying,
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               Row(
                 children: [
                   OutlinedButton.icon(
@@ -193,33 +194,32 @@ class _ReviewWarning extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(15, 13, 15, 13),
+      padding: const EdgeInsets.fromLTRB(13, 10, 13, 10),
       decoration: BoxDecoration(
-        color: scheme.tertiaryContainer.withValues(alpha: 0.38),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: scheme.tertiary.withValues(alpha: 0.16)),
+        color: BroomColors.amber.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: BroomColors.amber.withValues(alpha: 0.22)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            Icons.warning_amber_rounded,
-            size: 19,
-            color: scheme.onTertiaryContainer,
+          const Padding(
+            padding: EdgeInsets.only(top: 1),
+            child: Icon(
+              Icons.warning_amber_rounded,
+              size: 15,
+              color: BroomColors.amber,
+            ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 9),
           Expanded(
             child: Text(
-              context.t(
-                '回收站清理属于 Review 级操作：清空后无法恢复，文件不会进入 Broom 隔离区，'
-                '也没有撤销入口。请确认里面的内容不再需要。',
-              ),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: scheme.onTertiaryContainer,
-                height: 1.55,
+              context.t('清空后无法恢复，文件不会进入隔离区，也没有撤销入口。'),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: BroomColors.inkMuted(context),
+                height: 1.5,
               ),
             ),
           ),
@@ -243,97 +243,83 @@ class _RecycleBinCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final empty = snapshot?.isEmpty ?? false;
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(26, 26, 26, 24),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.55),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: scheme.shadow.withValues(alpha: 0.035),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
+    return GlassCard(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color:
-                  (empty ? scheme.primaryContainer : scheme.tertiaryContainer)
-                      .withValues(alpha: 0.5),
-            ),
-            child: Icon(
-              empty
-                  ? Icons.delete_sweep_outlined
-                  : Icons.delete_forever_rounded,
-              size: 32,
-              color: empty ? scheme.primary : scheme.onTertiaryContainer,
-            ),
-          ),
-          const SizedBox(height: 16),
-          if (loading && snapshot == null)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 18),
-              child: CircularProgressIndicator(strokeWidth: 2.5),
-            )
-          else if (snapshot == null)
-            Column(
-              children: [
-                Text(context.t('无法读取回收站'), style: theme.textTheme.titleMedium),
-                const SizedBox(height: 5),
-                Text(
-                  context.t('可以稍后重试，或检查系统是否允许访问回收站。'),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
+          Row(
+            children: [
+              IconTile(
+                icon: empty
+                    ? Icons.delete_sweep_outlined
+                    : Icons.delete_forever_rounded,
+                size: 44,
+                color: empty ? BroomColors.accent : BroomColors.amber,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (loading && snapshot == null)
+                      Text(
+                        context.t('正在读取回收站…'),
+                        style: theme.textTheme.titleSmall,
+                      )
+                    else if (snapshot == null)
+                      Text(
+                        context.t('无法读取回收站'),
+                        style: theme.textTheme.titleSmall,
+                      )
+                    else
+                      Text(
+                        empty
+                            ? context.t('回收站是空的')
+                            : context.tf('回收站中有 {count} 个项目', {
+                                'count': formatCount(snapshot!.itemCount),
+                              }),
+                        style: theme.textTheme.titleMedium,
+                      ),
+                    const SizedBox(height: 3),
+                    Text(
+                      loading && snapshot == null
+                          ? context.t('正在查询所有磁盘的回收站占用。')
+                          : snapshot == null
+                          ? context.t('可以稍后重试，或检查系统是否允许访问回收站。')
+                          : empty
+                          ? context.t('没有需要清空的内容。')
+                          : context.tf('占用约 {bytes} · 统计范围包含所有磁盘', {
+                              'bytes': formatBytes(snapshot!.totalBytes),
+                            }),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: BroomColors.inkMuted(context),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            )
-          else ...[
-            Text(
-              empty
-                  ? context.t('回收站是空的')
-                  : context.tf('回收站中有 {count} 个项目', {
-                      'count': formatCount(snapshot!.itemCount),
-                    }),
-              style: theme.textTheme.titleLarge,
-              textAlign: TextAlign.center,
+              ),
+              if (loading && snapshot == null)
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+            ],
+          ),
+          if (emptying) ...[
+            const SizedBox(height: 14),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: const LinearProgressIndicator(minHeight: 4),
             ),
             const SizedBox(height: 6),
             Text(
-              empty
-                  ? context.t('没有需要清空的内容。')
-                  : context.tf('占用约 {bytes}，统计范围包含所有磁盘。', {
-                      'bytes': formatBytes(snapshot!.totalBytes),
-                    }),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-          if (emptying) ...[
-            const SizedBox(height: 18),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(999),
-              child: const LinearProgressIndicator(minHeight: 6),
-            ),
-            const SizedBox(height: 8),
-            Text(
               context.t('正在通知 Windows 清空回收站…'),
               style: theme.textTheme.labelSmall?.copyWith(
-                color: scheme.onSurfaceVariant,
+                color: BroomColors.inkMuted(context),
               ),
             ),
           ],
@@ -349,40 +335,30 @@ class _PolicyNote extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.45),
-        ),
-      ),
-      child: Column(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(
-                Icons.verified_user_outlined,
-                size: 17,
-                color: scheme.primary,
-              ),
-              const SizedBox(width: 8),
-              Text(context.t('Broom 的处理边界'), style: theme.textTheme.titleSmall),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            context.t(
-              '缓存清理使用 Broom 自己的隔离区，可以撤销。回收站由 Windows 管理，'
-              'Broom 只读取统计并调用系统清空命令，不读取其中的文件内容。',
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(
+              Icons.verified_user_outlined,
+              size: 13,
+              color: BroomColors.inkFaint(context),
             ),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-              height: 1.6,
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              context.t(
+                '缓存清理使用 Broom 自己的隔离区，可以撤销。回收站由 Windows 管理，'
+                'Broom 只读取统计并调用系统清空命令，不读取其中的文件内容。',
+              ),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: BroomColors.inkFaint(context),
+                height: 1.55,
+              ),
             ),
           ),
         ],

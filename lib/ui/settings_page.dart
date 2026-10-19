@@ -18,6 +18,7 @@ import 'analysis_widgets.dart';
 import 'clean_controller.dart';
 import 'exclusions_page.dart';
 import 'format.dart';
+import 'glass_ui.dart';
 import 'quarantine_policy_dialog.dart';
 import 'rule_update_controller.dart';
 import 'settings_controller.dart';
@@ -90,7 +91,7 @@ class SettingsPage extends StatelessWidget {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 960),
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(28, 6, 28, 28),
+                padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
                 children: [
                   if (settings.loadError case final error?)
                     _SettingsBanner(
@@ -107,94 +108,153 @@ class SettingsPage extends StatelessWidget {
                     icon: Icons.palette_outlined,
                     title: strings.t('外观'),
                     subtitle: strings.t('语言切换会立即应用，已保存的清理规则与排除项不受影响。'),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _FieldLabel(label: strings.t('主题')),
-                        SegmentedButton<AppThemePreference>(
-                          key: const ValueKey('settings-theme-selector'),
-                          segments: [
-                            ButtonSegment(
-                              value: AppThemePreference.system,
-                              icon: const Icon(Icons.brightness_auto_outlined),
-                              label: Text(strings.t('跟随系统')),
-                            ),
-                            ButtonSegment(
-                              value: AppThemePreference.light,
-                              icon: const Icon(Icons.light_mode_outlined),
-                              label: Text(strings.t('浅色')),
-                            ),
-                            ButtonSegment(
-                              value: AppThemePreference.dark,
-                              icon: const Icon(Icons.dark_mode_outlined),
-                              label: Text(strings.t('深色')),
-                            ),
-                          ],
-                          selected: {settings.settings.theme},
-                          onSelectionChanged: (selection) =>
-                              _setTheme(context, selection.single),
-                        ),
-                        const SizedBox(height: 18),
-                        _FieldLabel(label: strings.t('语言')),
-                        SegmentedButton<AppLanguagePreference>(
-                          key: const ValueKey('settings-language-selector'),
-                          segments: [
-                            ButtonSegment(
-                              value: AppLanguagePreference.system,
-                              label: Text(strings.t('跟随系统')),
-                            ),
-                            ButtonSegment(
-                              value: AppLanguagePreference.zh,
-                              label: Text(strings.t('简体中文')),
-                            ),
-                            ButtonSegment(
-                              value: AppLanguagePreference.en,
-                              label: const Text('English'),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final wide = constraints.maxWidth >= 600;
+                        final themeField = Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _FieldLabel(label: strings.t('主题')),
+                            SegmentedButton<AppThemePreference>(
+                              key: const ValueKey('settings-theme-selector'),
+                              expandedInsets: EdgeInsets.zero,
+                              segments: [
+                                ButtonSegment(
+                                  value: AppThemePreference.system,
+                                  icon: const Icon(
+                                    Icons.brightness_auto_outlined,
+                                    size: 16,
+                                  ),
+                                  label: Text(strings.t('跟随系统')),
+                                ),
+                                ButtonSegment(
+                                  value: AppThemePreference.light,
+                                  icon: const Icon(
+                                    Icons.light_mode_outlined,
+                                    size: 16,
+                                  ),
+                                  label: Text(strings.t('浅色')),
+                                ),
+                                ButtonSegment(
+                                  value: AppThemePreference.dark,
+                                  icon: const Icon(
+                                    Icons.dark_mode_outlined,
+                                    size: 16,
+                                  ),
+                                  label: Text(strings.t('深色')),
+                                ),
+                              ],
+                              selected: {settings.settings.theme},
+                              onSelectionChanged: (selection) =>
+                                  _setTheme(context, selection.single),
                             ),
                           ],
-                          selected: {settings.settings.language},
-                          onSelectionChanged: (selection) =>
-                              _setLanguage(context, selection.single),
-                        ),
-                      ],
+                        );
+                        final languageField = Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _FieldLabel(label: strings.t('语言')),
+                            SegmentedButton<AppLanguagePreference>(
+                              key: const ValueKey('settings-language-selector'),
+                              expandedInsets: EdgeInsets.zero,
+                              segments: [
+                                ButtonSegment(
+                                  value: AppLanguagePreference.system,
+                                  label: Text(strings.t('跟随系统')),
+                                ),
+                                ButtonSegment(
+                                  value: AppLanguagePreference.zh,
+                                  label: Text(strings.t('简体中文')),
+                                ),
+                                ButtonSegment(
+                                  value: AppLanguagePreference.en,
+                                  label: const Text('English'),
+                                ),
+                              ],
+                              selected: {settings.settings.language},
+                              onSelectionChanged: (selection) =>
+                                  _setLanguage(context, selection.single),
+                            ),
+                          ],
+                        );
+                        if (!wide) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              themeField,
+                              const SizedBox(height: 14),
+                              languageField,
+                            ],
+                          );
+                        }
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: themeField),
+                            const SizedBox(width: 20),
+                            Expanded(child: languageField),
+                          ],
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(height: 16),
                   _Section(
                     icon: Icons.tune_rounded,
                     title: strings.t('扫描引擎'),
-                    subtitle: strings.t(
-                      '扫描类别、并行线程、低优先级与 NTFS 索引都在本机生效。'
-                      '扫描结果默认不限制数量；NTFS 索引在权限不足或非 NTFS 卷上会自动回退。',
-                    ),
+                    subtitle: strings.t('并行线程、低优先级与 NTFS 索引均在本机生效；索引不可用时自动回退。'),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _FieldLabel(label: strings.t('扫描类别')),
-                        for (final entry in ruleGroups.entries)
-                          CheckboxListTile(
-                            key: ValueKey(
-                              'settings-category-'
-                              '${ruleCategoryKey(entry.value.first)}',
-                            ),
-                            value: settings.isCategoryEnabled(
-                              ruleCategoryKey(entry.value.first),
-                            ),
-                            onChanged: (value) => _setCategory(
-                              context,
-                              ruleCategoryKey(entry.value.first),
-                              value ?? false,
-                            ),
-                            contentPadding: EdgeInsets.zero,
-                            controlAffinity: ListTileControlAffinity.leading,
-                            dense: true,
-                            title: Text(entry.key),
-                            subtitle: Text(
-                              strings.tf('{count} 条规则', {
-                                'count': entry.value.length,
-                              }),
-                            ),
-                          ),
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final columns = constraints.maxWidth >= 560 ? 2 : 1;
+                            final width =
+                                (constraints.maxWidth - 12 * (columns - 1)) /
+                                columns;
+                            return Wrap(
+                              spacing: 12,
+                              runSpacing: 0,
+                              children: [
+                                for (final entry in ruleGroups.entries)
+                                  SizedBox(
+                                    width: width,
+                                    child: CheckboxListTile(
+                                      key: ValueKey(
+                                        'settings-category-'
+                                        '${ruleCategoryKey(entry.value.first)}',
+                                      ),
+                                      value: settings.isCategoryEnabled(
+                                        ruleCategoryKey(entry.value.first),
+                                      ),
+                                      onChanged: (value) => _setCategory(
+                                        context,
+                                        ruleCategoryKey(entry.value.first),
+                                        value ?? false,
+                                      ),
+                                      contentPadding: EdgeInsets.zero,
+                                      controlAffinity:
+                                          ListTileControlAffinity.leading,
+                                      dense: true,
+                                      title: Text(
+                                        entry.key,
+                                        style: theme.textTheme.labelMedium
+                                            ?.copyWith(
+                                              color: BroomColors.ink(context),
+                                            ),
+                                      ),
+                                      subtitle: Text(
+                                        strings.tf('{count} 条规则', {
+                                          'count': entry.value.length,
+                                        }),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            );
+                          },
+                        ),
                         const Divider(),
                         _FieldLabel(label: strings.t('并行扫描线程')),
                         SegmentedButton<int>(
@@ -280,7 +340,7 @@ class SettingsPage extends StatelessWidget {
                     title: strings.t('清理规则'),
                     subtitle: strings.t(
                       '关闭的规则不会参与扫描，也不会出现在清理结果中。'
-                      'Review 级规则默认扫描但不预选，需要在预览中手动勾选。'
+                      '需确认规则默认扫描但不预选，需要在预览中手动勾选。'
                       '排除列表仍然优先于所有规则。',
                     ),
                     trailing: Row(
@@ -1644,41 +1704,59 @@ class _Section extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
 
-    return Material(
-      color: scheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.55)),
+    return Container(
+      decoration: BoxDecoration(
+        color: BroomColors.card(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: BroomColors.hairline(context)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(
+              alpha: BroomColors.isDark(context) ? 0.1 : 0.035,
+            ),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 18, color: scheme.primary),
-                const SizedBox(width: 8),
-                Expanded(child: Text(title, style: theme.textTheme.titleSmall)),
-                ?trailing,
-              ],
-            ),
-            if (subtitle case final subtitle?) ...[
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                  height: 1.5,
-                ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: 16, color: BroomColors.inkMuted(context)),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  ?trailing,
+                ],
               ),
+              if (subtitle case final subtitle?) ...[
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: BroomColors.inkMuted(context),
+                    height: 1.5,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 11),
+              child,
             ],
-            const SizedBox(height: 12),
-            child,
-          ],
+          ),
         ),
       ),
     );

@@ -178,7 +178,7 @@ void main() {
   ) async {
     await pumpApp(tester);
 
-    expect(find.text('设置'), findsOneWidget);
+    expect(find.text('设置'), findsWidgets);
     expect(find.text('外观'), findsOneWidget);
     expect(find.text('清理规则'), findsOneWidget);
 
@@ -200,7 +200,7 @@ void main() {
     await tester.tap(find.text('English'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('Settings'), findsWidgets);
     expect(find.text('Cleaning rules'), findsOneWidget);
     expect(find.text('Appearance'), findsOneWidget);
     expect(settingsStore.load().language, AppLanguagePreference.en);
@@ -219,8 +219,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Scan now'), findsOneWidget);
-    expect(find.text('Analyze & review'), findsOneWidget);
-    expect(find.text('Duplicate files'), findsOneWidget);
+    expect(find.text('Tools'), findsWidgets);
+    expect(find.text('Duplicate files'), findsWidgets);
     expect(find.text('开始扫描'), findsNothing);
   });
 
@@ -318,7 +318,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('onboarding-dialog')), findsNothing);
-    expect(find.text('设置'), findsOneWidget);
+    expect(find.text('设置'), findsWidgets);
   });
 
   testWidgets('exports configuration without quarantine data', (tester) async {

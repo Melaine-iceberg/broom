@@ -9,6 +9,7 @@ import '../l10n/broom_strings.dart';
 import '../platform/window_chrome.dart';
 import 'analysis_widgets.dart';
 import 'format.dart';
+import 'glass_ui.dart';
 import 'system_cache_confirm_dialog.dart';
 import 'system_cache_controller.dart';
 
@@ -171,7 +172,7 @@ class _AdminGate extends StatelessWidget {
     final scheme = theme.colorScheme;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(28, 8, 28, 28),
+      padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
       children: [
         if (controller.error case final error?) ...[
           AnalysisBanner(
@@ -179,113 +180,106 @@ class _AdminGate extends StatelessWidget {
             isError: true,
             onClose: controller.clearError,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
         ],
         if (controller.notice case final notice?) ...[
           AnalysisBanner(message: notice, onClose: controller.clearNotice),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
         ],
         const _ReviewWarning(),
-        const SizedBox(height: 14),
-        Container(
-          padding: const EdgeInsets.fromLTRB(28, 30, 28, 24),
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(
-              color: scheme.outlineVariant.withValues(alpha: 0.55),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: scheme.shadow.withValues(alpha: 0.035),
-                blurRadius: 24,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
+        const SizedBox(height: 12),
+        GlassCard(
+          padding: const EdgeInsets.all(18),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: scheme.tertiaryContainer.withValues(alpha: 0.5),
-                ),
-                child: Icon(
-                  Icons.admin_panel_settings_outlined,
-                  size: 34,
-                  color: scheme.onTertiaryContainer,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                context.t('需要管理员权限'),
-                style: theme.textTheme.titleLarge,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 6),
-              Text(
-                context.t(
-                  '系统级缓存与 Windows.old 位于受保护的系统位置。Broom 会通过 Windows UAC '
-                  '以管理员身份重新启动，只在新的管理员窗口中进行扫描和清理。',
-                ),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                  height: 1.55,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                context.t('重启后不会自动扫描或删除任何内容。'),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-                textAlign: TextAlign.center,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const IconTile(
+                    icon: Icons.admin_panel_settings_outlined,
+                    size: 42,
+                    color: BroomColors.amber,
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          context.t('需要管理员权限'),
+                          style: theme.textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          context.t(
+                            '系统级缓存位于受保护的系统位置。Broom 会通过 Windows UAC '
+                            '以管理员身份重新启动，只在新的管理员窗口中进行扫描和清理。',
+                          ),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: BroomColors.inkMuted(context),
+                            height: 1.55,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
               if (controller.accessError case final accessError?) ...[
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: scheme.errorContainer.withValues(alpha: 0.45),
-                    borderRadius: BorderRadius.circular(12),
+                    color: scheme.error.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: scheme.error.withValues(alpha: 0.22),
+                    ),
                   ),
                   child: Text(
                     accessError,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: scheme.onErrorContainer,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: scheme.error,
                     ),
                   ),
                 ),
               ],
-              const SizedBox(height: 20),
+              const SizedBox(height: 14),
               Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 10,
-                runSpacing: 10,
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  OutlinedButton.icon(
-                    onPressed: controller.relaunching
-                        ? null
-                        : controller.checkAccess,
-                    icon: const Icon(Icons.refresh_rounded, size: 17),
-                    label: Text(context.t('重新检测')),
-                  ),
                   FilledButton.icon(
                     onPressed: controller.relaunching ? null : onElevate,
                     icon: controller.relaunching
                         ? const SizedBox(
-                            width: 16,
-                            height: 16,
+                            width: 15,
+                            height: 15,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.verified_user_outlined, size: 19),
+                        : const Icon(Icons.verified_user_outlined, size: 17),
                     label: Text(
                       controller.relaunching
                           ? context.t('正在请求授权…')
                           : context.t('以管理员身份重新启动'),
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: controller.relaunching
+                        ? null
+                        : controller.checkAccess,
+                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                    label: Text(context.t('重新检测')),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: Text(
+                      context.t('重启后不会自动扫描或删除任何内容。'),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: BroomColors.inkFaint(context),
+                      ),
                     ),
                   ),
                 ],
@@ -293,9 +287,9 @@ class _AdminGate extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
         _RuleOverview(rules: controller.platform.rules),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         const _BoundaryNote(),
       ],
     );
@@ -345,35 +339,35 @@ class _ReviewWarning extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(15, 13, 15, 13),
+      padding: const EdgeInsets.fromLTRB(13, 10, 13, 10),
       decoration: BoxDecoration(
-        color: scheme.tertiaryContainer.withValues(alpha: 0.38),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: scheme.tertiary.withValues(alpha: 0.16)),
+        color: BroomColors.amber.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: BroomColors.amber.withValues(alpha: 0.22)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            Icons.warning_amber_rounded,
-            size: 19,
-            color: scheme.onTertiaryContainer,
+          const Padding(
+            padding: EdgeInsets.only(top: 1),
+            child: Icon(
+              Icons.warning_amber_rounded,
+              size: 15,
+              color: BroomColors.amber,
+            ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 9),
           Expanded(
             child: Text(
               context.t(
-                '系统级缓存属于 Review 级操作：被清理的内容会永久删除，'
-                '不会进入 Broom 隔离区，也没有撤销入口。Windows.old 还会失去系统回滚能力，'
-                '并可能包含需要备份的旧用户配置文件副本。'
-                '如有正在下载或安装的 Windows 更新，建议完成后再清理。',
+                '系统级缓存不会经过隔离区，也没有撤销入口；Windows.old 还会失去系统回滚能力。'
+                '如正在安装 Windows 更新，建议完成后再清理。',
               ),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: scheme.onTertiaryContainer,
-                height: 1.55,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: BroomColors.inkMuted(context),
+                height: 1.5,
               ),
             ),
           ),
@@ -391,40 +385,45 @@ class _RuleOverview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
-      ),
+    return GlassCard(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Icon(
-                Icons.travel_explore_rounded,
-                size: 18,
-                color: scheme.primary,
+                Icons.folder_open_rounded,
+                size: 15,
+                color: BroomColors.inkMuted(context),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 7),
               Text(context.t('可清理的系统缓存'), style: theme.textTheme.titleSmall),
+              const Spacer(),
+              Text(
+                context.tf('{count} 项', {'count': rules.length}),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: BroomColors.inkFaint(context),
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 6),
-          for (final rule in rules)
+          const SizedBox(height: 4),
+          for (var index = 0; index < rules.length; index++) ...[
+            if (index > 0) const Divider(),
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 7),
+              padding: const EdgeInsets.symmetric(vertical: 8),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    _ruleIcon(rule.id),
-                    size: 16,
-                    color: scheme.onSurfaceVariant,
+                  Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    child: Icon(
+                      _ruleIcon(rules[index].id),
+                      size: 15,
+                      color: BroomColors.inkMuted(context),
+                    ),
                   ),
                   const SizedBox(width: 9),
                   Expanded(
@@ -432,16 +431,17 @@ class _RuleOverview extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          context.strings.systemRuleTitle(rule),
-                          style: theme.textTheme.bodySmall?.copyWith(
+                          context.strings.systemRuleTitle(rules[index]),
+                          style: theme.textTheme.labelMedium?.copyWith(
                             fontWeight: FontWeight.w600,
+                            color: BroomColors.ink(context),
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          context.strings.systemRuleDescription(rule),
+                          context.strings.systemRuleDescription(rules[index]),
                           style: theme.textTheme.labelSmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
+                            color: BroomColors.inkMuted(context),
                             height: 1.45,
                           ),
                         ),
@@ -451,6 +451,7 @@ class _RuleOverview extends StatelessWidget {
                 ],
               ),
             ),
+          ],
         ],
       ),
     );
@@ -463,41 +464,31 @@ class _BoundaryNote extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.45),
-        ),
-      ),
-      child: Column(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(
-                Icons.verified_user_outlined,
-                size: 17,
-                color: scheme.primary,
-              ),
-              const SizedBox(width: 8),
-              Text(context.t('Broom 的处理边界'), style: theme.textTheme.titleSmall),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            context.t(
-              'Broom 只使用 Windows 原生 API 定位缓存目录，不接受任意路径输入，'
-              '并且只删除这些目录内的普通文件。Windows.old 仅在单独规则中处理，'
-              '其中可能包含旧用户配置文件副本；当前系统、更新历史与系统还原点不在处理范围内。',
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(
+              Icons.verified_user_outlined,
+              size: 13,
+              color: BroomColors.inkFaint(context),
             ),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-              height: 1.6,
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              context.t(
+                'Broom 只通过 Windows 原生 API 定位缓存目录，不接受任意路径输入，'
+                '只处理这些目录内的普通文件；当前系统、更新历史与系统还原点不在处理范围内。',
+              ),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: BroomColors.inkFaint(context),
+                height: 1.55,
+              ),
             ),
           ),
         ],

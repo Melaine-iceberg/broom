@@ -26,8 +26,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
-  Win32Window::Size size(1120, 780);
-  if (!window.Create(L"Broom - Junk Cleaner", origin, size)) {
+  Win32Window::Size size(1240, 820);
+  if (!window.Create(L"Broom", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);

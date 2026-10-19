@@ -39,7 +39,7 @@ class _OnboardingDialogState extends State<OnboardingDialog> {
         title: context.t('先扫描，再决定'),
         body: context.t(
           '扫描只读取文件信息，不会修改任何文件。结果先进入预览，'
-          '由你决定要清理哪些内容；Safe 级缓存默认勾选，Review 级默认不勾选。',
+          '由你决定要清理哪些内容；安全缓存默认勾选，需确认的缓存默认不勾选。',
         ),
         point: context.t('预览支持搜索、排序与逐文件勾选。'),
       ),
