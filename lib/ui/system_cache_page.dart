@@ -269,7 +269,7 @@ class _AdminGate extends StatelessWidget {
                   OutlinedButton.icon(
                     onPressed: controller.relaunching
                         ? null
-                        : () => controller.checkAccess(),
+                        : controller.checkAccess,
                     icon: const Icon(Icons.refresh_rounded, size: 17),
                     label: Text(context.t('重新检测')),
                   ),

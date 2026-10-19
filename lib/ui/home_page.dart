@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../core/analysis/analysis_service.dart';
 import '../core/clean/quarantine_retention_service.dart';
+import '../core/diagnostics/app_logger.dart';
 import '../core/models/clean_models.dart';
 import '../core/models/cleaner_rule.dart';
 import '../core/models/scan_models.dart';
@@ -39,6 +40,7 @@ class HomePage extends StatefulWidget {
     this.analysisExcludedPaths = const [],
     this.startInSystemCache = false,
     this.ruleUpdates,
+    this.logger,
   });
 
   final CleanController controller;
@@ -51,6 +53,7 @@ class HomePage extends StatefulWidget {
   final List<String> analysisExcludedPaths;
   final bool startInSystemCache;
   final RuleUpdateController? ruleUpdates;
+  final AppLogger? logger;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -496,6 +499,7 @@ class _HomePageState extends State<HomePage> {
           retention: widget.quarantineRetention,
           ruleUpdates: widget.ruleUpdates,
           onShowOnboarding: _showOnboarding,
+          logger: widget.logger,
         ),
       ),
     );

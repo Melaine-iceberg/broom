@@ -74,6 +74,7 @@ Map<String, dynamic> encodeSettingsDocument(AppSettings settings) {
     'scanItemLimit': settings.scanItemLimit,
     'ruleUpdateUrl': settings.ruleUpdateUrl,
     'onboardingCompleted': settings.onboardingCompleted,
+    'diagnosticsEnabled': settings.diagnosticsEnabled,
   };
 }
 
@@ -97,6 +98,7 @@ AppSettings decodeSettingsDocument(Map<String, dynamic> raw) {
   final itemLimit = migrated['scanItemLimit'];
   final updateUrl = migrated['ruleUpdateUrl'];
   final onboardingCompleted = migrated['onboardingCompleted'];
+  final diagnosticsEnabled = migrated['diagnosticsEnabled'];
   if (parallelism != null &&
       (parallelism is! int || parallelism < 0 || parallelism > 16)) {
     throw const FormatException('扫描线程数无效');
@@ -117,6 +119,9 @@ AppSettings decodeSettingsDocument(Map<String, dynamic> raw) {
   if (onboardingCompleted != null && onboardingCompleted is! bool) {
     throw const FormatException('首次使用引导状态无效');
   }
+  if (diagnosticsEnabled != null && diagnosticsEnabled is! bool) {
+    throw const FormatException('诊断日志设置无效');
+  }
 
   return AppSettings(
     theme: theme,
@@ -129,6 +134,7 @@ AppSettings decodeSettingsDocument(Map<String, dynamic> raw) {
     scanItemLimit: itemLimit as int?,
     ruleUpdateUrl: updateUrl as String? ?? '',
     onboardingCompleted: onboardingCompleted as bool? ?? true,
+    diagnosticsEnabled: diagnosticsEnabled as bool? ?? false,
   );
 }
 

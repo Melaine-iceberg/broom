@@ -842,6 +842,18 @@ const translationsEn = <String, String>{
   '还没有清理历史': 'No cleaning history yet',
   '完成一次清理后，这里会保留一条记录；恢复或永久释放隔离区不会删除历史。': 'After a clean, a record appears here. Restoring or permanently releasing quarantine files does not remove history.',
 
+  // Settings: diagnostics and logs
+  '诊断与日志': 'Diagnostics and logs',
+  '日志默认关闭，仅保存在本地，不记录文件内容。启用后仅记录操作事件、错误信息与统计数字，用于排查问题；可随时导出诊断包并分享给开发者。': 'Logging is off by default and stays on this device. File contents are never recorded; only events, errors, and counters are written for troubleshooting. Export a diagnostics bundle at any time to share with developers.',
+  '启用本地诊断日志': 'Enable local diagnostics',
+  '运行事件将写入 Broom 日志目录，最多保留 3 个滚动文件。': 'Runtime events are written to the Broom log folder, keeping up to three rolling files.',
+  '当前未写入任何诊断日志。': 'No diagnostics are being written.',
+  '导出诊断信息': 'Export diagnostics',
+  '诊断包为 JSON 文件，包含版本、系统环境、日志级别与滚动日志。日志未启用时仍可导出环境信息用于排查启动问题。': 'The diagnostics bundle is a JSON file with the version, system environment, log level, and rolling logs. Even with logging off, environment information can help diagnose startup problems.',
+  '无法更新诊断日志设置：{error}': 'Could not update diagnostics settings: {error}',
+  '诊断信息已导出：{name}': 'Diagnostics exported: {name}',
+  '无法导出诊断信息：{error}': 'Could not export diagnostics: {error}',
+
   // Settings: configuration backup, import, and reset
   '备份与恢复': 'Backup and restore',
   '导出或导入主题、语言、规则开关、扫描设置、排除列表与保留策略。配置不包含隔离区文件、清理历史、扫描结果或在线规则目录。': 'Export or import theme, language, rule toggles, scan settings, exclusions, and the retention policy. Configurations never include quarantine files, cleaning history, scan results, or the online rule catalog.',

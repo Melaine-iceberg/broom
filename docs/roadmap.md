@@ -181,15 +181,24 @@
 
 ## 8. 工程与质量（P1）
 
-- [ ] **Widget / 集成测试补全**：预览选择、清理确认、进度、撤销成功 / 冲突流程、部分会话恢复、错误提示。
-- [ ] **文件系统测试替身**：引入可注入文件系统，避免测试依赖真实临时目录与平台时序。
-- [ ] **恶意 / 损坏元数据测试**：非法会话 ID、路径穿越、超长 storedName、未知状态、截断 JSONL。
-- [ ] **并发测试**：清理、撤销、扫描同时触发的状态机保护；当前控制器用 phase 拦截，但需要系统化验证。
-- [ ] **性能基准**：10 万 / 100 万文件扫描、内存峰值、isolate 传输成本、UI 帧率。
-- [ ] **Windows CI**：`flutter analyze`、`flutter test`、构建与产物上传；当前仅有本地验证。
-- [ ] **日志与诊断**：本地滚动日志（不含文件内容），支持导出用于问题排查；必须默认关闭或最小化。
-- [ ] **静态检查收口**：启用更严格 lint、`dart format` 校验、未使用代码检查。
+- [x] **Widget / 集成测试补全**：预览选择、清理确认、进度、撤销成功 / 冲突流程、部分会话恢复、错误提示。
+      - 已实现：`rule_detail_page_test.dart` 覆盖逐文件选择与规则三态；`home_page_test.dart` 覆盖 Review 二次确认、实时清理进度、完成后撤销成功、跳过 / 失败提示与空扫描；`quarantine_page_test.dart` 覆盖撤销成功、冲突策略、部分会话续跑与完整性错误。新增 `integration_test/app_smoke_test.dart`，在真实 Windows 窗口内完成“设置往返 → 扫描 → 预览”冒烟流程。
+- [x] **文件系统测试替身**：引入可注入文件系统，避免测试依赖真实临时目录与平台时序。
+      - 已实现：`BroomFileSystem` 抽象与 `IoFileSystem` / `MemoryFileSystem` 两个实现，扫描器、隔离区与诊断日志均支持注入。内存实现覆盖大小写不敏感路径、原子重命名、只读文件、追加写入与截断回滚，并可注入操作钩子制造顺序屏障或失败。文件选择、设置与扫描结果存储仍直接使用 `dart:io`。
+- [x] **恶意 / 损坏元数据测试**：非法会话 ID、路径穿越、超长 storedName、未知状态、截断 JSONL。
+      - 已实现：会话 ID 限制长度并拒绝路径分隔符、保留设备名与控制字符；`storedName` 拒绝路径穿越、冒号、尾随点 / 空格、设备名与超长名称；条目必须位于声明的根目录内且大小有效。无法解析的 JSONL 行被隔离为“被拒绝条目”，保留会话以便手动释放，不自动删除；未知状态、更高 schema 版本与损坏的 `session.json` 不会被列出。新增 `test/quarantine_metadata_hardening_test.dart` 覆盖上述场景。
+- [x] **并发测试**：清理、撤销、扫描同时触发的状态机保护；当前控制器用 phase 拦截，但需要系统化验证。
+      - 已实现：`QuarantineService` 对 clean / resume / undo / purge 使用 FIFO `AsyncMutex`，扫描期间仍允许只读查询；控制器在清理中忽略扫描 / 恢复、在扫描或清理中拒绝撤销，并阻止并发撤销。`test/concurrency_test.dart` 与 `test/clean_controller_test.dart` 使用可控文件系统屏障验证操作顺序、只读并发、双重清理与 phase 拦截。
+- [x] **性能基准**：10 万 / 100 万文件扫描、内存峰值、isolate 传输成本、UI 帧率。
+      - 已实现：`benchmark/scan_benchmark.dart` 通过按需生成的合成文件树测量 10 万 / 100 万文件扫描、RSS 与 isolate 往返传输；`integration_test/ui_frame_benchmark_test.dart` 在真实 Windows 窗口滚动 5,000 条预览并输出 p50 / p95 帧时间。参考结果与运行方式见 [benchmark/README.md](../benchmark/README.md)。
+- [x] **Windows CI**：`flutter analyze`、`flutter test`、构建与产物上传；当前仅有本地验证。
+      - 已实现：`.github/workflows/windows.yml` 在 `windows-latest` 上执行格式校验、`flutter analyze --fatal-infos`、完整测试、Release 构建与产物上传；桌面集成测试和 1M 基准作为手动触发的独立任务。
+- [x] **日志与诊断**：本地滚动日志（不含文件内容），支持导出用于问题排查；必须默认关闭或最小化。
+      - 已实现：设置页新增“诊断与日志”，默认关闭。启用后写入 `%LOCALAPPDATA%\Broom\logs\broom.log`，最多 3 个 512 KiB 滚动文件；只记录事件、计数、路径与错误文本，绝不记录文件内容。导出生成 `broom.diagnostics` JSON（版本、系统环境、日志级别与滚动日志），日志关闭时仍可导出环境信息。写日志失败不会影响清理或撤销。
+- [x] **静态检查收口**：启用更严格 lint、`dart format` 校验、未使用代码检查。
+      - 已实现：`analysis_options.yaml` 启用严格类型推断 / 转换 / 原始类型检查，未使用元素、字段、导入、局部变量与死代码作为错误，并增加一批更严格的 lint；CI 使用 `dart format --set-exit-if-changed` 与 `flutter analyze --fatal-infos`。
 - [ ] **崩溃与错误上报**：若加入，遵循隐私开关与最小化字段；不记录用户路径明文，除非用户主动导出。
+      - 当前仅提供本地诊断日志与手动导出，没有网络上报；日志默认关闭，导出由用户主动发起。
 
 ## 9. 打包与分发（P2）
 
@@ -235,7 +244,7 @@
 
 1. **v1.1 安全与可管理性**：设置页、国际化、单文件选择。（三项均已完成；排除列表、撤销冲突处理与隔离区保留/容量策略已完成；隔离区管理页、按范围恢复与永久释放已在 v4 完成）
 2. **v1.2 扫描与类别扩展**：按类别扫描、流式结果、常见应用缓存与 Review 级规则、清理历史。（按类别扫描、流式结果、结果持久化、并行 / 低优先级、NTFS 索引、错误细分、规则更新与路径语义已完成；隔离区清理历史已完成）
-3. **v1.3 自动化与分发**：定时任务、托盘、CLI、安装包与签名、Windows CI 与性能基准。
+3. **v1.3 自动化与分发**：定时任务、托盘、CLI、安装包与签名、Windows CI 与性能基准。（Windows CI 与性能基准已完成；定时任务、托盘、CLI、安装包与签名待做）
 4. **v2.0 平台扩展**：路径语义抽象、macOS / Linux；管理员系统清理已在 v3 实现，但仍需补充服务占用检测与 UAC 兼容性矩阵；移动端作为独立阶段，基于 SAF / MediaStore 重新设计。
 
 ## 非目标

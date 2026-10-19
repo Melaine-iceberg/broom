@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../core/clean/quarantine_service.dart';
+import '../core/diagnostics/app_logger.dart';
 import '../core/models/clean_models.dart';
 import '../core/models/cleaner_rule.dart';
 import '../core/models/scan_models.dart';
@@ -63,6 +64,7 @@ class CleanController extends ChangeNotifier {
     this.ntfsIndex,
     ScanService Function()? scanServiceFactory,
     FileLockProbe? lockProbe,
+    this.logger,
   }) : _scanServiceFactory = scanServiceFactory ?? ScanService.new,
        _lockProbe = lockProbe ?? const NoopFileLockProbe();
 
@@ -76,6 +78,7 @@ class CleanController extends ChangeNotifier {
   final NtfsIndex? ntfsIndex;
   final ScanService Function() _scanServiceFactory;
   final FileLockProbe _lockProbe;
+  final AppLogger? logger;
 
   CleanPhase _phase = CleanPhase.idle;
   ScanProgress? _scanProgress;
@@ -312,7 +315,7 @@ class CleanController extends ChangeNotifier {
   }
 
   Future<void> restoreLastScan() async {
-    if (isBusy || _restoringLastScan) return;
+    if (isBusy || _restoringLastScan || _scanStarting || _undoBusy) return;
     final store = scanResultStore;
     final summary = _lastScanSummary;
     if (store == null || summary == null) {
@@ -404,7 +407,7 @@ class CleanController extends ChangeNotifier {
   Future<void> refreshLastScanSummary() => _refreshLastScanSummary();
 
   Future<void> scan() async {
-    if (isBusy || _scanStarting) return;
+    if (isBusy || _scanStarting || _undoBusy) return;
     _scanStarting = true;
     try {
       await _ensureExclusionsLoaded();
@@ -451,9 +454,15 @@ class CleanController extends ChangeNotifier {
           _notice = exclusions.paths.isEmpty
               ? tr('没有找到可扫描的缓存目录。')
               : tr('没有可扫描的缓存目录（可能已被排除列表覆盖）。');
+          logger?.info('scan', '没有可扫描的目录');
           _notify();
           return;
         }
+        logger?.info(
+          'scan',
+          '开始扫描：${jobs.length} 个任务，'
+              '${jobs.fold<int>(0, (total, job) => total + job.roots.length)} 个根目录',
+        );
 
         final excludedPaths = <String>[
           ...exclusions.paths,
@@ -491,9 +500,7 @@ class CleanController extends ChangeNotifier {
               _queuePersist(writer, items);
             }
           },
-          onIssue: (issue) {
-            _acceptScanIssue(issue);
-          },
+          onIssue: _acceptScanIssue,
         );
 
         await _persistQueue;
@@ -502,6 +509,7 @@ class CleanController extends ChangeNotifier {
           await _abortWriter(writer);
           _phase = CleanPhase.idle;
           _notice = tr('扫描已取消。');
+          logger?.info('scan', '扫描已取消');
           _notify();
           return;
         }
@@ -514,6 +522,12 @@ class CleanController extends ChangeNotifier {
         _resetSelection();
         _selectDefaultItems(notify: false);
         _phase = CleanPhase.preview;
+        logger?.info(
+          'scan',
+          '扫描完成：扫描 ${result.scannedFiles} 个文件，'
+              '命中 $_liveFoundCount 个，共 $_liveFoundBytes 字节，'
+              '错误 ${result.directoryErrors} 个，耗时 ${result.elapsed.inMilliseconds} 毫秒',
+        );
         if (_results.isEmpty) {
           _notice = tr('没有发现可清理的内容。');
         }
@@ -543,6 +557,7 @@ class CleanController extends ChangeNotifier {
         await _abortWriter(writer);
         _phase = CleanPhase.idle;
         _error = trf('扫描失败：{error}', {'error': error});
+        logger?.error('scan', '扫描失败', error: error);
         _notify();
       } finally {
         _scanService = null;
@@ -763,7 +778,12 @@ class CleanController extends ChangeNotifier {
   }
 
   Future<void> cleanSelected() async {
-    if (_phase != CleanPhase.preview) return;
+    if (_phase != CleanPhase.preview ||
+        _scanStarting ||
+        _restoringLastScan ||
+        _undoBusy) {
+      return;
+    }
     final items = selectedItems;
     if (items.isEmpty) return;
 
@@ -777,6 +797,7 @@ class CleanController extends ChangeNotifier {
     );
     _cleanCancelRequested = false;
     _error = null;
+    logger?.info('clean', '开始清理：${items.length} 个文件');
     _notify();
 
     try {
@@ -791,18 +812,29 @@ class CleanController extends ChangeNotifier {
       _lastReport = report;
       _cleanProgress = null;
       _phase = CleanPhase.done;
+      logger?.info(
+        'clean',
+        '清理结束：移动 ${report.movedCount} 个，跳过 ${report.skippedCount} 个，'
+            '失败 ${report.failureCount} 个，剩余 ${report.remainingCount} 个，'
+            '取消 ${report.cancelled}',
+      );
+      for (final failure in report.failures.take(20)) {
+        logger?.warning('clean', '失败：${failure.path}：${failure.reason}');
+      }
       await _refreshPendingSessions(notify: false);
       _notify();
     } on QuarantineSpaceException catch (error) {
       _phase = CleanPhase.preview;
       _cleanProgress = null;
       _error = trf('清理前磁盘空间检查未通过：{error}', {'error': error});
+      logger?.warning('clean', '磁盘空间预检未通过', error: error);
       await _refreshPendingSessions(notify: false);
       _notify();
     } catch (error) {
       _phase = CleanPhase.preview;
       _cleanProgress = null;
       _error = trf('清理失败：{error}', {'error': error});
+      logger?.error('clean', '清理失败', error: error);
       await _refreshPendingSessions(notify: false);
       _notify();
     }
@@ -822,15 +854,25 @@ class CleanController extends ChangeNotifier {
     if (_undoBusy) {
       throw StateError(tr('正在执行撤销，请稍候'));
     }
+    if (_phase == CleanPhase.scanning || _phase == CleanPhase.cleaning) {
+      throw StateError(tr('扫描或清理进行中，无法撤销'));
+    }
     _undoBusy = true;
     _error = null;
+    logger?.info('undo', '开始撤销会话 $sessionId');
     _notify();
     try {
       final report = await quarantine.undo(sessionId);
+      logger?.info(
+        'undo',
+        '撤销结束：恢复 ${report.restoredCount} 个，冲突 ${report.conflictCount} 个，'
+            '失败 ${report.failureCount} 个，会话已移除 ${report.sessionRemoved}',
+      );
       await _refreshPendingSessions(notify: false);
       return report;
     } catch (error) {
       _error = trf('撤销失败：{error}', {'error': error});
+      logger?.error('undo', '撤销失败', error: error);
       rethrow;
     } finally {
       _undoBusy = false;
@@ -1055,8 +1097,7 @@ class CleanController extends ChangeNotifier {
       final excludedCount = candidates.where(exclusions.excludes).length;
       if (excludedCount == candidates.length) {
         scopes[rule.id] = RuleExclusionScope.all;
-      } else if (excludedCount > 0 ||
-          candidates.any((root) => exclusions.intersects(root))) {
+      } else if (excludedCount > 0 || candidates.any(exclusions.intersects)) {
         scopes[rule.id] = RuleExclusionScope.partial;
       } else {
         scopes[rule.id] = RuleExclusionScope.none;

@@ -2,6 +2,7 @@ import 'dart:collection';
 import 'dart:io';
 
 import '../models/scan_models.dart';
+import '../platform/file_system.dart';
 import '../platform/path_semantics.dart';
 import 'ntfs_index.dart';
 
@@ -16,6 +17,7 @@ class JunkScanner {
     this.useNtfsIndex = false,
     this.jobIndexBase = 0,
     this.jobCountOverride,
+    this.fileSystem = const IoFileSystem(),
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now {
     for (final path in excludedPaths) {
@@ -35,6 +37,7 @@ class JunkScanner {
   final bool useNtfsIndex;
   final int jobIndexBase;
   final int? jobCountOverride;
+  final BroomFileSystem fileSystem;
   final DateTime Function() _clock;
   final Set<String> _excludedKeys = {};
 
@@ -122,14 +125,14 @@ class JunkScanner {
       if (_isWithin(rootKey, entityKey) == false) return;
       if (!_acceptsExtension(job, path)) return;
       scannedFiles++;
-      FileStat stat;
+      FsStat stat;
       try {
-        stat = await FileStat.stat(semantics.forIo(path));
+        stat = await fileSystem.stat(path);
       } on FileSystemException catch (error) {
         reportIssue(_issue(job.ruleId, path, error));
         return;
       }
-      if (stat.type != FileSystemEntityType.file) return;
+      if (stat.type != FsEntityType.file) return;
       if (job.minAge > Duration.zero &&
           _clock().difference(stat.modified) < job.minAge) {
         return;
@@ -212,11 +215,7 @@ class JunkScanner {
           }
         }
 
-        if (await FileSystemEntity.type(
-              semantics.forIo(root),
-              followLinks: false,
-            ) !=
-            FileSystemEntityType.directory) {
+        if (await fileSystem.type(root) != FsEntityType.directory) {
           continue;
         }
         if (_isExcluded(rootKey) || isJobExcluded(rootKey)) continue;
@@ -236,23 +235,22 @@ class JunkScanner {
           }
 
           try {
-            await for (final entity in Directory(
-              semantics.forIo(current.directory),
-            ).list(followLinks: false)) {
+            await for (final entity in fileSystem.list(current.directory)) {
               if (isCancelled?.call() ?? false) {
                 cancelled = true;
                 break scanLoop;
               }
-              if (entity is Link) continue;
+              if (entity.type == FsEntityType.link) continue;
+              if (entity.type == FsEntityType.notFound) continue;
               final entityPath = semantics.canonical(entity.path);
               final entityKey = _key(entityPath);
               if (_isExcluded(entityKey) || isJobExcluded(entityKey)) continue;
 
-              if (entity is Directory) {
+              if (entity.type == FsEntityType.directory) {
                 pending.add((directory: entityPath, root: current.root));
                 continue;
               }
-              if (entity is! File) continue;
+              if (entity.type != FsEntityType.file) continue;
               try {
                 await processCandidate(
                   job: job,

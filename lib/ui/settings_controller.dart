@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
 
+import '../core/diagnostics/app_logger.dart';
 import '../core/models/app_settings.dart';
 import '../core/models/scan_models.dart';
 import '../core/settings/settings_store.dart';
 
 class SettingsController extends ChangeNotifier {
-  SettingsController({this.store, AppSettings initial = AppSettings.defaults})
-    : _settings = initial;
+  SettingsController({
+    this.store,
+    this.logger,
+    AppSettings initial = AppSettings.defaults,
+  }) : _settings = initial;
 
   final SettingsStore? store;
+  final AppLogger? logger;
 
   AppSettings _settings;
   String? _loadError;
@@ -25,6 +30,8 @@ class SettingsController extends ChangeNotifier {
   bool get loaded => _loaded;
 
   bool get onboardingCompleted => _settings.onboardingCompleted;
+
+  bool get diagnosticsEnabled => _settings.diagnosticsEnabled;
 
   ThemeMode get themeMode => switch (_settings.theme) {
     AppThemePreference.system => ThemeMode.system,
@@ -68,6 +75,7 @@ class SettingsController extends ChangeNotifier {
       _settings = AppSettings.defaults;
       _loadError = error.message;
     }
+    _applyLogLevel(_settings);
     _loaded = true;
     _notify();
   }
@@ -152,6 +160,11 @@ class SettingsController extends ChangeNotifier {
     return _persist(_settings.copyWith(ruleUpdateUrl: trimmed));
   }
 
+  Future<String?> setDiagnosticsEnabled(bool enabled) {
+    if (_settings.diagnosticsEnabled == enabled) return Future.value();
+    return _persist(_settings.copyWith(diagnosticsEnabled: enabled));
+  }
+
   Future<String?> completeOnboarding() {
     if (_settings.onboardingCompleted) return Future.value();
     return _persist(_settings.copyWith(onboardingCompleted: true));
@@ -192,6 +205,7 @@ class SettingsController extends ChangeNotifier {
   Future<String?> _persist(AppSettings next) async {
     final previous = _settings;
     _settings = next;
+    _applyLogLevel(next);
     _saveError = null;
     _notify();
     final store = this.store;
@@ -201,10 +215,17 @@ class SettingsController extends ChangeNotifier {
       return null;
     } on SettingsException catch (error) {
       _settings = previous;
+      _applyLogLevel(previous);
       _saveError = error.message;
       _notify();
       return error.message;
     }
+  }
+
+  void _applyLogLevel(AppSettings settings) {
+    logger?.configureLevel(
+      settings.diagnosticsEnabled ? AppLogLevel.info : AppLogLevel.off,
+    );
   }
 
   void _notify() {

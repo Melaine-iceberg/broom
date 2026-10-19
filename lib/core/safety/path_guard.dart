@@ -11,7 +11,7 @@ class PathGuard {
     this.semantics = const WindowsPathSemantics(),
   }) : _protectedRoots = protectedRoots
            .where((root) => root.trim().isNotEmpty)
-           .map((root) => semantics.key(root))
+           .map(semantics.key)
            .toList();
 
   factory PathGuard.forWindows({

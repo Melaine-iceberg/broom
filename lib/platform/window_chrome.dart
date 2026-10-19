@@ -14,6 +14,9 @@ class WindowChrome {
 
   final ValueNotifier<bool> isMaximized = ValueNotifier<bool>(false);
 
+  // The singleton lives for the whole application, so the subscription is
+  // intentionally kept for the process lifetime.
+  // ignore: cancel_subscriptions
   StreamSubscription<dynamic>? _stateSubscription;
 
   bool get isSupported =>

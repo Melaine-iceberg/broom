@@ -1206,7 +1206,7 @@ final windowsSafeRules = <CleanerRule>[
           'Docker\\wsl 与其他同级目录不会被命中；Docker 数据必须通过 Docker 自身'
           '的清理命令管理，Broom 不删除 ext4.vhdx。',
       reverseEvidenceEn:
-          "Docker\\wsl and other sibling folders do not match. Docker data must "
+          'Docker\\wsl and other sibling folders do not match. Docker data must '
           "be managed with Docker's own cleanup commands; Broom never deletes "
           'ext4.vhdx.',
       patterns: [r'%LOCALAPPDATA%\Docker\log'],

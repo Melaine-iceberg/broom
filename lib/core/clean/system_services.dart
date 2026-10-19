@@ -221,7 +221,11 @@ class WindowsServiceManager implements ServiceControl {
   };
 
   static String _scFailure(ProcessResult result) {
-    final detail = _firstLine(result.stderr) ?? _firstLine(result.stdout);
+    final stderr = result.stderr;
+    final stdout = result.stdout;
+    final detail =
+        _firstLine(stderr is String ? stderr : '$stderr') ??
+        _firstLine(stdout is String ? stdout : '$stdout');
     final reason = switch (result.exitCode) {
       5 => '没有访问权限',
       1058 => '服务已被禁用',

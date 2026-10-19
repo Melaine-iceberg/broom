@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:broom/core/models/clean_models.dart';
@@ -83,6 +84,65 @@ class _RecordingScanService extends ScanService {
   }
 }
 
+class _ControlledScanService extends ScanService {
+  _ControlledScanService(this.items);
+
+  final List<JunkItem> items;
+  final started = Completer<void>();
+  final release = Completer<void>();
+  int calls = 0;
+
+  @override
+  Future<ScanResult> scan({
+    required List<ScanJob> jobs,
+    required List<String> excludedPaths,
+    ScanOptions options = const ScanOptions(),
+    NtfsIndex? ntfsIndex,
+    void Function(ScanProgress progress)? onProgress,
+    void Function(List<JunkItem> items)? onItems,
+    void Function(ScanIssue issue)? onIssue,
+    bool retainItems = true,
+  }) async {
+    calls++;
+    if (!started.isCompleted) started.complete();
+    await release.future;
+    if (items.isNotEmpty) onItems?.call(items);
+    return ScanResult(
+      items: retainItems ? items : const [],
+      scannedFiles: items.length,
+      directoryErrors: 0,
+      truncated: false,
+      cancelled: false,
+    );
+  }
+}
+
+class _ControlledQuarantineService extends FakeQuarantineService {
+  final started = Completer<void>();
+  final release = Completer<void>();
+  int cleanCalls = 0;
+
+  @override
+  Future<CleanReport> clean(
+    List<JunkItem> items, {
+    void Function(CleanProgress progress)? onProgress,
+    bool Function()? isCancelled,
+  }) async {
+    cleanCalls++;
+    cleanRequest = List.of(items);
+    if (!started.isCompleted) started.complete();
+    await release.future;
+    return CleanReport(
+      sessionId: FakeQuarantineService.sessionId,
+      movedCount: items.length,
+      movedBytes: items.fold(0, (total, item) => total + item.size),
+      failureCount: 0,
+      failures: const [],
+      cancelled: false,
+    );
+  }
+}
+
 class _FakeLockProbe implements FileLockProbe {
   _FakeLockProbe(this.lockedPaths, {this.error});
 
@@ -139,7 +199,8 @@ void main() {
 
   CleanController createController({
     required ExclusionStore exclusions,
-    required _RecordingScanService scanner,
+    _RecordingScanService? scanner,
+    ScanService? scanService,
     required List<CleanerRule> rules,
     required Map<String, List<String>> rootsByRule,
     FileLockProbe? lockProbe,
@@ -147,12 +208,16 @@ void main() {
     ScanResultStore? scanResultStore,
     FakeQuarantineService? quarantine,
   }) {
+    final service = scanService ?? scanner;
+    if (service == null) {
+      throw ArgumentError('scanner or scanService is required');
+    }
     return CleanController(
       platform: _TestPlatform(definedRules: rules, rootsByRule: rootsByRule),
       guard: PathGuard(protectedRoots: const []),
       quarantine: quarantine ?? FakeQuarantineService(),
       exclusions: exclusions,
-      scanServiceFactory: () => scanner,
+      scanServiceFactory: () => service,
       lockProbe: lockProbe,
       scanSettings: scanSettings,
       scanResultStore: scanResultStore,
@@ -743,5 +808,101 @@ void main() {
     expect(controller.scanElapsed, isNotNull);
     expect(controller.scanDirectoryErrors, 0);
     expect(controller.scanTruncated, isFalse);
+  });
+
+  test('blocks scan, restore and undo while cleaning is in progress', () async {
+    final exclusions = createStore();
+    final item = JunkItem(
+      ruleId: 'test.rule',
+      rootPath: rootA.path,
+      path: p.windows.join(rootA.path, 'busy.tmp'),
+      size: 10,
+      modified: DateTime(2026, 10, 18),
+    );
+    final scanner = _RecordingScanService(items: [item]);
+    final quarantine = _ControlledQuarantineService();
+    final rule = createRule();
+    final controller = createController(
+      exclusions: exclusions,
+      scanner: scanner,
+      rules: [rule],
+      rootsByRule: {
+        rule.id: [rootA.path],
+      },
+      quarantine: quarantine,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    await controller.scan();
+    expect(controller.phase, CleanPhase.preview);
+
+    final cleanFuture = controller.cleanSelected();
+    await quarantine.started.future;
+    expect(controller.phase, CleanPhase.cleaning);
+    expect(controller.cleanProgress, isNotNull);
+
+    await controller.scan();
+    await controller.restoreLastScan();
+    await expectLater(
+      controller.undo(FakeQuarantineService.sessionId),
+      throwsA(isA<StateError>()),
+    );
+    await controller.cleanSelected();
+    expect(controller.phase, CleanPhase.cleaning);
+    expect(quarantine.cleanCalls, 1);
+    expect(controller.lastReport, isNull);
+
+    quarantine.release.complete();
+    await cleanFuture;
+
+    expect(controller.phase, CleanPhase.done);
+    expect(controller.lastReport?.movedCount, 1);
+    expect(quarantine.cleanRequest.single.path, item.path);
+  });
+
+  test('ignores clean and undo while a scan is in progress', () async {
+    final exclusions = createStore();
+    final item = JunkItem(
+      ruleId: 'test.rule',
+      rootPath: rootA.path,
+      path: p.windows.join(rootA.path, 'scanning.tmp'),
+      size: 10,
+      modified: DateTime(2026, 10, 18),
+    );
+    final scanner = _ControlledScanService([item]);
+    final quarantine = FakeQuarantineService();
+    final rule = createRule();
+    final controller = createController(
+      exclusions: exclusions,
+      scanService: scanner,
+      rules: [rule],
+      rootsByRule: {
+        rule.id: [rootA.path],
+      },
+      quarantine: quarantine,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    final scanFuture = controller.scan();
+    await scanner.started.future;
+    expect(controller.phase, CleanPhase.scanning);
+
+    await controller.cleanSelected();
+    expect(quarantine.cleanRequest, isEmpty);
+    await expectLater(
+      controller.undo(FakeQuarantineService.sessionId),
+      throwsA(isA<StateError>()),
+    );
+    await controller.scan();
+    expect(scanner.calls, 1);
+    expect(controller.phase, CleanPhase.scanning);
+
+    scanner.release.complete();
+    await scanFuture;
+
+    expect(controller.phase, CleanPhase.preview);
+    expect(controller.selectedCount, 1);
+    expect(controller.results.single.items.single.path, item.path);
   });
 }

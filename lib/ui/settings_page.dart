@@ -1,8 +1,13 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
+import '../core/app_info.dart';
 import '../core/clean/quarantine_retention_service.dart';
+import '../core/diagnostics/app_logger.dart';
 import '../core/models/app_settings.dart';
 import '../core/models/cleaner_rule.dart';
 import '../core/models/quarantine_policy_models.dart';
@@ -17,7 +22,7 @@ import 'quarantine_policy_dialog.dart';
 import 'rule_update_controller.dart';
 import 'settings_controller.dart';
 
-const _appVersion = '0.4.0';
+const _appVersion = broomAppVersion;
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
@@ -28,6 +33,7 @@ class SettingsPage extends StatelessWidget {
     this.retention,
     this.ruleUpdates,
     this.onShowOnboarding,
+    this.logger,
   });
 
   final SettingsController settings;
@@ -36,6 +42,7 @@ class SettingsPage extends StatelessWidget {
   final QuarantineRetentionService? retention;
   final RuleUpdateController? ruleUpdates;
   final VoidCallback? onShowOnboarding;
+  final AppLogger? logger;
 
   @override
   Widget build(BuildContext context) {
@@ -437,6 +444,14 @@ class SettingsPage extends StatelessWidget {
                     retention: retention,
                     shell: shell,
                   ),
+                  if (logger case final logger?) ...[
+                    const SizedBox(height: 16),
+                    _DiagnosticsSection(
+                      settings: settings,
+                      logger: logger,
+                      shell: shell,
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   _Section(
                     icon: Icons.info_outline_rounded,
@@ -1454,6 +1469,156 @@ class _ImportSummaryLine extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(text, style: Theme.of(context).textTheme.bodySmall),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DiagnosticsSection extends StatefulWidget {
+  const _DiagnosticsSection({
+    required this.settings,
+    required this.logger,
+    required this.shell,
+  });
+
+  final SettingsController settings;
+  final AppLogger logger;
+  final SystemShell shell;
+
+  @override
+  State<_DiagnosticsSection> createState() => _DiagnosticsSectionState();
+}
+
+class _DiagnosticsSectionState extends State<_DiagnosticsSection> {
+  bool _busy = false;
+  bool _toggling = false;
+
+  Future<void> _setEnabled(bool enabled) async {
+    setState(() => _toggling = true);
+    final error = await widget.settings.setDiagnosticsEnabled(enabled);
+    if (!mounted) return;
+    setState(() => _toggling = false);
+    if (error != null) {
+      _showError(context.tf('无法更新诊断日志设置：{error}', {'error': error}));
+    }
+  }
+
+  Future<void> _export() async {
+    setState(() => _busy = true);
+    try {
+      final now = DateTime.now();
+      String two(int value) => value.toString().padLeft(2, '0');
+      final stamp =
+          '${now.year}${two(now.month)}${two(now.day)}-'
+          '${two(now.hour)}${two(now.minute)}${two(now.second)}';
+      final locale = context.strings.localeName;
+      final path = await widget.shell.saveJsonFile(
+        suggestedName: 'broom-diagnostics-$stamp.json',
+        title: context.t('导出诊断信息'),
+      );
+      if (path == null || path.isEmpty) return;
+      final bundle = await widget.logger.buildBundle(
+        appVersion: _appVersion,
+        environment: {
+          'os': Platform.operatingSystem,
+          'osVersion': Platform.operatingSystemVersion,
+          'locale': locale,
+          'processors': '${Platform.numberOfProcessors}',
+        },
+      );
+      File(path).writeAsStringSync(
+        const JsonEncoder.withIndent('  ').convert(bundle),
+        flush: true,
+      );
+      widget.logger.info('diagnostics', '诊断信息已导出');
+      if (!mounted) return;
+      _showMessage(
+        context.tf('诊断信息已导出：{name}', {'name': p.windows.basename(path)}),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      _showError(context.tf('无法导出诊断信息：{error}', {'error': error}));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+      );
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Theme.of(context).colorScheme.errorContainer,
+        ),
+      );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final enabled = widget.settings.diagnosticsEnabled;
+    return _Section(
+      icon: Icons.bug_report_outlined,
+      title: context.t('诊断与日志'),
+      subtitle: context.t(
+        '日志默认关闭，仅保存在本地，不记录文件内容。启用后仅记录操作事件、'
+        '错误信息与统计数字，用于排查问题；可随时导出诊断包并分享给开发者。',
+      ),
+      trailing: _busy
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SwitchListTile(
+            key: const ValueKey('settings-diagnostics-toggle'),
+            contentPadding: EdgeInsets.zero,
+            value: enabled,
+            onChanged: _toggling || _busy ? null : _setEnabled,
+            title: Text(context.t('启用本地诊断日志')),
+            subtitle: Text(
+              enabled
+                  ? context.t('运行事件将写入 Broom 日志目录，最多保留 3 个滚动文件。')
+                  : context.t('当前未写入任何诊断日志。'),
+            ),
+          ),
+          const Divider(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              key: const ValueKey('settings-diagnostics-export'),
+              onPressed: _busy ? null : _export,
+              icon: const Icon(Icons.download_rounded, size: 17),
+              label: Text(context.t('导出诊断信息')),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            context.t(
+              '诊断包为 JSON 文件，包含版本、系统环境、日志级别与滚动日志。'
+              '日志未启用时仍可导出环境信息用于排查启动问题。',
+            ),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+              height: 1.5,
+            ),
           ),
         ],
       ),

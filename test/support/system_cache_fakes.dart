@@ -1,10 +1,10 @@
 import 'package:broom/core/clean/system_cache_cleaner.dart';
 import 'package:broom/core/models/scan_models.dart';
-import 'package:broom/core/scan/ntfs_index.dart';
 import 'package:broom/core/models/system_models.dart';
 import 'package:broom/core/platform/system_access.dart';
 import 'package:broom/core/platform/system_cache_platform.dart';
 import 'package:broom/core/rules/windows_system_rules.dart';
+import 'package:broom/core/scan/ntfs_index.dart';
 import 'package:broom/core/scan/scan_service.dart';
 
 class FakeSystemAccess implements SystemAccess {

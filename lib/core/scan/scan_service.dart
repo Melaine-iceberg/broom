@@ -519,8 +519,12 @@ class _WorkerHandle {
   ReceivePort? exits;
   ReceivePort? control;
   SendPort? controlSendPort;
+  // These subscriptions are cancelled together in `_closeWorker`.
+  // ignore: cancel_subscriptions
   StreamSubscription<dynamic>? eventSubscription;
+  // ignore: cancel_subscriptions
   StreamSubscription<dynamic>? errorSubscription;
+  // ignore: cancel_subscriptions
   StreamSubscription<dynamic>? exitSubscription;
   bool done = false;
   ScanProgress? progress;

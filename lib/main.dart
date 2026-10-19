@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
@@ -11,6 +12,7 @@ import 'core/clean/quarantine_retention_service.dart';
 import 'core/clean/quarantine_service.dart';
 import 'core/clean/system_cache_cleaner.dart';
 import 'core/clean/system_services.dart';
+import 'core/diagnostics/app_logger.dart';
 import 'core/platform/cleaner_platform.dart';
 import 'core/platform/file_lock_probe.dart';
 import 'core/platform/system_access.dart';
@@ -55,6 +57,15 @@ void main(List<String> args) {
     environment: platform.environment,
     additionalProtectedRoots: [quarantineRoot],
   );
+  final logger = AppLogger(
+    directoryPath: p.windows.join(p.windows.dirname(quarantineRoot), 'logs'),
+  );
+  AppLogger.instance = logger;
+  _installErrorLogging(logger);
+  logger.info(
+    'app',
+    'Broom 启动：平台 ${platform.displayName}，参数 ${args.isEmpty ? '无' : args.join(' ')}',
+  );
   final exclusions = ExclusionStore(
     filePath: ExclusionStore.defaultFilePath(quarantineRoot),
   );
@@ -86,8 +97,14 @@ void main(List<String> args) {
     store: SettingsStore(
       filePath: SettingsStore.defaultFilePath(quarantineRoot),
     ),
+    logger: logger,
   );
   settings.load();
+  logger.info(
+    'app',
+    '设置加载完成：诊断日志 ${settings.diagnosticsEnabled ? '已启用' : '已关闭'}，'
+        '规则 ${platform.rules.length} 条',
+  );
 
   final catalogStore = RuleCatalogStore(
     directoryPath: RuleCatalogStore.defaultDirectory(quarantineRoot),
@@ -111,6 +128,7 @@ void main(List<String> args) {
     ),
     ntfsIndex: ntfsIndex,
     lockProbe: createFileLockProbe(),
+    logger: logger,
   );
   final ruleUpdates = RuleUpdateController(
     service: RuleUpdateService(
@@ -125,7 +143,11 @@ void main(List<String> args) {
       unawaited(controller.refreshRuleExclusionScopes());
     },
   );
-  unawaited(_initializeBroom(controller, retention));
+  unawaited(
+    _initializeBroom(controller, retention).catchError((Object error) {
+      logger.error('app', '启动初始化失败', error: error);
+    }),
+  );
 
   final systemAccess = createSystemAccess();
   final systemCacheController = SystemCacheController(
@@ -147,8 +169,26 @@ void main(List<String> args) {
       analysisExcludedPaths: [quarantineRoot],
       startInSystemCache: args.contains('--system-cache'),
       ruleUpdates: ruleUpdates,
+      logger: logger,
     ),
   );
+  logger.info('app', '主窗口已创建');
+}
+
+void _installErrorLogging(AppLogger logger) {
+  FlutterError.onError = (details) {
+    logger.error(
+      'flutter',
+      details.exceptionAsString(),
+      error: details.exception,
+      stackTrace: details.stack,
+    );
+    FlutterError.presentError(details);
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    logger.error('platform', '未捕获的异步异常', error: error, stackTrace: stack);
+    return false;
+  };
 }
 
 // Apply the quarantine retention policy before loading pending sessions so the

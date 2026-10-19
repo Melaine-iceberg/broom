@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import 'core/analysis/analysis_service.dart';
 import 'core/clean/quarantine_retention_service.dart';
+import 'core/diagnostics/app_logger.dart';
 import 'core/shell/system_shell.dart';
 import 'l10n/broom_strings.dart';
 import 'ui/clean_controller.dart';
@@ -26,6 +27,7 @@ class BroomApp extends StatefulWidget {
     this.analysisExcludedPaths = const [],
     this.startInSystemCache = false,
     this.ruleUpdates,
+    this.logger,
   });
 
   final CleanController controller;
@@ -38,6 +40,7 @@ class BroomApp extends StatefulWidget {
   final List<String> analysisExcludedPaths;
   final bool startInSystemCache;
   final RuleUpdateController? ruleUpdates;
+  final AppLogger? logger;
 
   @override
   State<BroomApp> createState() => _BroomAppState();
@@ -45,7 +48,7 @@ class BroomApp extends StatefulWidget {
 
 class _BroomAppState extends State<BroomApp> {
   late final SettingsController _settings =
-      widget.settingsController ?? SettingsController();
+      widget.settingsController ?? SettingsController(logger: widget.logger);
   late final bool _ownsSettings = widget.settingsController == null;
 
   @override
@@ -100,6 +103,7 @@ class _BroomAppState extends State<BroomApp> {
             analysisExcludedPaths: widget.analysisExcludedPaths,
             startInSystemCache: widget.startInSystemCache,
             ruleUpdates: widget.ruleUpdates,
+            logger: widget.logger,
           ),
         );
       },

@@ -1,0 +1,124 @@
+name: Windows CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_desktop_tests:
+        description: Run Windows integration and frame-time tests
+        type: boolean
+        default: false
+      run_benchmarks:
+        description: Run the 1M file scan benchmark
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 3.47.7
+
+jobs:
+  quality:
+    name: Format, analyze, test, build
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Verify formatting
+        run: dart format --output=none --set-exit-if-changed lib test benchmark integration_test
+
+      - name: Analyze (strict lint, unused code)
+        run: flutter analyze --fatal-infos
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: broom-windows-x64
+          path: build/windows/x64/runner/Release/
+          if-no-files-found: error
+          retention-days: 14
+
+  desktop-integration:
+    name: Desktop integration and frame timing
+    if: github.event_name == 'workflow_dispatch' && inputs.run_desktop_tests
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run integration smoke test
+        run: flutter test integration_test/app_smoke_test.dart -d windows
+
+      - name: Measure preview frame timings
+        run: flutter test integration_test/ui_frame_benchmark_test.dart -d windows
+
+  benchmark:
+    name: Scan benchmark
+    if: github.event_name == 'workflow_dispatch' && inputs.run_benchmarks
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run scan and isolate benchmarks
+        shell: pwsh
+        run: |
+          dart run benchmark/scan_benchmark.dart --million 2>&1 | Tee-Object -FilePath benchmark-results.txt
+          exit $LASTEXITCODE
+
+      - name: Upload benchmark log
+        uses: actions/upload-artifact@v4
+        with:
+          name: broom-benchmark-log
+          path: benchmark-results.txt
+          if-no-files-found: ignore
+          retention-days: 14
+        if: always()

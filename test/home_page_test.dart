@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:broom/app.dart';
@@ -148,6 +149,75 @@ class _ReportingQuarantineService extends FakeQuarantineService {
   }) async => report;
 }
 
+class _ProgressQuarantineService extends FakeQuarantineService {
+  final started = Completer<void>();
+  final release = Completer<void>();
+
+  @override
+  Future<List<QuarantineSessionInfo>> listSessions() async {
+    return [
+      QuarantineSessionInfo(
+        id: FakeQuarantineService.sessionId,
+        createdAt: DateTime(2026, 10, 18, 12),
+        status: QuarantineStatus.ready,
+        entryCount: 2,
+        totalBytes: 64,
+        pendingCount: 2,
+        pendingBytes: 64,
+        plannedCount: 2,
+      ),
+    ];
+  }
+
+  @override
+  Future<CleanReport> clean(
+    List<JunkItem> items, {
+    void Function(CleanProgress progress)? onProgress,
+    bool Function()? isCancelled,
+  }) async {
+    onProgress?.call(
+      CleanProgress(
+        moved: 1,
+        processed: 1,
+        total: items.length,
+        movedBytes: items.first.size,
+        currentPath: items.first.path,
+      ),
+    );
+    if (!started.isCompleted) started.complete();
+    await release.future;
+    return CleanReport(
+      sessionId: FakeQuarantineService.sessionId,
+      movedCount: items.length,
+      movedBytes: items.fold(0, (total, item) => total + item.size),
+      failureCount: 0,
+      failures: const [],
+      cancelled: false,
+    );
+  }
+
+  @override
+  Future<UndoReport> undo(
+    String sessionId, {
+    Set<String>? storedNames,
+    UndoConflictPolicy conflictPolicy = UndoConflictPolicy.skip,
+    Map<String, UndoConflictPolicy> conflictPolicies = const {},
+  }) async {
+    return const UndoReport(
+      restoredCount: 2,
+      restoredBytes: 64,
+      conflictCount: 0,
+      keptBothCount: 0,
+      overwrittenCount: 0,
+      missingCount: 0,
+      failureCount: 0,
+      integrityFailureCount: 0,
+      failures: [],
+      sessionRemoved: true,
+    );
+  }
+}
+
 ExclusionStore _exclusionsStore() => ExclusionStore(
   filePath: p.windows.join(r'C:\broom_widget_test', 'exclusions.json'),
 );
@@ -253,7 +323,7 @@ void main() {
       platform: FakeSystemCachePlatform(resolver: (_) => const []),
       access: FakeSystemAccess(elevated: false),
       cleaner: FakeSystemCacheCleaner(),
-      scanServiceFactory: () => FakeScanService(),
+      scanServiceFactory: FakeScanService.new,
     );
     addTearDown(systemController.dispose);
 
@@ -717,5 +787,81 @@ void main() {
     expect(settings.onboardingCompleted, isTrue);
     expect(settingsStore.load().onboardingCompleted, isTrue);
     expect(find.text('开始扫描'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('shows clean progress and undo success', (tester) async {
+    tester.view.physicalSize = const Size(1200, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const root = r'C:\broom_widget_test\cache';
+    final items = [
+      JunkItem(
+        ruleId: 'test.cache',
+        rootPath: root,
+        path: p.windows.join(root, 'first.tmp'),
+        size: 32,
+        modified: DateTime(2026, 10, 18),
+      ),
+      JunkItem(
+        ruleId: 'test.cache',
+        rootPath: root,
+        path: p.windows.join(root, 'second.tmp'),
+        size: 32,
+        modified: DateTime(2026, 10, 18),
+      ),
+    ];
+    const rule = CleanerRule(
+      id: 'test.cache',
+      title: '测试缓存',
+      category: '测试',
+      description: '测试用缓存规则',
+      pathPatterns: [],
+    );
+    final quarantine = _ProgressQuarantineService();
+    final controller = CleanController(
+      platform: _FixedRootsPlatform(rule: rule, roots: [root]),
+      guard: PathGuard(protectedRoots: const []),
+      quarantine: quarantine,
+      exclusions: _exclusionsStore(),
+      scanServiceFactory: () => _FixedScanService(items),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    await controller.scan();
+
+    await tester.pumpWidget(
+      BroomApp(controller: controller, systemShell: _FakeSystemShell()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('已选择 2 项'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, '清理 2 项'));
+    await tester.pumpAndSettle();
+    expect(find.text('移入隔离区？'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, '暂存 2 项'));
+    await tester.pump();
+    await quarantine.started.future;
+    await tester.pump();
+
+    expect(find.text('正在移入隔离区'), findsOneWidget);
+    expect(find.text('1 / 2 项'), findsOneWidget);
+    expect(find.text('first.tmp'), findsOneWidget);
+    expect(find.textContaining('已移动 1 项'), findsOneWidget);
+
+    quarantine.release.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.text('清理完成'), findsOneWidget);
+    expect(find.text('撤销本次清理'), findsOneWidget);
+    expect(find.text('2 个文件'), findsOneWidget);
+
+    await tester.tap(find.text('撤销本次清理'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('撤销完成'), findsOneWidget);
+    expect(find.textContaining('已恢复 2 个文件'), findsOneWidget);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 }

@@ -10,6 +10,8 @@ v4 内容：在 v3 的 **管理员系统级缓存清理** 之上，完成 **隔�
 
 当前开发版同时完成 **v1.1 安全与可管理性**：新增**设置页**（主题、语言、规则开关、排除列表与保留策略入口）、**中英文界面**，以及预览页的**逐文件选择**。设置页现已补齐**配置文件 v2 迁移**、**恢复默认**与**配置导入导出**：已知旧版配置自动迁移，未知更高版本被拒绝；导出的配置包不包含隔离区文件，导入与重置都不会立即释放文件。此外还加入了**排除列表**、**隔离区完整性校验**、**未完成清理会话提示**、**清理断点续跑**、**文件占用检测**与**跳过 / 失败分类**：排除项优先于所有规则，并在扫描、清理与撤销三个环节统一校验；隔离条目会记录文件大小与小文件的 SHA-256，恢复前重新校验；清理开始前会持久化完整选中清单，中断或崩溃后可在隔离区继续未完成的清理；预览阶段会提示可能被占用的文件，清理结果把跳过与失败分开统计。预览页现在提供**扫描摘要、规则搜索与排序**，规则详情可查看**来源、实际目录、过滤条件与清理后果**，并可逐文件或按规则根目录**在资源管理器中显示**；同时加入**键盘快捷键**与可重新打开的**首次使用引导**。
 
+当前开发版同时完成 **工程与质量收口**：Windows CI（格式校验、严格静态检查、完整测试、Release 构建与产物上传）、可注入文件系统与内存测试替身、恶意 / 损坏隔离元数据防御、清理 / 撤销 / 扫描并发保护、10 万 / 100 万文件与 UI 帧率基准，以及默认关闭的本地滚动诊断日志与 JSON 诊断包导出。详见 [docs/engineering.md](docs/engineering.md)。
+
 规则与类别也已扩展：**Review 级缓存规则进入普通扫描但默认不勾选**，需要手动选择并额外确认；新增缩略图 / 图标、DirectX / GPU、日志诊断、常见应用、Cargo / Go / NuGet / Maven / JetBrains 等开发缓存、浏览器扩展脚本缓存，以及管理员工具中的 Windows.old 清理。当前内置 **31 条用户规则 + 3 条管理员规则**，兼容边界见 [docs/roadmap.md](docs/roadmap.md)。其他平台与清理能力尚未实现。
 
 ## 如何定义“垃圾”
@@ -240,7 +242,8 @@ lib/
     rules/windows_rules.dart       # Windows Safe / Review 规则
     rules/windows_system_rules.dart # Windows 系统级缓存规则
     rules/rule_update_service.dart # 签名在线更新、规则目录编解码与回滚
-    platform/                      # CleanerPlatform、PathSemantics、系统访问、长路径、扫描优先级与错误辅助
+    platform/                      # CleanerPlatform、PathSemantics、可注入文件系统、系统访问、长路径、扫描优先级与错误辅助
+    diagnostics/app_logger.dart    # 默认关闭的滚动诊断日志与 JSON 诊断包
     safety/path_guard.dart         # 路径包含与保护规则
     scan/                          # 流式扫描器、并行 isolate 服务、NTFS 索引客户端与结果持久化
     clean/quarantine_service.dart  # 隔离、预检、撤销、会话管理与历史记录
@@ -261,7 +264,11 @@ lib/
 windows/runner/system_shell_channel.*  # 原生 Shell API 通道
 windows/runner/system_access_channel.* # 原生提权与系统缓存路径通道
 windows/runner/file_metadata_channel.* # 原生元数据 / DACL 恢复通道
-test/                              # 路径守卫、扫描、隔离区、分析、系统缓存、Shell 通道、长路径与特殊文件系统测试
+test/                              # 单元与 Widget 测试；support/ 内含内存文件系统等替身
+integration_test/                  # 真实 Windows 窗口冒烟与预览帧率基准
+benchmark/                         # 10 万 / 100 万文件扫描、RSS 与 isolate 传输基准
+.github/workflows/windows.yml      # Windows CI：格式、严格分析、测试、构建与产物上传
+docs/engineering.md                # 测试、可注入文件系统、并发、日志、基准与 CI 说明
 docs/roadmap.md                    # 未实现目标与非目标
 docs/filesystem-validation.md      # 长路径 / UNC / FAT / 网络盘 / 只读介质验证说明
 ```
@@ -273,12 +280,36 @@ docs/filesystem-validation.md      # 长路径 / UNC / FAT / 网络盘 / 只读�
 ```bash
 flutter pub get
 flutter run -d windows
-flutter analyze
+
+# 与 CI 相同的质量门禁
+dart format --output=none --set-exit-if-changed lib test benchmark integration_test
+flutter analyze --fatal-infos
 flutter test
 flutter build windows --release
 ```
 
 构建产物位于 `build/windows/x64/runner/Release/`。FAT/exFAT、网络盘与物理只读介质的可选验证命令见 [docs/filesystem-validation.md](docs/filesystem-validation.md)。
+
+可选的桌面与性能验证：
+
+```bash
+flutter test integration_test/app_smoke_test.dart -d windows
+flutter test integration_test/ui_frame_benchmark_test.dart -d windows
+dart run benchmark/scan_benchmark.dart
+dart run benchmark/scan_benchmark.dart --million
+```
+
+## 工程、测试与诊断
+
+- **测试**：单元 / Widget 测试覆盖扫描、清理、撤销、冲突、续跑、设置与分析页；`integration_test/` 在真实 Windows 窗口运行应用级冒烟与帧率场景。
+- **可注入文件系统**：`BroomFileSystem` 同时提供 `dart:io` 实现与内存实现。扫描器、隔离区与诊断日志接受注入，测试和基准不再依赖真实临时目录与平台时序。
+- **隔离元数据防御**：非法会话 ID、路径穿越、超长 / 保留设备名、未知状态、越界计划与截断 JSONL 都会被拒绝或隔离，不会导致越界恢复或静默删除。
+- **并发保护**：控制器 phase 与服务端 `AsyncMutex` 双重防护；只读查询不阻塞，清理、续跑、撤销与永久释放不会交错。
+- **诊断日志**：默认关闭。开启后写入 `%LOCALAPPDATA%\Broom\logs`（最多 3 个 512 KiB 滚动文件），仅记录事件、计数、路径与错误文本，不记录文件内容；设置页可导出 `broom.diagnostics` JSON。
+- **性能基准**：合成文件树测量 10 万 / 100 万文件扫描、RSS 与 isolate 往返传输，真实窗口测量预览滚动帧时间；参考结果见 [benchmark/README.md](benchmark/README.md)。
+- **Windows CI**：`.github/workflows/windows.yml` 执行格式校验、`flutter analyze --fatal-infos`、完整测试、Release 构建并上传产物；桌面集成测试与 1M 基准为手动触发的可选任务。
+
+更完整的设计与安全边界见 [docs/engineering.md](docs/engineering.md)，未完成目标见 [docs/roadmap.md](docs/roadmap.md)。
 
 ## 平台与移动端扩展
 
@@ -308,6 +339,9 @@ flutter build windows --release
 - 设置页不包含定时任务与隔离区位置迁移。已知 v1 配置会自动迁移，更高版本会被拒绝；设置读取失败时回退默认、排除列表阻止扫描、保留策略保持关闭。配置导入的保留策略保持关闭，排除路径需在本机一致才会生效；配置文件上限 1 MiB。清理历史位于隔离区页，最多保留最近 200 次，不提供导出或单独清除入口。
 - 磁盘空间预检只覆盖主动清理 / 续跑的跨卷复制；同卷移动不需要额外空间。若无法查询磁盘空间（例如通道不可用），清理会继续，运行中磁盘写满会被安全中止并保留可续跑的计划。
 - 未知或更高版本的隔离会话不会出现在列表中，也不会被恢复、释放或续跑；需要升级 Broom 后才能处理。已知旧版本会在读取时迁移，不修改原文件，直到下一次会话写入。
+- 隔离区元数据被视为不可信输入：非法名称、越界路径、未知状态与损坏的 JSONL 会被拒绝或隔离。若记录无法解析，会话会保留以便手动释放，但对应文件不能恢复；续跑会停止。
+- 诊断日志默认关闭，写入本地滚动文件；它不会上传任何数据，也不记录文件内容，但会包含路径、错误消息与计数。启用后请按需导出诊断包，并在分享前检查其中的路径信息。
+- Windows CI 覆盖格式、静态分析、单元 / Widget 测试与 Release 构建；桌面集成测试和 1M 性能基准需要手动触发，避免在每次推送时创建真实窗口或占用大量内存。
 - 中英文界面覆盖应用文案与规则元数据，但核心层和 Windows 原生调用返回的错误详情可能仍为中文。
 - 扫描结果默认不限制数量；如配置上限，超过上限时预览与清理只包含已找到的部分。结果流式写入 JSONL，单个结果文件达到 1 GiB 的磁盘保护上限后会停止持久化其余条目并提示，当前内存中的预览不受影响。
 - 结果持久化只保留最近一次完成的扫描，默认 24 小时后不再提供恢复；规则版本变化时会标记为“规则已变化”，仍可查看但建议重新扫描。被取消或失败的扫描不会发布结果。

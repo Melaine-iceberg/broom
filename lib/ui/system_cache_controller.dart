@@ -7,9 +7,9 @@ import '../core/models/scan_models.dart';
 import '../core/models/system_models.dart';
 import '../core/platform/file_lock_probe.dart';
 import '../core/platform/system_access.dart';
-import '../l10n/broom_strings.dart';
 import '../core/platform/system_cache_platform.dart';
 import '../core/scan/scan_service.dart';
+import '../l10n/broom_strings.dart';
 
 enum SystemCachePhase { idle, scanning, preview, cleaning, done }
 

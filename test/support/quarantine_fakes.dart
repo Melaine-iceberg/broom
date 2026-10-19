@@ -45,6 +45,9 @@ class FakeQuarantineService implements QuarantineService {
   CleanHistoryStore? get historyStore => history;
 
   @override
+  bool get operationInProgress => false;
+
+  @override
   Future<QuarantineSpaceAssessment> assessSpace(List<JunkItem> items) async =>
       QuarantineSpaceAssessment(
         requiredBytes: 0,

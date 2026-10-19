@@ -3,10 +3,12 @@ import 'dart:io';
 
 import 'package:broom/app.dart';
 import 'package:broom/core/clean/quarantine_retention_service.dart';
+import 'package:broom/core/diagnostics/app_logger.dart';
 import 'package:broom/core/models/app_settings.dart';
 import 'package:broom/core/models/cleaner_rule.dart';
 import 'package:broom/core/models/quarantine_policy_models.dart';
 import 'package:broom/core/platform/cleaner_platform.dart';
+import 'package:broom/core/platform/memory_file_system.dart';
 import 'package:broom/core/rules/rule_catalog_store.dart';
 import 'package:broom/core/rules/rule_update_service.dart';
 import 'package:broom/core/safety/path_guard.dart';
@@ -129,6 +131,7 @@ void main() {
     RuleUpdateController? ruleUpdates,
     _FakeSystemShell? shell,
     QuarantineRetentionService? retention,
+    AppLogger? logger,
   }) async {
     tester.view.physicalSize = const Size(1200, 1800);
     tester.view.devicePixelRatio = 1;
@@ -137,7 +140,7 @@ void main() {
 
     // These scenarios exercise a returning profile, not the first-run guide.
     await settingsStore.save(AppSettings.defaults);
-    final settings = SettingsController(store: settingsStore);
+    final settings = SettingsController(store: settingsStore, logger: logger);
     settings.load();
     addTearDown(settings.dispose);
     final exclusions = ExclusionStore(
@@ -161,6 +164,7 @@ void main() {
         systemShell: shell ?? _FakeSystemShell(),
         quarantineRetention: retention,
         ruleUpdates: ruleUpdates,
+        logger: logger,
       ),
     );
     await tester.pumpAndSettle();
@@ -446,5 +450,42 @@ void main() {
     expect(retention.policy?.enabled, isFalse);
     expect(retention.policy?.retentionDays, 30);
     expect(find.byType(SnackBar), findsOneWidget);
+  });
+
+  testWidgets('enables diagnostics and exports a JSON bundle', (tester) async {
+    final shell = _FakeSystemShell();
+    final exportFile = File(p.windows.join(temp.path, 'diagnostics.json'));
+    shell.exportPath = exportFile.path;
+    final logFs = MemoryFileSystem();
+    final logger = AppLogger(
+      directoryPath: p.windows.join(temp.path, 'logs'),
+      fileSystem: logFs,
+      clock: () => DateTime.utc(2026, 10, 19, 12),
+    );
+    await pumpApp(tester, shell: shell, logger: logger);
+
+    final toggle = find.byKey(const ValueKey('settings-diagnostics-toggle'));
+    await tester.ensureVisible(toggle);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+
+    expect(settingsStore.load().diagnosticsEnabled, isTrue);
+    expect(logger.level, AppLogLevel.info);
+
+    final export = find.byKey(const ValueKey('settings-diagnostics-export'));
+    await tester.ensureVisible(export);
+    await tester.tap(export);
+    await tester.pumpAndSettle();
+
+    expect(shell.lastSuggestedName, startsWith('broom-diagnostics-'));
+    expect(shell.lastSuggestedName, endsWith('.json'));
+    expect(exportFile.existsSync(), isTrue);
+    final bundle =
+        jsonDecode(exportFile.readAsStringSync()) as Map<String, dynamic>;
+    expect(bundle['kind'], 'broom.diagnostics');
+    expect(bundle['appVersion'], '0.4.0');
+    expect(bundle['loggingEnabled'], isTrue);
+    expect(bundle['logs'], contains('诊断日志已启用'));
+    expect(find.textContaining('诊断信息已导出'), findsOneWidget);
   });
 }

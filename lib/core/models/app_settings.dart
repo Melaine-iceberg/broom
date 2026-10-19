@@ -14,6 +14,7 @@ class AppSettings {
     this.scanItemLimit,
     this.ruleUpdateUrl = '',
     this.onboardingCompleted = true,
+    this.diagnosticsEnabled = false,
   });
 
   static const defaults = AppSettings();
@@ -43,6 +44,10 @@ class AppSettings {
   /// are treated as having completed the introduction.
   final bool onboardingCompleted;
 
+  /// Opt-in local diagnostics. Off by default; logs never include file
+  /// contents and are written to a rolling file in the Broom data directory.
+  final bool diagnosticsEnabled;
+
   bool isRuleEnabled(String ruleId) => !disabledRuleIds.contains(ruleId);
 
   bool isCategoryEnabled(String categoryId) =>
@@ -60,6 +65,7 @@ class AppSettings {
     bool clearScanItemLimit = false,
     String? ruleUpdateUrl,
     bool? onboardingCompleted,
+    bool? diagnosticsEnabled,
   }) {
     return AppSettings(
       theme: theme ?? this.theme,
@@ -78,6 +84,7 @@ class AppSettings {
           : (scanItemLimit ?? this.scanItemLimit),
       ruleUpdateUrl: ruleUpdateUrl ?? this.ruleUpdateUrl,
       onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
+      diagnosticsEnabled: diagnosticsEnabled ?? this.diagnosticsEnabled,
     );
   }
 
@@ -95,7 +102,8 @@ class AppSettings {
         other.useNtfsIndex == useNtfsIndex &&
         other.scanItemLimit == scanItemLimit &&
         other.ruleUpdateUrl == ruleUpdateUrl &&
-        other.onboardingCompleted == onboardingCompleted;
+        other.onboardingCompleted == onboardingCompleted &&
+        other.diagnosticsEnabled == diagnosticsEnabled;
   }
 
   @override
@@ -110,5 +118,6 @@ class AppSettings {
     scanItemLimit,
     ruleUpdateUrl,
     onboardingCompleted,
+    diagnosticsEnabled,
   );
 }
