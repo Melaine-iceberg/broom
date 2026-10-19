@@ -49,3 +49,6 @@ app.*.map.json
 
 # CI benchmark output
 /benchmark-results.txt
+
+# Local Qoder MCP configuration (machine-specific tool paths)
+/.qoder/settings.local.json

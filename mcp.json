@@ -3,7 +3,19 @@
         "dart": {
             "command": "dart",
             "args": [
-                "mcp-server"
+                "mcp-server",
+                "--enable",
+                "launch_app",
+                "--enable",
+                "list_devices",
+                "--enable",
+                "run_tests",
+                "--enable",
+                "get_app_logs",
+                "--enable",
+                "stop_app",
+                "--enable",
+                "list_running_apps"
             ]
         }
     }
