@@ -6,7 +6,7 @@ import '../l10n/broom_strings.dart';
 import '../platform/window_chrome.dart';
 import 'glass_ui.dart';
 
-/// Places the aurora backdrop and the custom title bar above every route.
+/// Places the quiet desktop chrome above every route.
 class BroomWindowFrame extends StatelessWidget {
   const BroomWindowFrame({super.key, required this.child});
 
@@ -15,37 +15,35 @@ class BroomWindowFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final supported = WindowChrome.instance.isSupported;
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        const LiquidBackdrop(),
-        if (!supported)
-          child
-        else
-          Column(
-            children: [
-              const WindowTitleBar(),
-              Expanded(child: child),
-            ],
-          ),
-      ],
+    return ColoredBox(
+      color: BroomColors.page(context),
+      child: supported
+          ? Column(
+              children: [
+                const WindowTitleBar(),
+                Expanded(child: child),
+              ],
+            )
+          : child,
     );
   }
 }
 
-/// A draggable title bar matching the translucent desktop shell.
+/// A compact, rectangular title bar. It reads as window chrome rather than as
+/// another content surface.
 class WindowTitleBar extends StatelessWidget {
   const WindowTitleBar({super.key});
 
-  static const double barHeight = 48;
+  static const double barHeight = 38;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
-    return SizedBox(
+    return Container(
       height: barHeight,
+      decoration: BoxDecoration(color: BroomColors.sidebar(context)),
       child: Row(
         children: [
           Expanded(
@@ -60,66 +58,64 @@ class WindowTitleBar extends StatelessWidget {
                 onSecondaryTapUp: (_) =>
                     unawaited(WindowChrome.instance.showSystemMenu()),
                 child: Padding(
-                  padding: const EdgeInsets.only(left: 18, right: 12),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final showTagline = constraints.maxWidth >= 340;
-                      return Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(6),
-                            child: Image.asset(
-                              'assets/icon/app_icon.png',
-                              width: 22,
-                              height: 22,
-                              cacheWidth: 96,
-                              filterQuality: FilterQuality.medium,
-                              excludeFromSemantics: true,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Icon(
-                                  Icons.cleaning_services_rounded,
-                                  size: 18,
-                                  color: scheme.primary,
-                                );
-                              },
-                            ),
+                  padding: const EdgeInsets.only(left: 14, right: 12),
+                  child: Row(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: Image.asset(
+                          'assets/icon/app_icon.png',
+                          width: 18,
+                          height: 18,
+                          cacheWidth: 72,
+                          filterQuality: FilterQuality.medium,
+                          excludeFromSemantics: true,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Icon(
+                              Icons.cleaning_services_rounded,
+                              size: 16,
+                              color: scheme.onSurfaceVariant,
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 9),
+                      Text(
+                        'Broom',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.1,
+                          color: BroomColors.ink(context),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: BroomColors.ink(context).withValues(
+                            alpha: BroomColors.isDark(context) ? 0.1 : 0.06,
                           ),
-                          const SizedBox(width: 9),
-                          Text(
-                            'Broom',
-                            style: theme.textTheme.labelLarge?.copyWith(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: -0.1,
-                              color: BroomColors.ink(context),
-                            ),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          context.t('本地安全清理'),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            fontSize: 10,
+                            color: BroomColors.inkMuted(context),
                           ),
-                          if (showTagline) ...[
-                            const SizedBox(width: 10),
-                            Container(
-                              width: 1,
-                              height: 11,
-                              color: BroomColors.hairlineStrong(context),
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              context.t('本地安全清理'),
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: BroomColors.inkFaint(context),
-                                letterSpacing: 0.1,
-                              ),
-                            ),
-                          ],
-                        ],
-                      );
-                    },
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
           ),
           const _WindowControls(),
-          const SizedBox(width: 6),
         ],
       ),
     );
@@ -196,14 +192,10 @@ class _WindowButtonState extends State<_WindowButton> {
       return Colors.transparent;
     }
     if (_pressed) {
-      return BroomColors.isDark(context)
-          ? const Color(0x1FFFFFFF)
-          : const Color(0x14000000);
+      return BroomColors.ink(context).withValues(alpha: 0.1);
     }
     if (_hovered) {
-      return BroomColors.isDark(context)
-          ? const Color(0x12FFFFFF)
-          : const Color(0x0D000000);
+      return BroomColors.ink(context).withValues(alpha: 0.06);
     }
     return Colors.transparent;
   }
@@ -243,24 +235,20 @@ class _WindowButtonState extends State<_WindowButton> {
           onTapCancel: () => _setPressed(false),
           onTapUp: (_) => _setPressed(false),
           onTap: widget.onPressed,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 90),
-              curve: Curves.easeOut,
-              width: 40,
-              height: 30,
-              decoration: BoxDecoration(
-                color: _backgroundColor(context),
-                borderRadius: BorderRadius.circular(7),
-              ),
-              alignment: Alignment.center,
-              child: CustomPaint(
-                size: const Size(12, 12),
-                painter: _WindowGlyphPainter(
-                  glyph: widget.glyph,
-                  color: _foregroundColor(context),
-                ),
+          child: Container(
+            width: 44,
+            height: WindowTitleBar.barHeight - 10,
+            margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 5),
+            decoration: BoxDecoration(
+              color: _backgroundColor(context),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            alignment: Alignment.center,
+            child: CustomPaint(
+              size: const Size(10, 10),
+              painter: _WindowGlyphPainter(
+                glyph: widget.glyph,
+                color: _foregroundColor(context),
               ),
             ),
           ),
@@ -287,33 +275,25 @@ class _WindowGlyphPainter extends CustomPainter {
       ..isAntiAlias = true;
 
     canvas.save();
-    canvas.translate((size.width - 12) / 2, (size.height - 12) / 2);
+    canvas.translate((size.width - 10) / 2, (size.height - 10) / 2);
 
     switch (glyph) {
       case _WindowGlyph.minimize:
-        canvas.drawLine(const Offset(1.5, 6.5), const Offset(10.5, 6.5), paint);
+        canvas.drawLine(const Offset(1, 5.5), const Offset(9, 5.5), paint);
       case _WindowGlyph.maximize:
-        canvas.drawRect(const Rect.fromLTWH(1.5, 1.5, 9, 9), paint);
+        canvas.drawRect(const Rect.fromLTWH(1, 1, 8, 8), paint);
       case _WindowGlyph.restore:
-        canvas.drawRect(const Rect.fromLTWH(1.5, 4.5, 6, 6), paint);
+        canvas.drawRect(const Rect.fromLTWH(1, 3.5, 5.5, 5.5), paint);
         canvas.drawPath(
           Path()
-            ..moveTo(4.5, 1.5)
-            ..lineTo(10.5, 1.5)
-            ..lineTo(10.5, 7.5),
+            ..moveTo(3.5, 1)
+            ..lineTo(9, 1)
+            ..lineTo(9, 6.5),
           paint,
         );
       case _WindowGlyph.close:
-        canvas.drawLine(
-          const Offset(1.5, 1.5),
-          const Offset(10.5, 10.5),
-          paint,
-        );
-        canvas.drawLine(
-          const Offset(10.5, 1.5),
-          const Offset(1.5, 10.5),
-          paint,
-        );
+        canvas.drawLine(const Offset(1, 1), const Offset(9, 9), paint);
+        canvas.drawLine(const Offset(9, 1), const Offset(1, 9), paint);
     }
 
     canvas.restore();

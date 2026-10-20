@@ -314,20 +314,8 @@ class _QuarantinePageState extends State<QuarantinePage> {
           icon: const Icon(Icons.arrow_back_rounded),
           tooltip: context.t('返回'),
         ),
-        toolbarHeight: 68,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(context.t('隔离区')),
-            const SizedBox(height: 1),
-            Text(
-              context.t('恢复文件，或永久释放磁盘空间'),
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
+        toolbarHeight: 76,
+        title: Text(context.t('隔离区')),
         actions: [
           IconButton(
             onPressed: _loading || _busy
@@ -401,9 +389,16 @@ class _QuarantinePageState extends State<QuarantinePage> {
               const SizedBox(height: 22),
               Row(
                 children: [
-                  Icon(Icons.restore_rounded, size: 18, color: scheme.primary),
-                  const SizedBox(width: 8),
-                  Text(context.t('待处理清理'), style: theme.textTheme.titleSmall),
+                  Icon(Icons.restore_rounded, size: 20, color: scheme.primary),
+                  const SizedBox(width: 9),
+                  Text(
+                    context.t('待处理清理'),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
                   const Spacer(),
                   if (_sessions.isNotEmpty)
                     Text(
@@ -851,7 +846,7 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
           icon: const Icon(Icons.arrow_back_rounded),
           tooltip: context.t('返回'),
         ),
-        toolbarHeight: 68,
+        toolbarHeight: 76,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1010,19 +1005,15 @@ class _SummaryCard extends StatelessWidget {
     final scheme = theme.colorScheme;
 
     return GlassCard(
-      radius: 22,
-      padding: const EdgeInsets.fromLTRB(26, 24, 26, 22),
-      tint: BroomColors.accent.withValues(
-        alpha: BroomColors.isDark(context) ? 0.06 : 0.05,
-      ),
+      padding: const EdgeInsets.fromLTRB(22, 20, 22, 18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const IconTile(icon: Icons.restore_rounded, size: 44, radius: 13),
-              const SizedBox(width: 14),
+              const IconTile(icon: Icons.restore_rounded, size: 36, radius: 10),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1038,15 +1029,13 @@ class _SummaryCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       pendingFiles == 0
-                          ? context.t('清理过的文件会先放在这里，随时可以恢复。')
+                          ? context.t('清理过的文件会暂存在这里，可随时恢复。')
                           : context.tf(
-                              '{files} 个文件 · {sessions} 次清理。'
-                              '文件仍占用磁盘空间，永久释放后才会腾出空间。',
+                              '{files} 个文件 · {sessions} 次清理，仍占用磁盘空间。',
                               {'files': pendingFiles, 'sessions': sessionCount},
                             ),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: scheme.onSurfaceVariant,
-                        height: 1.55,
                       ),
                     ),
                   ],
@@ -1105,11 +1094,8 @@ class _SummaryCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
               decoration: BoxDecoration(
-                color: scheme.surface.withValues(alpha: 0.52),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: scheme.outlineVariant.withValues(alpha: 0.5),
-                ),
+                color: BroomColors.block(context),
+                borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
                 children: [
@@ -1187,18 +1173,13 @@ class _MetricChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: BoxDecoration(
-        color: scheme.surface.withValues(alpha: 0.62),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 2),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 15, color: scheme.onSurfaceVariant),
-          const SizedBox(width: 7),
+          Icon(icon, size: 14, color: scheme.onSurfaceVariant),
+          const SizedBox(width: 5),
           Text(
             '$label ',
             style: theme.textTheme.labelSmall?.copyWith(
@@ -1209,7 +1190,7 @@ class _MetricChip extends StatelessWidget {
             value,
             style: theme.textTheme.labelSmall?.copyWith(
               color: scheme.onSurface,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -1243,28 +1224,28 @@ class _SessionCard extends StatelessWidget {
 
     return Material(
       color: BroomColors.card(context),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: BroomColors.hairline(context)),
-      ),
+      elevation: 1,
+      shadowColor: Colors.black.withValues(alpha: 0.12),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       clipBehavior: Clip.antiAlias,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 16, 12, 10),
+        padding: const EdgeInsets.fromLTRB(20, 18, 14, 12),
         child: Column(
           children: [
             Row(
               children: [
                 Container(
-                  width: 38,
-                  height: 38,
+                  width: 36,
+                  height: 36,
                   decoration: BoxDecoration(
-                    color: scheme.surface.withValues(alpha: 0.72),
-                    borderRadius: BorderRadius.circular(11),
+                    color: BroomColors.block(context),
+                    borderRadius: BorderRadius.circular(9),
                   ),
                   child: Icon(
                     Icons.inventory_2_outlined,
-                    size: 19,
-                    color: scheme.primary,
+                    size: 18,
+                    color: BroomColors.inkMuted(context),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -1739,28 +1720,31 @@ class _EmptyState extends StatelessWidget {
     return SizedBox(
       width: double.infinity,
       child: GlassCard(
-        radius: 18,
+        radius: 14,
         padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 24),
         child: Center(
           child: Column(
             children: [
-              const IconTile(icon: Icons.restore_rounded, size: 46, radius: 14),
-              const SizedBox(height: 13),
+              Icon(
+                Icons.restore_rounded,
+                size: 28,
+                color: BroomColors.inkFaint(context),
+              ),
+              const SizedBox(height: 12),
               Text(
                 context.t('没有待处理的清理'),
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 5),
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 460),
                 child: Text(
-                  context.t('完成一次清理后，文件会暂存在这里。你可以随时恢复它们，或永久释放空间。'),
+                  context.t('完成一次清理后，文件会暂存在这里。'),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: BroomColors.inkMuted(context),
-                    height: 1.55,
                   ),
                 ),
               ),
@@ -1811,13 +1795,9 @@ class _PolicyNote extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: Text(
-            context.t(
-              '隔离区文件只保存在本机。恢复遇到同名文件时可选择跳过、保留两者或覆盖；'
-              '覆盖需要二次确认。永久释放是不可撤销的操作，页面会再次要求确认。',
-            ),
+            context.t('隔离区文件只保存在本机；永久释放后无法恢复。'),
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
-              height: 1.5,
             ),
           ),
         ),

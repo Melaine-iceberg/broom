@@ -72,20 +72,8 @@ class SettingsPage extends StatelessWidget {
               icon: const Icon(Icons.arrow_back_rounded),
               tooltip: strings.t('返回'),
             ),
-            toolbarHeight: 68,
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(strings.t('设置')),
-                const SizedBox(height: 1),
-                Text(
-                  strings.t('偏好设置'),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
+            toolbarHeight: 76,
+            title: Text(strings.t('设置')),
           ),
           body: Center(
             child: ConstrainedBox(
@@ -107,7 +95,6 @@ class SettingsPage extends StatelessWidget {
                   _Section(
                     icon: Icons.palette_outlined,
                     title: strings.t('外观'),
-                    subtitle: strings.t('语言切换会立即应用，已保存的清理规则与排除项不受影响。'),
                     child: LayoutBuilder(
                       builder: (context, constraints) {
                         final wide = constraints.maxWidth >= 600;
@@ -198,11 +185,10 @@ class SettingsPage extends StatelessWidget {
                       },
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 18),
                   _Section(
                     icon: Icons.tune_rounded,
                     title: strings.t('扫描引擎'),
-                    subtitle: strings.t('并行线程、低优先级与 NTFS 索引均在本机生效；索引不可用时自动回退。'),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -280,12 +266,7 @@ class SettingsPage extends StatelessWidget {
                           contentPadding: EdgeInsets.zero,
                           dense: true,
                           title: Text(strings.t('低优先级扫描')),
-                          subtitle: Text(
-                            strings.t(
-                              '扫描期间尝试使用后台 I/O 与低于正常的 CPU 优先级，'
-                              '减少对前台程序的影响；结束后恢复。',
-                            ),
-                          ),
+                          subtitle: Text(strings.t('扫描时降低后台 I/O 与 CPU 优先级。')),
                         ),
                         SwitchListTile(
                           key: const ValueKey('settings-ntfs-index'),
@@ -295,10 +276,7 @@ class SettingsPage extends StatelessWidget {
                           dense: true,
                           title: Text(strings.t('优先使用 NTFS 索引')),
                           subtitle: Text(
-                            strings.t(
-                              '通过 USN 日志快速枚举文件，需要管理员权限且仅支持 NTFS 卷；'
-                              '不可用时会自动回退到逐目录扫描，不会漏掉回退路径。',
-                            ),
+                            strings.t('需要管理员权限与 NTFS 卷，不可用时自动回退。'),
                           ),
                         ),
                         ListTile(
@@ -334,15 +312,11 @@ class SettingsPage extends StatelessWidget {
                           _restoreBuiltinRules(context, updates),
                     ),
                   ],
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 18),
                   _Section(
                     icon: Icons.rule_rounded,
                     title: strings.t('清理规则'),
-                    subtitle: strings.t(
-                      '关闭的规则不会参与扫描，也不会出现在清理结果中。'
-                      '需确认规则默认扫描但不预选，需要在预览中手动勾选。'
-                      '排除列表仍然优先于所有规则。',
-                    ),
+                    subtitle: strings.t('关闭的规则不会参与扫描。'),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -428,7 +402,7 @@ class SettingsPage extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 18),
                   _Section(
                     icon: Icons.inventory_2_outlined,
                     title: strings.t('扫描与隔离'),
@@ -512,7 +486,7 @@ class SettingsPage extends StatelessWidget {
                       shell: shell,
                     ),
                   ],
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 18),
                   _Section(
                     icon: Icons.info_outline_rounded,
                     title: strings.t('关于'),
@@ -1708,35 +1682,28 @@ class _Section extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: BroomColors.card(context),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: BroomColors.hairline(context)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(
-              alpha: BroomColors.isDark(context) ? 0.1 : 0.035,
-            ),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(26),
+        boxShadow: BroomColors.cardShadow(context),
       ),
       clipBehavior: Clip.antiAlias,
       child: Material(
         type: MaterialType.transparency,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
+          padding: const EdgeInsets.fromLTRB(22, 20, 22, 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Icon(icon, size: 16, color: BroomColors.inkMuted(context)),
-                  const SizedBox(width: 7),
+                  Icon(icon, size: 19, color: BroomColors.inkMuted(context)),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       title,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.15,
                       ),
                     ),
                   ),
@@ -1744,16 +1711,16 @@ class _Section extends StatelessWidget {
                 ],
               ),
               if (subtitle case final subtitle?) ...[
-                const SizedBox(height: 3),
+                const SizedBox(height: 5),
                 Text(
                   subtitle,
-                  style: theme.textTheme.labelSmall?.copyWith(
+                  style: theme.textTheme.bodySmall?.copyWith(
                     color: BroomColors.inkMuted(context),
                     height: 1.5,
                   ),
                 ),
               ],
-              const SizedBox(height: 11),
+              const SizedBox(height: 16),
               child,
             ],
           ),
@@ -1775,6 +1742,7 @@ class _FieldLabel extends StatelessWidget {
       child: Text(
         label,
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          fontSize: 12.5,
           color: Theme.of(context).colorScheme.onSurfaceVariant,
           fontWeight: FontWeight.w600,
         ),
@@ -1803,13 +1771,8 @@ class _SettingsBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: isError
             ? scheme.errorContainer.withValues(alpha: 0.65)
-            : scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isError
-              ? scheme.error.withValues(alpha: 0.2)
-              : scheme.outlineVariant.withValues(alpha: 0.5),
-        ),
+            : BroomColors.block(context),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         children: [

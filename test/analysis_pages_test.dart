@@ -136,7 +136,6 @@ void main() {
     );
 
     expect(find.text('只读'), findsOneWidget);
-    expect(find.textContaining('不会删除、移动或修改'), findsOneWidget);
 
     await tester.tap(find.text('开始分析'));
     await tester.pumpAndSettle();
@@ -197,7 +196,7 @@ void main() {
     expect(find.text('archive.zip'), findsOneWidget);
     expect(find.text('5.0 MB'), findsOneWidget);
     expect(find.text('7.0 MB'), findsWidgets);
-    expect(find.textContaining('不会删除、移动或修改'), findsOneWidget);
+    expect(find.text('只读'), findsOneWidget);
     expect(find.text('清理'), findsNothing);
     expect(
       find.widgetWithIcon(IconButton, Icons.folder_open_rounded),

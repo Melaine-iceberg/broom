@@ -8,6 +8,7 @@ import '../l10n/broom_strings.dart';
 import 'analysis_controllers.dart';
 import 'analysis_widgets.dart';
 import 'format.dart';
+import 'glass_ui.dart';
 
 class DuplicateFinderPage extends StatefulWidget {
   const DuplicateFinderPage({
@@ -59,9 +60,6 @@ class _DuplicateFinderPageState extends State<DuplicateFinderPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -69,20 +67,8 @@ class _DuplicateFinderPageState extends State<DuplicateFinderPage> {
           icon: const Icon(Icons.arrow_back_rounded),
           tooltip: context.t('返回'),
         ),
-        toolbarHeight: 68,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(context.t('重复文件')),
-            const SizedBox(height: 1),
-            Text(
-              context.t('按内容比对 · 手动决定保留哪一份'),
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
+        toolbarHeight: 76,
+        title: Text(context.t('重复文件')),
         actions: const [
           Padding(
             padding: EdgeInsets.only(right: 20),
@@ -117,13 +103,6 @@ class _DuplicateFinderPageState extends State<DuplicateFinderPage> {
                       const SizedBox(height: 10),
                     ],
                     _ConfigPanel(controller: _controller),
-                    const SizedBox(height: 10),
-                    ReadOnlyHint(
-                      message: context.t(
-                        '只读分析：Broom 只读取文件内容进行比对，不会删除、移动或修改任何文件。'
-                        '是否保留重复项由你自行决定，分析结果也不会自动勾选。',
-                      ),
-                    ),
                     const SizedBox(height: 14),
                     Expanded(child: _buildContent(context)),
                   ],
@@ -246,13 +225,11 @@ class _ConfigPanel extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
           decoration: BoxDecoration(
-            color: scheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(15),
-            border: Border.all(
-              color: scheme.outlineVariant.withValues(alpha: 0.55),
-            ),
+            color: BroomColors.card(context),
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: BroomColors.cardShadow(context),
           ),
           child: Row(
             children: [
@@ -310,13 +287,11 @@ class _DuplicateSummary extends StatelessWidget {
     final scheme = theme.colorScheme;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 15, 20, 14),
+      padding: const EdgeInsets.fromLTRB(22, 18, 22, 16),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.55),
-        ),
+        color: BroomColors.card(context),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: BroomColors.cardShadow(context),
       ),
       child: Column(
         children: [
@@ -421,13 +396,11 @@ class _DuplicateGroupCard extends StatelessWidget {
     final hidden = group.files.length - _maxVisibleFiles;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.55),
-        ),
+        color: BroomColors.card(context),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: BroomColors.cardShadow(context),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -600,7 +573,6 @@ class _NoDuplicates extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
 
     return Center(
       child: SingleChildScrollView(
@@ -608,34 +580,43 @@ class _NoDuplicates extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
           child: Container(
-            padding: const EdgeInsets.fromLTRB(28, 32, 28, 28),
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
             decoration: BoxDecoration(
-              color: scheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(
-                color: scheme.outlineVariant.withValues(alpha: 0.5),
-              ),
+              color: BroomColors.card(context),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: BroomColors.cardShadow(context),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(
                   Icons.check_circle_outline_rounded,
-                  size: 44,
-                  color: scheme.primary,
+                  size: 20,
+                  color: BroomColors.inkMuted(context),
                 ),
-                const SizedBox(height: 14),
-                Text(context.t('没有发现重复文件'), style: theme.textTheme.titleMedium),
-                const SizedBox(height: 6),
-                Text(
-                  context.tf('已检查 {scanned} 个文件（{bytes}），所选目录中没有内容完全相同的文件。', {
-                    'scanned': formatCount(report.scannedFiles),
-                    'bytes': formatBytes(report.scannedBytes),
-                  }),
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                    height: 1.55,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        context.t('没有发现重复文件'),
+                        style: theme.textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        context.tf(
+                          '已检查 {scanned} 个文件（{bytes}），所选目录中没有内容完全相同的文件。',
+                          {
+                            'scanned': formatCount(report.scannedFiles),
+                            'bytes': formatBytes(report.scannedBytes),
+                          },
+                        ),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: BroomColors.inkMuted(context),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -653,44 +634,28 @@ class _IdleState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
 
     return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.only(bottom: 24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 580),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 84,
-                height: 84,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: scheme.primaryContainer.withValues(alpha: 0.4),
-                ),
-                child: Icon(
-                  Icons.content_copy_rounded,
-                  size: 38,
-                  color: scheme.primary,
-                ),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 60),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.content_copy_outlined,
+              size: 30,
+              color: BroomColors.inkFaint(context),
+            ),
+            const SizedBox(height: 12),
+            Text(context.t('选择文件夹开始分析'), style: theme.textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              context.t('只读取文件内容，不会修改文件。'),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: BroomColors.inkMuted(context),
               ),
-              const SizedBox(height: 18),
-              Text(context.t('找出内容相同的文件'), style: theme.textTheme.titleLarge),
-              const SizedBox(height: 7),
-              Text(
-                '选择一个文件夹开始分析。Broom 会先按文件大小分组，'
-                '再比对内容，避免对每个文件都做完整读取。\n'
-                '分析结果只读，不会替你选择保留项。',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                  height: 1.65,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

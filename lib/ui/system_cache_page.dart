@@ -59,9 +59,6 @@ class _SystemCachePageState extends State<SystemCachePage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
     return ListenableBuilder(
       listenable: controller,
       builder: (context, _) {
@@ -72,20 +69,8 @@ class _SystemCachePageState extends State<SystemCachePage> {
               icon: const Icon(Icons.arrow_back_rounded),
               tooltip: context.t('返回'),
             ),
-            toolbarHeight: 68,
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(context.t('系统级缓存')),
-                const SizedBox(height: 1),
-                Text(
-                  context.t('Windows 更新、传递优化与 Windows.old · 需管理员权限'),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
+            toolbarHeight: 76,
+            title: Text(context.t('系统级缓存')),
             actions: [
               Padding(
                 padding: const EdgeInsets.only(right: 20),
@@ -340,13 +325,8 @@ class _ReviewWarning extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(13, 10, 13, 10),
-      decoration: BoxDecoration(
-        color: BroomColors.amber.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(11),
-        border: Border.all(color: BroomColors.amber.withValues(alpha: 0.22)),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -355,10 +335,10 @@ class _ReviewWarning extends StatelessWidget {
             child: Icon(
               Icons.warning_amber_rounded,
               size: 15,
-              color: BroomColors.amber,
+              color: BroomColors.warning,
             ),
           ),
-          const SizedBox(width: 9),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               context.t(
@@ -528,11 +508,9 @@ class _IdleView extends StatelessWidget {
         Container(
           padding: const EdgeInsets.fromLTRB(26, 26, 26, 24),
           decoration: BoxDecoration(
-            color: scheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(
-              color: scheme.outlineVariant.withValues(alpha: 0.55),
-            ),
+            color: BroomColors.card(context),
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: BroomColors.cardShadow(context),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -624,13 +602,13 @@ class _SystemRuleCard extends StatelessWidget {
           ? scheme.primaryContainer.withValues(
               alpha: theme.brightness == Brightness.dark ? 0.24 : 0.3,
             )
-          : scheme.surfaceContainerLow,
+          : BroomColors.block(context),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         side: BorderSide(
           color: selected
               ? scheme.primary.withValues(alpha: 0.18)
-              : scheme.outlineVariant.withValues(alpha: 0.5),
+              : Colors.transparent,
         ),
       ),
       clipBehavior: Clip.antiAlias,

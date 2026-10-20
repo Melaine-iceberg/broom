@@ -8,6 +8,7 @@ import '../l10n/broom_strings.dart';
 import 'analysis_controllers.dart';
 import 'analysis_widgets.dart';
 import 'format.dart';
+import 'glass_ui.dart';
 
 class LargeFilesPage extends StatefulWidget {
   const LargeFilesPage({
@@ -59,9 +60,6 @@ class _LargeFilesPageState extends State<LargeFilesPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -69,20 +67,8 @@ class _LargeFilesPageState extends State<LargeFilesPage> {
           icon: const Icon(Icons.arrow_back_rounded),
           tooltip: context.t('返回'),
         ),
-        toolbarHeight: 68,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(context.t('大文件分析')),
-            const SizedBox(height: 1),
-            Text(
-              context.t('按体积排序 · 找出最占空间的文件'),
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
+        toolbarHeight: 76,
+        title: Text(context.t('大文件分析')),
         actions: const [
           Padding(
             padding: EdgeInsets.only(right: 20),
@@ -117,13 +103,6 @@ class _LargeFilesPageState extends State<LargeFilesPage> {
                       const SizedBox(height: 10),
                     ],
                     _ConfigPanel(controller: _controller),
-                    const SizedBox(height: 10),
-                    ReadOnlyHint(
-                      message: context.t(
-                        '只读分析：Broom 只读取文件的大小与位置，不会删除、移动或修改任何文件。'
-                        '如需清理，请先在文件资源管理器中确认文件用途。',
-                      ),
-                    ),
                     const SizedBox(height: 14),
                     Expanded(child: _buildContent(context)),
                   ],
@@ -257,13 +236,11 @@ class _ConfigPanel extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
           decoration: BoxDecoration(
-            color: scheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(15),
-            border: Border.all(
-              color: scheme.outlineVariant.withValues(alpha: 0.55),
-            ),
+            color: BroomColors.card(context),
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: BroomColors.cardShadow(context),
           ),
           child: Row(
             children: [
@@ -321,13 +298,11 @@ class _LargeFileSummary extends StatelessWidget {
     final scheme = theme.colorScheme;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 15, 20, 14),
+      padding: const EdgeInsets.fromLTRB(22, 18, 22, 16),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.55),
-        ),
+        color: BroomColors.card(context),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: BroomColors.cardShadow(context),
       ),
       child: Column(
         children: [
@@ -431,29 +406,26 @@ class _LargeFileRow extends StatelessWidget {
     final scheme = theme.colorScheme;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 11, 8, 11),
+      padding: const EdgeInsets.fromLTRB(16, 12, 10, 12),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.55),
-        ),
+        color: BroomColors.card(context),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         children: [
           Container(
-            width: 34,
-            height: 34,
+            width: 32,
+            height: 32,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: scheme.surface.withValues(alpha: 0.72),
-              borderRadius: BorderRadius.circular(10),
+              color: BroomColors.block(context),
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               '$rank',
               style: theme.textTheme.labelMedium?.copyWith(
-                color: scheme.onSurfaceVariant,
-                fontWeight: FontWeight.w700,
+                color: BroomColors.inkMuted(context),
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -528,7 +500,6 @@ class _NoLargeFiles extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
 
     return Center(
       child: SingleChildScrollView(
@@ -536,41 +507,43 @@ class _NoLargeFiles extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
           child: Container(
-            padding: const EdgeInsets.fromLTRB(28, 32, 28, 28),
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
             decoration: BoxDecoration(
-              color: scheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(
-                color: scheme.outlineVariant.withValues(alpha: 0.5),
-              ),
+              color: BroomColors.card(context),
+              borderRadius: BorderRadius.circular(14),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(
                   Icons.check_circle_outline_rounded,
-                  size: 44,
-                  color: scheme.primary,
+                  size: 20,
+                  color: BroomColors.inkMuted(context),
                 ),
-                const SizedBox(height: 14),
-                Text(
-                  context.t('没有超过阈值的大文件'),
-                  style: theme.textTheme.titleMedium,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  context.tf(
-                    '已检查 {scanned} 个文件（{bytes}），所选目录中没有大于 {threshold} 的文件。',
-                    {
-                      'scanned': formatCount(report.scannedFiles),
-                      'bytes': formatBytes(report.scannedBytes),
-                      'threshold': formatBytes(minFileSize),
-                    },
-                  ),
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                    height: 1.55,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        context.t('没有超过阈值的大文件'),
+                        style: theme.textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        context.tf(
+                          '已检查 {scanned} 个文件（{bytes}），所选目录中没有大于 {threshold} 的文件。',
+                          {
+                            'scanned': formatCount(report.scannedFiles),
+                            'bytes': formatBytes(report.scannedBytes),
+                            'threshold': formatBytes(minFileSize),
+                          },
+                        ),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: BroomColors.inkMuted(context),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -588,43 +561,28 @@ class _IdleState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
 
     return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.only(bottom: 24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 580),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 84,
-                height: 84,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: scheme.primaryContainer.withValues(alpha: 0.4),
-                ),
-                child: Icon(
-                  Icons.sd_storage_rounded,
-                  size: 38,
-                  color: scheme.primary,
-                ),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 60),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.sd_storage_outlined,
+              size: 30,
+              color: BroomColors.inkFaint(context),
+            ),
+            const SizedBox(height: 12),
+            Text(context.t('选择文件夹查看大文件'), style: theme.textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              context.t('按体积从大到小排列，只读分析。'),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: BroomColors.inkMuted(context),
               ),
-              const SizedBox(height: 18),
-              Text(context.t('看看是什么占用了空间'), style: theme.textTheme.titleLarge),
-              const SizedBox(height: 7),
-              Text(
-                '选择一个文件夹开始分析。Broom 会找出超过阈值的大文件，'
-                '按体积从大到小排列。\n分析结果只读，不会清理任何文件。',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                  height: 1.65,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

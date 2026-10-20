@@ -65,20 +65,8 @@ class _CleanHistoryPageState extends State<CleanHistoryPage> {
           icon: const Icon(Icons.arrow_back_rounded),
           tooltip: context.t('返回'),
         ),
-        toolbarHeight: 68,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(context.t('清理历史')),
-            const SizedBox(height: 1),
-            Text(
-              context.t('记录每次清理的时间、规则、数量与结果'),
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
+        toolbarHeight: 76,
+        title: Text(context.t('清理历史')),
         actions: [
           IconButton(
             onPressed: _loading ? null : _load,
@@ -115,13 +103,9 @@ class _CleanHistoryPageState extends State<CleanHistoryPage> {
                 ],
               const SizedBox(height: 8),
               Text(
-                context.t(
-                  '历史记录独立于隔离区：恢复或永久释放文件不会删除这里的记录。'
-                  '最多保留最近 200 次清理。',
-                ),
+                context.t('最多保留最近 200 次清理。'),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: scheme.onSurfaceVariant,
-                  height: 1.5,
                 ),
               ),
             ],
@@ -142,50 +126,33 @@ class _HistoryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final (:label, :color, :background) = switch (record.outcome) {
+    final (:label, :color) = switch (record.outcome) {
       CleanHistoryOutcome.completed => (
         label: context.t('已完成'),
-        color: scheme.onPrimaryContainer,
-        background: scheme.primaryContainer,
+        color: BroomColors.success,
       ),
       CleanHistoryOutcome.partial => (
         label: context.t('部分完成'),
-        color: scheme.onTertiaryContainer,
-        background: scheme.tertiaryContainer,
+        color: BroomColors.warning,
       ),
       CleanHistoryOutcome.cancelled => (
         label: context.t('已取消'),
-        color: scheme.onTertiaryContainer,
-        background: scheme.tertiaryContainer,
+        color: BroomColors.inkMuted(context),
       ),
       CleanHistoryOutcome.failed => (
         label: context.t('失败'),
-        color: scheme.onErrorContainer,
-        background: scheme.errorContainer,
+        color: scheme.error,
       ),
     };
 
     return GlassCard(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
-      radius: 16,
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: scheme.surface.withValues(alpha: 0.72),
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                child: Icon(
-                  Icons.history_rounded,
-                  size: 19,
-                  color: scheme.primary,
-                ),
-              ),
+              const IconTile(icon: Icons.history_rounded, size: 36, radius: 10),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -204,21 +171,11 @@ class _HistoryCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: background.withValues(alpha: 0.55),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            label,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: color,
-                              fontWeight: FontWeight.w600,
-                            ),
+                        Text(
+                          label,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: color,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
@@ -311,15 +268,8 @@ class _HistoryMetric extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-      decoration: BoxDecoration(
-        color: scheme.surface.withValues(alpha: 0.62),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.45),
-        ),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 2),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -346,17 +296,16 @@ class _RuleChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
       decoration: BoxDecoration(
-        color: scheme.primaryContainer.withValues(alpha: 0.28),
-        borderRadius: BorderRadius.circular(7),
+        color: BroomColors.block(context),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
         count == null ? label : '$label · $count',
         style: theme.textTheme.labelSmall?.copyWith(
-          color: scheme.onPrimaryContainer,
+          color: BroomColors.inkMuted(context),
         ),
       ),
     );
@@ -369,37 +318,34 @@ class _EmptyHistory extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return SizedBox(
-      width: double.infinity,
-      child: GlassCard(
-        radius: 18,
-        padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 24),
-        child: Center(
-          child: Column(
-            children: [
-              const IconTile(icon: Icons.history_rounded, size: 46, radius: 14),
-              const SizedBox(height: 13),
-              Text(
-                context.t('还没有清理历史'),
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 6),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 460),
-                child: Text(
-                  context.t('完成一次清理后，这里会保留一条记录；恢复或永久释放隔离区不会删除历史。'),
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: BroomColors.inkMuted(context),
-                    height: 1.55,
-                  ),
-                ),
-              ),
-            ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 24),
+      child: Column(
+        children: [
+          Icon(
+            Icons.history_rounded,
+            size: 28,
+            color: BroomColors.inkFaint(context),
           ),
-        ),
+          const SizedBox(height: 12),
+          Text(
+            context.t('还没有清理历史'),
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 5),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460),
+            child: Text(
+              context.t('完成一次清理后，这里会保留一条记录；恢复或永久释放隔离区不会删除历史。'),
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: BroomColors.inkMuted(context),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

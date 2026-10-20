@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/shell/system_shell.dart';
 import '../l10n/broom_strings.dart';
 import 'clean_controller.dart';
+import 'glass_ui.dart';
 
 class ExclusionsPage extends StatefulWidget {
   const ExclusionsPage({
@@ -123,7 +124,7 @@ class _ExclusionsPageState extends State<ExclusionsPage> {
               icon: const Icon(Icons.arrow_back_rounded),
               tooltip: context.t('返回'),
             ),
-            toolbarHeight: 68,
+            toolbarHeight: 76,
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -159,9 +160,19 @@ class _ExclusionsPageState extends State<ExclusionsPage> {
                     const SizedBox(height: 18),
                     Row(
                       children: [
+                        Icon(
+                          Icons.block_rounded,
+                          size: 19,
+                          color: scheme.primary,
+                        ),
+                        const SizedBox(width: 9),
                         Text(
                           context.t('排除项'),
-                          style: theme.textTheme.titleSmall,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.2,
+                          ),
                         ),
                         const SizedBox(width: 8),
                         Text(
@@ -193,11 +204,9 @@ class _ExclusionsPageState extends State<ExclusionsPage> {
                     Expanded(
                       child: Container(
                         decoration: BoxDecoration(
-                          color: scheme.surfaceContainerLow,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: scheme.outlineVariant.withValues(alpha: 0.5),
-                          ),
+                          color: BroomColors.card(context),
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: BroomColors.cardShadow(context),
                         ),
                         clipBehavior: Clip.antiAlias,
                         child: paths.isEmpty
@@ -257,10 +266,10 @@ class _InfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       decoration: BoxDecoration(
-        color: scheme.primaryContainer.withValues(alpha: 0.32),
-        borderRadius: BorderRadius.circular(13),
+        color: scheme.primaryContainer.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: scheme.primary.withValues(alpha: 0.12)),
       ),
       child: Row(
@@ -299,7 +308,7 @@ class _LoadErrorBanner extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
       decoration: BoxDecoration(
         color: scheme.errorContainer.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: scheme.error.withValues(alpha: 0.18)),
       ),
       child: Row(

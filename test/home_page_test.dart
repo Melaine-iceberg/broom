@@ -247,18 +247,16 @@ void main() {
     await tester.pumpWidget(BroomApp(controller: controller));
 
     expect(find.text('Broom'), findsOneWidget);
-    expect(find.text('本地安全清理'), findsOneWidget);
     expect(find.byKey(const ValueKey('window-minimize')), findsOneWidget);
     expect(find.byKey(const ValueKey('window-maximize')), findsOneWidget);
     expect(find.byKey(const ValueKey('window-close')), findsOneWidget);
     expect(find.text('开始扫描'), findsOneWidget);
-    expect(find.text('本次扫描范围'), findsOneWidget);
+    expect(find.text('扫描范围'), findsWidgets);
     expect(find.text('工具'), findsWidgets);
     expect(find.byKey(const ValueKey('tool-recycle-bin')), findsOneWidget);
     expect(find.byKey(const ValueKey('tool-duplicate-files')), findsOneWidget);
     expect(find.byKey(const ValueKey('tool-large-files')), findsOneWidget);
-    expect(find.text('需确认'), findsOneWidget);
-    expect(find.text('只读'), findsNWidgets(2));
+    expect(find.text('按文件内容查找重复项'), findsOneWidget);
 
     await tester.tap(find.text('开始扫描'));
     await tester.pump();
@@ -377,7 +375,10 @@ void main() {
 
     final card = find.byKey(const ValueKey('quarantine-card'));
     expect(card, findsOneWidget);
-    expect(find.textContaining('隔离区暂存了'), findsOneWidget);
+    expect(
+      find.descendant(of: card, matching: find.text('管理')),
+      findsOneWidget,
+    );
 
     await tester.ensureVisible(card);
     await tester.tap(find.descendant(of: card, matching: find.text('管理')));
@@ -427,7 +428,7 @@ void main() {
     await tester.tap(find.byTooltip('返回'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('其中 1 次未正常结束'), findsOneWidget);
+    expect(find.textContaining('1 次清理未正常结束'), findsOneWidget);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('marks rules that are partially excluded', (tester) async {
@@ -703,7 +704,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('快捷键：F5'), findsOneWidget);
+    expect(find.byTooltip('开始扫描（F5）'), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.f5);
     await tester.pumpAndSettle();

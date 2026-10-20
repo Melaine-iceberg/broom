@@ -30,158 +30,119 @@ class AppSidebar extends StatelessWidget {
   final int quarantineCount;
   final bool showHistory;
 
+  static const double expandedWidth = 224;
+  static const double compactWidth = 64;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return SizedBox(
-      width: expanded ? 214 : 68,
-      child: GlassSurface(
-        radius: 22,
-        blur: 28,
-        color: BroomColors.sidebar(context),
-        shadow: false,
-        padding: EdgeInsets.fromLTRB(
-          expanded ? 10 : 8,
-          14,
-          expanded ? 10 : 8,
-          12,
-        ),
-        child: Stack(
-          children: [
-            const Positioned.fill(
-              child: AmbientGlow(
-                alignment: Alignment.topLeft,
-                radius: 1.15,
-                opacity: 0.22,
-              ),
+    final labelStyle = theme.textTheme.labelSmall?.copyWith(
+      fontSize: 10.5,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0.2,
+      color: BroomColors.inkFaint(context),
+    );
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
+      width: expanded ? expandedWidth : compactWidth,
+      color: BroomColors.sidebar(context),
+      padding: EdgeInsets.fromLTRB(
+        expanded ? 12 : 8,
+        14,
+        expanded ? 12 : 8,
+        12,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _NavItem(
+            key: const ValueKey('sidebar-clean'),
+            icon: Icons.cleaning_services_rounded,
+            label: context.t('清理'),
+            expanded: expanded,
+            selected: section == AppSection.clean,
+            onTap: () => onSelected(AppSection.clean),
+          ),
+          const SizedBox(height: 18),
+          if (expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+              child: Text(context.t('工具'), style: labelStyle),
             ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _NavItem(
-                  key: const ValueKey('sidebar-clean'),
-                  icon: Icons.cleaning_services_rounded,
-                  label: context.t('清理'),
-                  expanded: expanded,
-                  selected: section == AppSection.clean,
-                  onTap: () => onSelected(AppSection.clean),
-                ),
-                SizedBox(height: expanded ? 22 : 16),
-                if (expanded)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 7),
-                    child: Text(
-                      context.t('工具'),
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: BroomColors.inkFaint(context),
-                        letterSpacing: 0.6,
-                      ),
-                    ),
-                  ),
-                _NavItem(
-                  key: const ValueKey('sidebar-system-cache'),
-                  icon: Icons.admin_panel_settings_outlined,
-                  label: context.t('系统缓存'),
-                  expanded: expanded,
-                  selected: section == AppSection.systemCache,
-                  onTap: () => onSelected(AppSection.systemCache),
-                ),
-                _NavItem(
-                  key: const ValueKey('sidebar-recycle-bin'),
-                  icon: Icons.delete_outline_rounded,
-                  label: context.t('回收站'),
-                  expanded: expanded,
-                  selected: section == AppSection.recycleBin,
-                  onTap: () => onSelected(AppSection.recycleBin),
-                ),
-                _NavItem(
-                  key: const ValueKey('sidebar-duplicates'),
-                  icon: Icons.copy_all_outlined,
-                  label: context.t('重复文件'),
-                  expanded: expanded,
-                  selected: section == AppSection.duplicates,
-                  onTap: () => onSelected(AppSection.duplicates),
-                ),
-                _NavItem(
-                  key: const ValueKey('sidebar-large-files'),
-                  icon: Icons.sd_storage_outlined,
-                  label: context.t('大文件'),
-                  expanded: expanded,
-                  selected: section == AppSection.largeFiles,
-                  onTap: () => onSelected(AppSection.largeFiles),
-                ),
-                SizedBox(height: expanded ? 22 : 16),
-                if (expanded)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 7),
-                    child: Text(
-                      context.t('记录'),
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: BroomColors.inkFaint(context),
-                        letterSpacing: 0.6,
-                      ),
-                    ),
-                  ),
-                _NavItem(
-                  key: const ValueKey('sidebar-quarantine'),
-                  icon: Icons.inventory_2_outlined,
-                  label: context.t('隔离区'),
-                  expanded: expanded,
-                  selected: section == AppSection.quarantine,
-                  badge: quarantineCount > 0 ? '$quarantineCount' : null,
-                  onTap: () => onSelected(AppSection.quarantine),
-                ),
-                if (showHistory)
-                  _NavItem(
-                    key: const ValueKey('sidebar-history'),
-                    icon: Icons.history_rounded,
-                    label: context.t('清理历史'),
-                    expanded: expanded,
-                    selected: section == AppSection.history,
-                    onTap: () => onSelected(AppSection.history),
-                  ),
-                const Spacer(),
-                if (expanded)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.shield_outlined,
-                          size: 13,
-                          color: BroomColors.inkFaint(context),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            context.t('仅在本机处理'),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: BroomColors.inkFaint(context),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                Container(
-                  height: 1,
-                  margin: const EdgeInsets.only(bottom: 8, left: 6, right: 6),
-                  color: BroomColors.hairline(context),
-                ),
-                _NavItem(
-                  key: const ValueKey('open-settings'),
-                  icon: Icons.settings_outlined,
-                  label: context.t('设置'),
-                  expanded: expanded,
-                  selected: section == AppSection.settings,
-                  onTap: () => onSelected(AppSection.settings),
-                ),
-              ],
+          _NavItem(
+            key: const ValueKey('sidebar-system-cache'),
+            icon: Icons.admin_panel_settings_outlined,
+            label: context.t('系统缓存'),
+            expanded: expanded,
+            selected: section == AppSection.systemCache,
+            onTap: () => onSelected(AppSection.systemCache),
+          ),
+          _NavItem(
+            key: const ValueKey('sidebar-recycle-bin'),
+            icon: Icons.delete_outline_rounded,
+            label: context.t('回收站'),
+            expanded: expanded,
+            selected: section == AppSection.recycleBin,
+            onTap: () => onSelected(AppSection.recycleBin),
+          ),
+          _NavItem(
+            key: const ValueKey('sidebar-duplicates'),
+            icon: Icons.copy_all_outlined,
+            label: context.t('重复文件'),
+            expanded: expanded,
+            selected: section == AppSection.duplicates,
+            onTap: () => onSelected(AppSection.duplicates),
+          ),
+          _NavItem(
+            key: const ValueKey('sidebar-large-files'),
+            icon: Icons.sd_storage_outlined,
+            label: context.t('大文件'),
+            expanded: expanded,
+            selected: section == AppSection.largeFiles,
+            onTap: () => onSelected(AppSection.largeFiles),
+          ),
+          const SizedBox(height: 18),
+          if (expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+              child: Text(context.t('记录'), style: labelStyle),
             ),
-          ],
-        ),
+          _NavItem(
+            key: const ValueKey('sidebar-quarantine'),
+            icon: Icons.inventory_2_outlined,
+            label: context.t('隔离区'),
+            expanded: expanded,
+            selected: section == AppSection.quarantine,
+            badge: quarantineCount > 0 ? '$quarantineCount' : null,
+            onTap: () => onSelected(AppSection.quarantine),
+          ),
+          if (showHistory)
+            _NavItem(
+              key: const ValueKey('sidebar-history'),
+              icon: Icons.history_rounded,
+              label: context.t('清理历史'),
+              expanded: expanded,
+              selected: section == AppSection.history,
+              onTap: () => onSelected(AppSection.history),
+            ),
+          const Spacer(),
+          Container(
+            height: 1,
+            margin: EdgeInsets.symmetric(horizontal: expanded ? 4 : 10),
+            color: BroomColors.hairline(context),
+          ),
+          const SizedBox(height: 8),
+          _NavItem(
+            key: const ValueKey('open-settings'),
+            icon: Icons.settings_outlined,
+            label: context.t('设置'),
+            expanded: expanded,
+            selected: section == AppSection.settings,
+            onTap: () => onSelected(AppSection.settings),
+          ),
+        ],
       ),
     );
   }
@@ -219,35 +180,30 @@ class _NavItemState extends State<_NavItem> {
     final theme = Theme.of(context);
     final selected = widget.selected;
     final foreground = selected
-        ? (BroomColors.isDark(context) ? BroomColors.accent : scheme.primary)
+        ? BroomColors.ink(context)
         : BroomColors.inkMuted(context);
+    final iconColor = selected ? scheme.primary : BroomColors.inkMuted(context);
 
     final background = selected
-        ? scheme.primary.withValues(
-            alpha: BroomColors.isDark(context) ? 0.16 : 0.12,
-          )
+        ? BroomColors.ink(context)
+              .withValues(alpha: BroomColors.isDark(context) ? 0.1 : 0.07)
         : _hovered
-        ? Colors.white.withValues(
-            alpha: BroomColors.isDark(context) ? 0.055 : 0.5,
-          )
+        ? BroomColors.ink(context)
+              .withValues(alpha: BroomColors.isDark(context) ? 0.06 : 0.04)
         : Colors.transparent;
 
     final item = AnimatedContainer(
       duration: const Duration(milliseconds: 140),
       curve: Curves.easeOut,
-      height: 38,
+      height: 40,
       margin: const EdgeInsets.symmetric(vertical: 1.5),
-      padding: EdgeInsets.symmetric(horizontal: widget.expanded ? 10 : 0),
+      padding: EdgeInsets.symmetric(horizontal: widget.expanded ? 13 : 0),
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: _focused
-              ? scheme.primary.withValues(alpha: 0.7)
-              : selected
-              ? scheme.primary.withValues(alpha: 0.18)
-              : Colors.transparent,
-        ),
+        borderRadius: BorderRadius.circular(11),
+        border: _focused
+            ? Border.all(color: scheme.primary.withValues(alpha: 0.7))
+            : null,
       ),
       child: Row(
         mainAxisAlignment: widget.expanded
@@ -256,52 +212,60 @@ class _NavItemState extends State<_NavItem> {
         children: [
           Stack(
             clipBehavior: Clip.none,
+            alignment: Alignment.center,
             children: [
-              Icon(widget.icon, size: 18, color: foreground),
+              Icon(widget.icon, size: 21, color: iconColor),
               if (!widget.expanded && widget.badge != null)
                 Positioned(
-                  right: -2,
-                  top: -1,
+                  right: -4,
+                  top: 3,
                   child: Container(
-                    width: 5,
-                    height: 5,
+                    width: 7,
+                    height: 7,
                     decoration: BoxDecoration(
                       color: scheme.primary,
                       shape: BoxShape.circle,
+                      border: Border.all(
+                        color: BroomColors.sidebar(context),
+                        width: 1.5,
+                      ),
                     ),
                   ),
                 ),
             ],
           ),
           if (widget.expanded) ...[
-            const SizedBox(width: 10),
+            const SizedBox(width: 12),
             Expanded(
               child: Text(
                 widget.label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.labelLarge?.copyWith(
-                  fontSize: 12.5,
+                  fontSize: 14,
                   fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                  color: selected
-                      ? BroomColors.ink(context)
-                      : BroomColors.inkMuted(context),
+                  letterSpacing: -0.1,
+                  color: foreground,
                 ),
               ),
             ),
             if (widget.badge case final badge?)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                height: 19,
+                constraints: const BoxConstraints(minWidth: 19),
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: scheme.primary.withValues(alpha: 0.16),
+                  color: scheme.primary,
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
                   badge,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: foreground,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 9.5,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    height: 1,
+                    fontWeight: FontWeight.w700,
+                    color: scheme.onPrimary,
                   ),
                 ),
               ),
@@ -334,7 +298,25 @@ class _NavItemState extends State<_NavItem> {
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: widget.onTap,
-              child: item,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  item,
+                  if (selected)
+                    Positioned(
+                      left: widget.expanded ? -12 : 5,
+                      top: 11,
+                      child: Container(
+                        width: 3,
+                        height: 18,
+                        decoration: BoxDecoration(
+                          color: scheme.primary,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),

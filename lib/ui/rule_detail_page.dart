@@ -202,7 +202,7 @@ class _RuleDetailPageState extends State<RuleDetailPage> {
                   icon: const Icon(Icons.arrow_back_rounded),
                   tooltip: context.t('返回（Esc）'),
                 ),
-                toolbarHeight: 68,
+                toolbarHeight: 76,
                 title: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

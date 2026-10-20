@@ -12,45 +12,32 @@ class RiskBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (:label, :color) = switch (risk) {
-      CleanRisk.safe => (label: context.t('可撤销'), color: BroomColors.accent),
-      CleanRisk.review => (label: context.t('需确认'), color: BroomColors.amber),
-      CleanRisk.info => (label: context.t('只读'), color: BroomColors.violet),
+    final (icon, label, color) = switch (risk) {
+      CleanRisk.safe => (
+        Icons.undo_rounded,
+        context.t('可撤销'),
+        BroomColors.inkMuted(context),
+      ),
+      CleanRisk.review => (
+        Icons.shield_outlined,
+        context.t('需确认'),
+        BroomColors.warning,
+      ),
+      CleanRisk.info => (
+        Icons.visibility_outlined,
+        context.t('只读'),
+        BroomColors.inkMuted(context),
+      ),
     };
-    return StatusPill(label: label, color: color, dense: true);
-  }
-}
-
-class ReadOnlyHint extends StatelessWidget {
-  const ReadOnlyHint({
-    super.key,
-    required this.message,
-    this.icon = Icons.visibility_outlined,
-  });
-
-  final String message;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 1),
-          child: Icon(icon, size: 13, color: BroomColors.inkFaint(context)),
-        ),
-        const SizedBox(width: 7),
-        Expanded(
-          child: Text(
-            message,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: BroomColors.inkFaint(context),
-              height: 1.5,
-            ),
-          ),
+        Icon(icon, size: 12, color: color),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(color: color, fontWeight: FontWeight.w500),
         ),
       ],
     );
@@ -76,17 +63,13 @@ class AnalysisBanner extends StatelessWidget {
     final foreground = isError ? scheme.error : BroomColors.inkMuted(context);
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+      padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
       decoration: BoxDecoration(
         color: isError
-            ? scheme.error.withValues(alpha: 0.09)
+            ? scheme.errorContainer.withValues(alpha: 0.55)
             : BroomColors.card(context),
-        borderRadius: BorderRadius.circular(11),
-        border: Border.all(
-          color: isError
-              ? scheme.error.withValues(alpha: 0.24)
-              : BroomColors.hairline(context),
-        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: BroomColors.cardShadow(context),
       ),
       child: Row(
         children: [
@@ -138,27 +121,25 @@ class FolderSelectionCard extends StatelessWidget {
     final hasPath = path != null;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+      padding: const EdgeInsets.fromLTRB(18, 16, 16, 16),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.55),
-        ),
+        color: BroomColors.card(context),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: BroomColors.cardShadow(context),
       ),
       child: Row(
         children: [
           Container(
-            width: 38,
-            height: 38,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
-              color: scheme.surface.withValues(alpha: 0.72),
-              borderRadius: BorderRadius.circular(11),
+              color: BroomColors.block(context),
+              borderRadius: BorderRadius.circular(13),
             ),
             child: Icon(
               Icons.folder_open_rounded,
-              size: 19,
-              color: scheme.primary,
+              size: 21,
+              color: BroomColors.inkMuted(context),
             ),
           ),
           const SizedBox(width: 12),
@@ -237,32 +218,23 @@ class AnalysisProgressCard extends StatelessWidget {
     final scheme = theme.colorScheme;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(28, 30, 28, 24),
+      padding: const EdgeInsets.fromLTRB(30, 34, 30, 26),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.55),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: scheme.shadow.withValues(alpha: 0.035),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        color: BroomColors.card(context),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: BroomColors.cardShadow(context),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 70,
-            height: 70,
+            width: 64,
+            height: 64,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: scheme.primaryContainer.withValues(alpha: 0.5),
+              color: scheme.primary.withValues(alpha: 0.1),
             ),
-            child: Icon(icon, size: 30, color: scheme.primary),
+            child: Icon(icon, size: 28, color: scheme.primary),
           ),
           const SizedBox(height: 18),
           Text(title, style: theme.textTheme.titleLarge),

@@ -100,20 +100,8 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
           icon: const Icon(Icons.arrow_back_rounded),
           tooltip: context.t('返回'),
         ),
-        toolbarHeight: 68,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(context.t('回收站')),
-            const SizedBox(height: 1),
-            Text(
-              context.t('Windows 系统回收站 · 永久清空'),
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
+        toolbarHeight: 76,
+        title: Text(context.t('回收站')),
         actions: const [
           Padding(
             padding: EdgeInsets.only(right: 20),
@@ -195,13 +183,8 @@ class _ReviewWarning extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(13, 10, 13, 10),
-      decoration: BoxDecoration(
-        color: BroomColors.amber.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(11),
-        border: Border.all(color: BroomColors.amber.withValues(alpha: 0.22)),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -210,10 +193,10 @@ class _ReviewWarning extends StatelessWidget {
             child: Icon(
               Icons.warning_amber_rounded,
               size: 15,
-              color: BroomColors.amber,
+              color: BroomColors.warning,
             ),
           ),
-          const SizedBox(width: 9),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               context.t('清空后无法恢复，文件不会进入隔离区，也没有撤销入口。'),

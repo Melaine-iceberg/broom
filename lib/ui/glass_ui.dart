@@ -1,325 +1,105 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 
-/// Shared colors and surfaces for the translucent desktop shell.
+/// Shared colors and surfaces for the desktop shell.
 ///
-/// The palette is intentionally restrained: the aurora backdrop provides the
-/// color, while content sits on quiet glass layers. Accent color is reserved
-/// for primary actions and selection.
+/// The palette follows the iOS grouped-surface model: a softly tinted page,
+/// bright cards floating on it, and blocks one level deeper for controls.
+/// Color is reserved for state, selection and the one primary action.
 abstract final class BroomColors {
-  static const accent = Color(0xFF7FB5FF);
-  static const accentStrong = Color(0xFF2F7BFF);
-  static const sky = Color(0xFF8ED5FF);
-  static const violet = Color(0xFFB9A8FF);
-  static const amber = Color(0xFFF0C67D);
-  static const danger = Color(0xFFFF8A80);
+  /// The single accent used for selection, focus and primary actions.
+  static const primary = Color(0xFF007AFF);
+
+  /// Secondary accent, used sparingly for highlights.
+  static const accent = primary;
+
+  /// Semantic colours. These are the only colours allowed on a neutral page.
+  static const success = Color(0xFF34C759);
+  static const warning = Color(0xFFFF9F0A);
+  static const danger = Color(0xFFFF3B30);
+
+  // Compatibility alias for older call sites.
+  static const amber = warning;
 
   static bool isDark(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark;
 
-  /// Fill for the main content panel.
-  static Color panel(BuildContext context) =>
-      isDark(context) ? const Color(0xC80D141F) : const Color(0xD9F7F9FC);
+  /// The content page behind every card.
+  static Color page(BuildContext context) =>
+      isDark(context) ? const Color(0xFF0B0C10) : const Color(0xFFF3F4F8);
 
-  /// Fill for the navigation rail / sidebar.
+  /// Window chrome: title bar and navigation sidebar.
   static Color sidebar(BuildContext context) =>
-      isDark(context) ? const Color(0xB80A0F17) : const Color(0xCCFFFFFF);
+      isDark(context) ? const Color(0xFF101116) : const Color(0xFFEDEFF4);
 
-  /// Default card fill inside a panel.
+  /// Default card fill, one step above the page.
   static Color card(BuildContext context) =>
-      isDark(context) ? const Color(0x0DFFFFFF) : const Color(0xF0FFFFFF);
+      isDark(context) ? const Color(0xFF17181F) : const Color(0xFFFFFFFF);
 
   /// Card fill on hover.
   static Color cardHover(BuildContext context) =>
-      isDark(context) ? const Color(0x17FFFFFF) : const Color(0xFFFFFFFF);
+      isDark(context) ? const Color(0xFF1E1F27) : const Color(0xFFFAFBFE);
 
+  /// A neutral block inside a card.
+  static Color block(BuildContext context) =>
+      isDark(context) ? const Color(0xFF23242C) : const Color(0xFFF0F1F6);
+
+  /// The deepest neutral, used for inset controls and empty media.
+  static Color inset(BuildContext context) =>
+      isDark(context) ? const Color(0xFF2C2D36) : const Color(0xFFE7E9F0);
+
+  /// Structural hairline. Used for chrome edges and grouped rows only.
   static Color hairline(BuildContext context) =>
-      isDark(context) ? const Color(0x17FFFFFF) : const Color(0x1A0B1220);
-
-  static Color hairlineStrong(BuildContext context) =>
-      isDark(context) ? const Color(0x26FFFFFF) : const Color(0x2A0B1220);
+      isDark(context) ? const Color(0x1FFFFFFF) : const Color(0x13000000);
 
   static Color ink(BuildContext context) =>
-      isDark(context) ? const Color(0xFFF1F5F9) : const Color(0xFF111820);
+      isDark(context) ? const Color(0xFFF2F2F7) : const Color(0xFF1C1C1E);
 
   static Color inkMuted(BuildContext context) =>
-      isDark(context) ? const Color(0xFF9AA6B4) : const Color(0xFF5A6675);
+      isDark(context) ? const Color(0xFFA7A7B0) : const Color(0xFF6C6C70);
 
   static Color inkFaint(BuildContext context) =>
-      isDark(context) ? const Color(0xFF6C7885) : const Color(0xFF8A95A3);
+      isDark(context) ? const Color(0xFF75757F) : const Color(0xFFA0A0A8);
 
-  static Color tint(BuildContext context, Color color, [double alpha = 0.14]) =>
-      Color.alphaBlend(color.withValues(alpha: alpha), Colors.transparent);
-}
+  /// Soft tint used behind the dashboard's primary action.
+  static Color primaryWash(BuildContext context) =>
+      isDark(context) ? const Color(0xFF0A2B52) : const Color(0xFFE3EFFF);
 
-/// Soft aurora gradient that sits behind the entire window.
-class LiquidBackdrop extends StatelessWidget {
-  const LiquidBackdrop({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final dark = BroomColors.isDark(context);
-    return RepaintBoundary(
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: dark
-                    ? const [
-                        Color(0xFF060A15),
-                        Color(0xFF0A1226),
-                        Color(0xFF070B14),
-                      ]
-                    : const [
-                        Color(0xFFF2F6FA),
-                        Color(0xFFE9F0F7),
-                        Color(0xFFF9F5F0),
-                      ],
-              ),
-            ),
-          ),
-          _Aurora(
-            alignment: const Alignment(-1.05, -0.95),
-            size: 720,
-            color: dark ? const Color(0xFF2D6BFF) : const Color(0xFFAFCEFA),
-            opacity: dark ? 0.62 : 0.62,
-          ),
-          _Aurora(
-            alignment: const Alignment(1.15, -0.55),
-            size: 780,
-            color: dark ? const Color(0xFF1E8FE0) : const Color(0xFFBFE2FF),
-            opacity: dark ? 0.4 : 0.5,
-          ),
-          _Aurora(
-            alignment: const Alignment(0.9, 1.2),
-            size: 660,
-            color: dark ? const Color(0xFF8C4623) : const Color(0xFFF5D6BD),
-            opacity: dark ? 0.26 : 0.46,
-          ),
-          _Aurora(
-            alignment: const Alignment(-0.95, 1.1),
-            size: 740,
-            color: dark ? const Color(0xFF6446C7) : const Color(0xFFD8C8F5),
-            opacity: dark ? 0.46 : 0.4,
-          ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: dark
-                    ? const [
-                        Color(0x33000000),
-                        Color(0x00000000),
-                        Color(0x4D000000),
-                      ]
-                    : const [
-                        Color(0x12FFFFFF),
-                        Color(0x00000000),
-                        Color(0x140B1220),
-                      ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Aurora extends StatelessWidget {
-  const _Aurora({
-    required this.alignment,
-    required this.size,
-    required this.color,
-    required this.opacity,
-  });
-
-  final Alignment alignment;
-  final double size;
-  final Color color;
-  final double opacity;
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: alignment,
-      child: IgnorePointer(
-        child: SizedBox(
-          width: size,
-          height: size,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [
-                  color.withValues(alpha: opacity),
-                  color.withValues(alpha: opacity * 0.55),
-                  color.withValues(alpha: 0),
-                ],
-                stops: const [0, 0.52, 1],
-              ),
-            ),
-          ),
+  static List<BoxShadow> cardShadow(BuildContext context) {
+    if (isDark(context)) {
+      return const [
+        BoxShadow(
+          color: Color(0x3D000000),
+          blurRadius: 18,
+          offset: Offset(0, 8),
         ),
-      ),
-    );
-  }
-}
-
-/// A soft light patch used to give glass panels depth.
-class AmbientGlow extends StatelessWidget {
-  const AmbientGlow({
-    super.key,
-    this.color = BroomColors.accentStrong,
-    this.alignment = Alignment.topLeft,
-    this.radius = 1.4,
-    this.opacity = 0.16,
-  });
-
-  final Color color;
-  final Alignment alignment;
-  final double radius;
-  final double opacity;
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: RadialGradient(
-            center: alignment,
-            radius: radius,
-            colors: [
-              color.withValues(
-                alpha: opacity * (BroomColors.isDark(context) ? 1.0 : 0.55),
-              ),
-              color.withValues(alpha: 0),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A rounded translucent panel, optionally blurred against the backdrop.
-class GlassSurface extends StatelessWidget {
-  const GlassSurface({
-    super.key,
-    required this.child,
-    this.padding,
-    this.radius = 22,
-    this.blur = 0,
-    this.color,
-    this.borderColor,
-    this.highlight = true,
-    this.shadow = true,
-    this.clip = true,
-  });
-
-  final Widget child;
-  final EdgeInsetsGeometry? padding;
-  final double radius;
-  final double blur;
-  final Color? color;
-  final Color? borderColor;
-  final bool highlight;
-  final bool shadow;
-  final bool clip;
-
-  @override
-  Widget build(BuildContext context) {
-    final fill = color ?? BroomColors.panel(context);
-    final border = borderColor ?? BroomColors.hairline(context);
-
-    Widget surface = DecoratedBox(
-      decoration: BoxDecoration(
-        color: fill,
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: border),
-        boxShadow: shadow
-            ? [
-                BoxShadow(
-                  color: Colors.black.withValues(
-                    alpha: BroomColors.isDark(context) ? 0.32 : 0.08,
-                  ),
-                  blurRadius: 32,
-                  offset: const Offset(0, 16),
-                ),
-              ]
-            : null,
-      ),
-      child: Stack(
-        children: [
-          if (highlight)
-            Positioned(
-              top: 0.5,
-              left: radius * 0.6,
-              right: radius * 0.6,
-              height: 1,
-              child: IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(1),
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.white.withValues(
-                          alpha: BroomColors.isDark(context) ? 0.02 : 0.0,
-                        ),
-                        Colors.white.withValues(
-                          alpha: BroomColors.isDark(context) ? 0.14 : 0.8,
-                        ),
-                        Colors.white.withValues(
-                          alpha: BroomColors.isDark(context) ? 0.02 : 0.0,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          Padding(padding: padding ?? EdgeInsets.zero, child: child),
-        ],
-      ),
-    );
-
-    if (clip) {
-      surface = ClipRRect(
-        borderRadius: BorderRadius.circular(radius),
-        child: surface,
-      );
+      ];
     }
-    if (blur > 0) {
-      surface = ClipRRect(
-        borderRadius: BorderRadius.circular(radius),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-          child: surface,
-        ),
-      );
-    }
-    return surface;
+    return const [
+      BoxShadow(
+        color: Color(0x0D000000),
+        blurRadius: 1,
+        offset: Offset(0, 0.5),
+      ),
+      BoxShadow(color: Color(0x0A000000), blurRadius: 8, offset: Offset(0, 3)),
+      BoxShadow(
+        color: Color(0x12000000),
+        blurRadius: 28,
+        offset: Offset(0, 14),
+        spreadRadius: -8,
+      ),
+    ];
   }
 }
 
-/// A hover-aware translucent card used inside the content panel.
+/// A hover-aware card used inside the content page.
 class GlassCard extends StatefulWidget {
   const GlassCard({
     super.key,
     required this.child,
     this.onTap,
-    this.padding = const EdgeInsets.all(18),
-    this.radius = 18,
+    this.padding = const EdgeInsets.all(22),
+    this.radius = 26,
     this.tint,
-    this.borderColor,
-    this.blur = 0,
-    this.highlight = true,
   });
 
   final Widget child;
@@ -327,9 +107,6 @@ class GlassCard extends StatefulWidget {
   final EdgeInsetsGeometry padding;
   final double radius;
   final Color? tint;
-  final Color? borderColor;
-  final double blur;
-  final bool highlight;
 
   @override
   State<GlassCard> createState() => _GlassCardState();
@@ -347,29 +124,17 @@ class _GlassCardState extends State<GlassCard> {
   Widget build(BuildContext context) {
     final fill =
         widget.tint ??
-        (_hovered ? BroomColors.cardHover(context) : BroomColors.card(context));
-    final border = widget.borderColor ?? BroomColors.hairline(context);
+        (_hovered && widget.onTap != null
+            ? BroomColors.cardHover(context)
+            : BroomColors.card(context));
 
-    Widget card = AnimatedContainer(
-      duration: const Duration(milliseconds: 140),
+    final card = AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
       curve: Curves.easeOut,
       decoration: BoxDecoration(
         color: fill,
         borderRadius: BorderRadius.circular(widget.radius),
-        border: Border.all(
-          color: _hovered && widget.onTap != null
-              ? BroomColors.hairlineStrong(context)
-              : border,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(
-              alpha: BroomColors.isDark(context) ? 0.1 : 0.035,
-            ),
-            blurRadius: _hovered ? 16 : 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: BroomColors.cardShadow(context),
       ),
       child: Material(
         type: MaterialType.transparency,
@@ -377,49 +142,12 @@ class _GlassCardState extends State<GlassCard> {
           onTap: widget.onTap,
           borderRadius: BorderRadius.circular(widget.radius),
           hoverColor: Colors.transparent,
-          highlightColor: Colors.white.withValues(alpha: 0.02),
+          splashColor: BroomColors.ink(context).withValues(alpha: 0.04),
+          highlightColor: Colors.transparent,
           child: Padding(padding: widget.padding, child: widget.child),
         ),
       ),
     );
-
-    card = Stack(
-      children: [
-        card,
-        if (widget.highlight)
-          Positioned(
-            top: 0.5,
-            left: widget.radius * 0.6,
-            right: widget.radius * 0.6,
-            height: 1,
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.transparent,
-                      Colors.white.withValues(
-                        alpha: BroomColors.isDark(context) ? 0.1 : 0.65,
-                      ),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-
-    if (widget.blur > 0) {
-      card = ClipRRect(
-        borderRadius: BorderRadius.circular(widget.radius),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: widget.blur, sigmaY: widget.blur),
-          child: card,
-        ),
-      );
-    }
 
     if (widget.onTap == null) return card;
     return MouseRegion(
@@ -431,78 +159,13 @@ class _GlassCardState extends State<GlassCard> {
   }
 }
 
-/// Small status label with a colored dot.
-class StatusPill extends StatelessWidget {
-  const StatusPill({
-    super.key,
-    required this.label,
-    this.color = BroomColors.accent,
-    this.icon,
-    this.dense = false,
-  });
-
-  final String label;
-  final Color color;
-  final IconData? icon;
-  final bool dense;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final foreground = BroomColors.isDark(context)
-        ? Color.alphaBlend(color.withValues(alpha: 0.86), Colors.white)
-        : Color.alphaBlend(color.withValues(alpha: 0.7), Colors.black);
-
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: dense ? 7 : 9,
-        vertical: dense ? 3 : 4,
-      ),
-      decoration: BoxDecoration(
-        color: color.withValues(
-          alpha: BroomColors.isDark(context) ? 0.12 : 0.16,
-        ),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.22)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: dense ? 11 : 12.5, color: foreground),
-            const SizedBox(width: 4),
-          ] else ...[
-            Container(
-              width: 5,
-              height: 5,
-              decoration: BoxDecoration(
-                color: foreground,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 6),
-          ],
-          Text(
-            label,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: foreground,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.1,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Soft square icon tile used inside cards and navigation.
+/// Neutral icon tile used inside cards and navigation.
 class IconTile extends StatelessWidget {
   const IconTile({
     super.key,
     required this.icon,
-    this.size = 38,
-    this.radius = 11,
+    this.size = 42,
+    this.radius = 13,
     this.color,
   });
 
@@ -513,24 +176,24 @@ class IconTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final tone = color ?? scheme.primary;
+    final tone = color ?? BroomColors.inkMuted(context);
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: tone.withValues(
-          alpha: BroomColors.isDark(context) ? 0.14 : 0.12,
-        ),
+        color: color == null
+            ? BroomColors.block(context)
+            : color!.withValues(
+                alpha: BroomColors.isDark(context) ? 0.18 : 0.11,
+              ),
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: tone.withValues(alpha: 0.14)),
       ),
-      child: Icon(icon, size: size * 0.5, color: tone),
+      child: Icon(icon, size: size * 0.48, color: tone),
     );
   }
 }
 
-/// Page heading used on the home surface.
+/// Page heading used on top-level surfaces.
 class PageHeading extends StatelessWidget {
   const PageHeading({
     super.key,
@@ -556,7 +219,7 @@ class PageHeading extends StatelessWidget {
               Text(
                 title,
                 style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                   letterSpacing: -0.4,
                 ),
               ),
@@ -566,7 +229,7 @@ class PageHeading extends StatelessWidget {
                   subtitle,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: BroomColors.inkMuted(context),
-                    height: 1.45,
+                    height: 1.4,
                   ),
                 ),
               ],
@@ -585,33 +248,29 @@ class SectionLabel extends StatelessWidget {
     super.key,
     required this.title,
     this.subtitle,
-    this.icon,
     this.trailing,
   });
 
   final String title;
   final String? subtitle;
-  final IconData? icon;
   final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        if (icon != null) ...[
-          Icon(icon, size: 16, color: BroomColors.inkFaint(context)),
-          const SizedBox(width: 7),
-        ],
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 title,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.2,
                 ),
               ),
               if (subtitle case final subtitle?) ...[
@@ -632,65 +291,135 @@ class SectionLabel extends StatelessWidget {
   }
 }
 
-/// Small metadata line used under card titles.
-class MetaLine extends StatelessWidget {
-  const MetaLine({super.key, required this.icon, required this.text});
+/// Small card header: an icon, a quiet title and optional trailing content.
+class BroomCardHeader extends StatelessWidget {
+  const BroomCardHeader({
+    super.key,
+    required this.title,
+    this.icon,
+    this.trailing,
+  });
 
-  final IconData icon;
-  final String text;
+  final String title;
+  final IconData? icon;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 12, color: BroomColors.inkFaint(context)),
-        const SizedBox(width: 5),
-        Flexible(
+        if (icon != null) ...[
+          Icon(icon, size: 18, color: BroomColors.inkMuted(context)),
+          const SizedBox(width: 9),
+        ],
+        Expanded(
           child: Text(
-            text,
+            title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.labelSmall
-                ?.copyWith(color: BroomColors.inkMuted(context)),
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.3,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.05,
+              color: BroomColors.inkMuted(context),
+            ),
           ),
         ),
+        if (trailing != null) ...[const SizedBox(width: 8), trailing!],
       ],
     );
   }
 }
 
-/// A compact glass app-bar title used by secondary pages.
-class ToolPageTitle extends StatelessWidget {
-  const ToolPageTitle({super.key, required this.title, this.subtitle});
+/// A small status capsule with an optional leading dot.
+class StatusChip extends StatelessWidget {
+  const StatusChip({
+    super.key,
+    required this.label,
+    this.tone,
+    this.icon,
+    this.dot = true,
+  });
 
-  final String title;
-  final String? subtitle;
+  final String label;
+  final Color? tone;
+  final IconData? icon;
+  final bool dot;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          title,
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-            letterSpacing: -0.1,
-          ),
-        ),
-        if (subtitle case final subtitle?) ...[
-          const SizedBox(height: 2),
+    final base = tone ?? BroomColors.inkMuted(context);
+    final foreground = BroomColors.isDark(context)
+        ? Color.lerp(base, Colors.white, 0.28)!
+        : Color.lerp(base, Colors.black, 0.16)!;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: base.withValues(alpha: BroomColors.isDark(context) ? 0.2 : 0.13),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null)
+            Icon(icon, size: 12, color: foreground)
+          else if (dot)
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(color: base, shape: BoxShape.circle),
+            ),
+          if (icon != null || dot) const SizedBox(width: 5),
           Text(
-            subtitle,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: BroomColors.inkMuted(context),
+            label,
+            style: TextStyle(
+              fontSize: 11.5,
+              height: 1.2,
+              fontWeight: FontWeight.w600,
+              color: foreground,
             ),
           ),
         ],
-      ],
+      ),
+    );
+  }
+}
+
+/// Large figure used in dashboard cards. Tabular digits keep metrics aligned.
+class CardFigure extends StatelessWidget {
+  const CardFigure(
+    this.value, {
+    super.key,
+    this.size = 32,
+    this.color,
+    this.maxLines = 1,
+  });
+
+  final String value;
+  final double size;
+  final Color? color;
+  final int maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      value,
+      maxLines: maxLines,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontFamily: 'Segoe UI Variable Display',
+        fontFamilyFallback: Theme.of(context)
+            .textTheme
+            .bodyMedium
+            ?.fontFamilyFallback,
+        fontSize: size,
+        height: 1.12,
+        fontWeight: FontWeight.w700,
+        letterSpacing: size * -0.02,
+        color: color ?? BroomColors.ink(context),
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
     );
   }
 }
