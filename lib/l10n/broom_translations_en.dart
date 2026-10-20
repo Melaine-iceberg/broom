@@ -75,6 +75,7 @@ const translationsEn = <String, String>{
   '关于': 'About',
   '版本 {version}': 'Version {version}',
   'Broom 只在本地运行，不上传文件、路径或使用数据。': 'Broom runs entirely on this device and never uploads files, paths, or usage data.',
+  '界面字体使用 HarmonyOS Sans（© Huawei Device Co., Ltd.），依据 HarmonyOS Sans Fonts License Agreement 授权使用。': 'The interface uses HarmonyOS Sans (© Huawei Device Co., Ltd.) under the HarmonyOS Sans Fonts License Agreement.',
   '设置读取失败，已使用默认设置：{error}':
       'Could not read settings; defaults are in use: {error}',
   '设置保存失败：{error}': 'Could not save settings: {error}',

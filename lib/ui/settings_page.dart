@@ -505,6 +505,16 @@ class SettingsPage extends StatelessWidget {
                             height: 1.5,
                           ),
                         ),
+                        const SizedBox(height: 6),
+                        Text(
+                          strings.t(
+                            '界面字体使用 HarmonyOS Sans（© Huawei Device Co., Ltd.），依据 HarmonyOS Sans Fonts License Agreement 授权使用。',
+                          ),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                            height: 1.5,
+                          ),
+                        ),
                         if (onShowOnboarding != null) ...[
                           const SizedBox(height: 12),
                           OutlinedButton.icon(

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'broom_fonts.dart';
+
 /// Shared colors and surfaces for the desktop shell.
 ///
 /// The palette follows the iOS grouped-surface model: a softly tinted page,
@@ -408,11 +410,8 @@ class CardFigure extends StatelessWidget {
       maxLines: maxLines,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
-        fontFamily: 'Segoe UI Variable Display',
-        fontFamilyFallback: Theme.of(context)
-            .textTheme
-            .bodyMedium
-            ?.fontFamilyFallback,
+        fontFamily: broomFontFamily,
+        fontFamilyFallback: broomFontFallback,
         fontSize: size,
         height: 1.12,
         fontWeight: FontWeight.w700,

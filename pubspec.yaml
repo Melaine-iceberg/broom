@@ -28,3 +28,13 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icon/app_icon.png
+    - assets/fonts/harmonyos_sans_sc/LICENSE.txt
+  fonts:
+    - family: HarmonyOS Sans SC
+      fonts:
+        - asset: assets/fonts/harmonyos_sans_sc/HarmonyOS_Sans_SC_Regular.ttf
+          weight: 400
+        - asset: assets/fonts/harmonyos_sans_sc/HarmonyOS_Sans_SC_Medium.ttf
+          weight: 500
+        - asset: assets/fonts/harmonyos_sans_sc/HarmonyOS_Sans_SC_Bold.ttf
+          weight: 700

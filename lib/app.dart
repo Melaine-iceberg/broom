@@ -7,6 +7,7 @@ import 'core/clean/quarantine_retention_service.dart';
 import 'core/diagnostics/app_logger.dart';
 import 'core/shell/system_shell.dart';
 import 'l10n/broom_strings.dart';
+import 'ui/broom_fonts.dart';
 import 'ui/clean_controller.dart';
 import 'ui/glass_ui.dart';
 import 'ui/home_page.dart';
@@ -196,17 +197,6 @@ class _UnsupportedView extends StatelessWidget {
   }
 }
 
-const _fontFamily = 'Segoe UI Variable Text';
-const _displayFamily = 'Segoe UI Variable Display';
-const _fontFallback = <String>[
-  'Segoe UI',
-  'Microsoft YaHei UI',
-  'Microsoft YaHei',
-  'PingFang SC',
-  'Noto Sans CJK SC',
-  'Arial',
-];
-
 ThemeData buildBroomTheme(Brightness brightness) {
   final dark = brightness == Brightness.dark;
   final scheme = ColorScheme(
@@ -265,8 +255,8 @@ ThemeData buildBroomTheme(Brightness brightness) {
     useMaterial3: true,
     brightness: brightness,
     colorScheme: scheme,
-    fontFamily: _fontFamily,
-    fontFamilyFallback: _fontFallback,
+    fontFamily: broomFontFamily,
+    fontFamilyFallback: broomFontFallback,
     scaffoldBackgroundColor: scheme.surface,
     canvasColor: scheme.surface,
     visualDensity: VisualDensity.standard,
@@ -288,8 +278,8 @@ ThemeData buildBroomTheme(Brightness brightness) {
     FontWeight weight = FontWeight.w700,
   }) {
     return TextStyle(
-      fontFamily: _displayFamily,
-      fontFamilyFallback: _fontFallback,
+      fontFamily: broomFontFamily,
+      fontFamilyFallback: broomFontFallback,
       fontSize: size,
       height: height / size,
       fontWeight: weight,
@@ -298,73 +288,78 @@ ThemeData buildBroomTheme(Brightness brightness) {
     );
   }
 
-  final textTheme = base.textTheme.copyWith(
-    displayLarge: display(40, 44),
-    displayMedium: display(34, 41),
-    displaySmall: display(34, 41),
-    headlineLarge: display(32, 38),
-    headlineMedium: display(28, 34),
-    headlineSmall: display(24, 30),
-    titleLarge: TextStyle(
-      fontSize: 20,
-      height: 25 / 20,
-      fontWeight: FontWeight.w600,
-      letterSpacing: -0.25,
-      color: scheme.onSurface,
-    ),
-    titleMedium: TextStyle(
-      fontSize: 17,
-      height: 22 / 17,
-      fontWeight: FontWeight.w600,
-      letterSpacing: -0.15,
-      color: scheme.onSurface,
-    ),
-    titleSmall: TextStyle(
-      fontSize: 15,
-      height: 20 / 15,
-      fontWeight: FontWeight.w600,
-      color: scheme.onSurface,
-    ),
-    bodyLarge: TextStyle(
-      fontSize: 17,
-      height: 22 / 17,
-      color: scheme.onSurface,
-    ),
-    bodyMedium: TextStyle(
-      fontSize: 14,
-      height: 20 / 14,
-      color: scheme.onSurface,
-    ),
-    bodySmall: TextStyle(
-      fontSize: 13,
-      height: 18 / 13,
-      color: scheme.onSurface,
-    ),
-    labelLarge: TextStyle(
-      fontSize: 14,
-      height: 18 / 14,
-      fontWeight: FontWeight.w600,
-      color: scheme.onSurface,
-    ),
-    labelMedium: TextStyle(
-      fontSize: 12,
-      height: 16 / 12,
-      fontWeight: FontWeight.w600,
-      letterSpacing: 0,
-      color: scheme.onSurfaceVariant,
-    ),
-    labelSmall: TextStyle(
-      fontSize: 11.5,
-      height: 15 / 11.5,
-      fontWeight: FontWeight.w500,
-      letterSpacing: 0,
-      color: scheme.onSurfaceVariant,
-    ),
-  );
+  final textTheme = base.textTheme
+      .copyWith(
+        displayLarge: display(40, 44),
+        displayMedium: display(34, 41),
+        displaySmall: display(34, 41),
+        headlineLarge: display(32, 38),
+        headlineMedium: display(28, 34),
+        headlineSmall: display(24, 30),
+        titleLarge: TextStyle(
+          fontSize: 20,
+          height: 25 / 20,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.25,
+          color: scheme.onSurface,
+        ),
+        titleMedium: TextStyle(
+          fontSize: 17,
+          height: 22 / 17,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.15,
+          color: scheme.onSurface,
+        ),
+        titleSmall: TextStyle(
+          fontSize: 15,
+          height: 20 / 15,
+          fontWeight: FontWeight.w600,
+          color: scheme.onSurface,
+        ),
+        bodyLarge: TextStyle(
+          fontSize: 17,
+          height: 22 / 17,
+          color: scheme.onSurface,
+        ),
+        bodyMedium: TextStyle(
+          fontSize: 14,
+          height: 20 / 14,
+          color: scheme.onSurface,
+        ),
+        bodySmall: TextStyle(
+          fontSize: 13,
+          height: 18 / 13,
+          color: scheme.onSurface,
+        ),
+        labelLarge: TextStyle(
+          fontSize: 14,
+          height: 18 / 14,
+          fontWeight: FontWeight.w600,
+          color: scheme.onSurface,
+        ),
+        labelMedium: TextStyle(
+          fontSize: 12,
+          height: 16 / 12,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0,
+          color: scheme.onSurfaceVariant,
+        ),
+        labelSmall: TextStyle(
+          fontSize: 11.5,
+          height: 15 / 11.5,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0,
+          color: scheme.onSurfaceVariant,
+        ),
+      )
+      .apply(
+        fontFamily: broomFontFamily,
+        fontFamilyFallback: broomFontFallback,
+      );
 
   const buttonText = TextStyle(
-    fontFamily: _fontFamily,
-    fontFamilyFallback: _fontFallback,
+    fontFamily: broomFontFamily,
+    fontFamilyFallback: broomFontFallback,
     fontSize: 14,
     height: 18 / 14,
     fontWeight: FontWeight.w600,
