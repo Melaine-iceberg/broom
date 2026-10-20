@@ -4,6 +4,8 @@
 
 例外是 `benchmark/clean_attribution_test.dart`：清理阶段的开销几乎全部来自真实的系统调用（rename、open、Defender 过滤驱动），只能用真实文件测，因此它在系统临时目录下自建 400 个 1 KiB 文件并在结束后删除。
 
+`benchmark/ui_preview_benchmark.dart` 也是合成的：10 万条 `JunkItem` 在内存里生成，只测选择聚合与过滤/排序的 CPU 成本，不碰磁盘。
+
 ## 运行
 
 ```bash
@@ -15,6 +17,10 @@ dart run benchmark/scan_benchmark.dart --million
 
 # 清理阶段每文件耗时的逐操作归因（需要 Flutter）
 flutter test benchmark/clean_attribution_test.dart
+
+# UI 侧选择聚合与过滤/排序（纯 CPU，可指定条目数）
+dart run benchmark/ui_preview_benchmark.dart
+dart run benchmark/ui_preview_benchmark.dart --items=1000000
 
 # 真实 Windows 窗口中的预览滚动帧时间
 flutter test integration_test/ui_frame_benchmark_test.dart -d windows
@@ -58,6 +64,20 @@ flutter test integration_test/app_smoke_test.dart -d windows
 单次 `readAsBytes(1 KiB)` 为 437–446 µs，其中 `open + close` 已占 255 µs，`sha256` 仅 14.5 µs；`position()` 为 47.5 µs，`flush()` 为 201 µs。改造后同一轮内交错测量：`readAsBytes` 515.5 µs vs `readBytesUpTo(size + 1)` 434.0 µs。
 
 这台机器的端到端总时长在相邻运行之间会摆动 10% 以上（Defender 负载），因此**不要用两次整体运行的差值做 A/B**：未改动的 rename 单项在两次运行间就从 995 µs 变到 1,280 µs。可靠的比较来自调用次数与同一轮内的交错计时。
+
+UI 侧（10 万条，合成条目，`dart run benchmark/ui_preview_benchmark.dart`，5 轮中位数，2026-10-20）。基准里保留了改造前实现的副本，因此"旧/新"两列来自同一个进程、同一批数据：
+
+| 操作 | 旧 | 新 |
+| --- | ---: | ---: |
+| 三个选择聚合 getter | 22.0 ms | 0.000 ms |
+| `sortResultItems(sizeDesc)` | 55.7 ms | 39.9 ms |
+| `sortResultItems(pathAsc)` | 405.1 ms | 166.7 ms |
+| `sortResultItems(extensionAsc)` | 2,443.6 ms | 273.8 ms |
+| `sortResultItems(sizeDesc)`，全部同体积 | 452.3 ms | 369.6 ms |
+| `filter + sort` 默认视图，每次重建 | 50.4 ms | 0.000 ms（缓存命中） |
+| `filter + sort` 换成关键词 filter（未命中） | — | 28.8 ms |
+
+结论与优化项见 `docs/perf-review.md` 的 P0-3 与 P0-4。`ui_preview_benchmark` 只测纯 CPU 计算，不含 Flutter 布局与绘制；帧时间仍以 `ui_frame_benchmark_test` 为准。
 
 ## 说明
 

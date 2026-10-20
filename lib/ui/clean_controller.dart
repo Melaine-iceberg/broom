@@ -85,6 +85,15 @@ class CleanController extends ChangeNotifier {
   List<RuleResult> _results = const [];
   final Set<String> _selectedPaths = <String>{};
   final Map<String, int> _selectedCountByRule = <String, int>{};
+
+  // Selection aggregates are maintained by _selectPath/_deselectPath rather
+  // than recomputed from _results. The preview rebuilds on every controller
+  // notification (lock probing ticks at 250 ms), so a full traversal per
+  // getter turned into a per-frame O(N) cost on large result sets.
+  int _selectedBytes = 0;
+  final Map<String, int> _selectedBytesByRule = <String, int>{};
+  int _selectedLockedCount = 0;
+
   final Map<String, JunkItem> _itemsByPath = <String, JunkItem>{};
   CleanReport? _lastReport;
   CleanProgress? _cleanProgress;
@@ -127,6 +136,12 @@ class CleanController extends ChangeNotifier {
   int _possiblyLockedCount = 0;
   final Map<String, int> _lockedCountByRule = <String, int>{};
   final Map<String, ({int ruleIndex, int itemIndex})> _itemLocations = {};
+
+  /// Bumped whenever the content of [results] changes: a new result set or an
+  /// item replaced by the lock probe. Views cache derived lists (filtered and
+  /// sorted views) against this value, so it must move on every change that
+  /// can alter what a derived list would contain.
+  int _itemsRevision = 0;
 
   CleanPhase get phase => _phase;
   ScanProgress? get scanProgress => _scanProgress;
@@ -210,17 +225,8 @@ class CleanController extends ChangeNotifier {
   int possiblyLockedCountForRule(String ruleId) =>
       _lockedCountByRule[ruleId] ?? 0;
 
-  int get selectedPossiblyLockedCount {
-    var count = 0;
-    for (final result in _results) {
-      for (final item in result.items) {
-        if (item.possiblyLocked && _selectedPaths.contains(item.path)) {
-          count++;
-        }
-      }
-    }
-    return count;
-  }
+  /// Number of selected items the lock probe flagged as possibly in use.
+  int get selectedPossiblyLockedCount => _selectedLockedCount;
 
   bool get canUndoLastReport {
     final id = _lastReport?.sessionId;
@@ -239,8 +245,9 @@ class CleanController extends ChangeNotifier {
   }
 
   int get selectedCount => _selectedPaths.length;
-  int get selectedBytes =>
-      selectedItems.fold(0, (total, item) => total + item.size);
+
+  /// Total bytes of the selected items, maintained incrementally.
+  int get selectedBytes => _selectedBytes;
 
   int get selectedReviewRuleCount => _results
       .where(
@@ -288,13 +295,10 @@ class CleanController extends ChangeNotifier {
 
   int selectedCountForRule(String ruleId) => _selectedCountByRule[ruleId] ?? 0;
 
-  int selectedBytesForRule(String ruleId) {
-    var total = 0;
-    for (final item in _findResult(ruleId)?.items ?? const <JunkItem>[]) {
-      if (_selectedPaths.contains(item.path)) total += item.size;
-    }
-    return total;
-  }
+  int selectedBytesForRule(String ruleId) => _selectedBytesByRule[ruleId] ?? 0;
+
+  /// Monotonic version of the result content, see [_itemsRevision].
+  int get itemsRevision => _itemsRevision;
 
   Future<void> initialize() async {
     await _ensureExclusionsLoaded();
@@ -356,7 +360,7 @@ class CleanController extends ChangeNotifier {
       _resetScanStreamState();
       _resetSelection();
       _resetLockProbeState();
-      _results = _groupResults(restoredItems);
+      _replaceResults(_groupResults(restoredItems));
       _resetSelection();
       _selectDefaultItems(notify: false);
       _liveFoundCount = restoredItems.length;
@@ -435,7 +439,7 @@ class CleanController extends ChangeNotifier {
         foundFiles: 0,
         foundBytes: 0,
       );
-      _results = const [];
+      _replaceResults(const []);
       _resetSelection();
       _resetLockProbeState();
       _resetScanStreamState();
@@ -519,7 +523,7 @@ class CleanController extends ChangeNotifier {
         _scanTruncated = result.truncated;
         _scanScannedFiles = result.scannedFiles;
         _scanElapsed = result.elapsed;
-        _results = _groupResultsFromStream();
+        _replaceResults(_groupResultsFromStream());
         _resetSelection();
         _selectDefaultItems(notify: false);
         _phase = CleanPhase.preview;
@@ -665,6 +669,34 @@ class CleanController extends ChangeNotifier {
     _scanService?.cancel();
   }
 
+  /// Adds [item] to the selection and updates every aggregate at once.
+  ///
+  /// All selection write paths go through this pair so the derived getters
+  /// (`selectedBytes`, `selectedBytesForRule`, `selectedPossiblyLockedCount`)
+  /// can never drift from [_selectedPaths]. Returns false when the item was
+  /// already registered, which keeps the aggregates idempotent.
+  bool _selectPath(JunkItem item) {
+    if (!_selectedPaths.add(item.path)) return false;
+    _selectedCountByRule[item.ruleId] =
+        (_selectedCountByRule[item.ruleId] ?? 0) + 1;
+    _selectedBytes += item.size;
+    _selectedBytesByRule[item.ruleId] =
+        (_selectedBytesByRule[item.ruleId] ?? 0) + item.size;
+    if (item.possiblyLocked) _selectedLockedCount++;
+    return true;
+  }
+
+  bool _deselectPath(JunkItem item) {
+    if (!_selectedPaths.remove(item.path)) return false;
+    _selectedCountByRule[item.ruleId] =
+        (_selectedCountByRule[item.ruleId] ?? 1) - 1;
+    _selectedBytes -= item.size;
+    _selectedBytesByRule[item.ruleId] =
+        (_selectedBytesByRule[item.ruleId] ?? item.size) - item.size;
+    if (item.possiblyLocked) _selectedLockedCount--;
+    return true;
+  }
+
   void toggleRule(String ruleId) {
     final result = _findResult(ruleId);
     if (result == null || result.items.isEmpty) return;
@@ -687,13 +719,9 @@ class CleanController extends ChangeNotifier {
     final item = _itemsByPath[path];
     if (item == null) return;
     if (_selectedPaths.contains(path)) {
-      _selectedPaths.remove(path);
-      _selectedCountByRule[item.ruleId] =
-          (_selectedCountByRule[item.ruleId] ?? 1) - 1;
+      _deselectPath(item);
     } else {
-      _selectedPaths.add(path);
-      _selectedCountByRule[item.ruleId] =
-          (_selectedCountByRule[item.ruleId] ?? 0) + 1;
+      _selectPath(item);
     }
     _notify();
   }
@@ -712,17 +740,12 @@ class CleanController extends ChangeNotifier {
   }
 
   void invertSelection() {
-    for (final entry in _itemsByPath.entries) {
-      if (_selectedPaths.contains(entry.key)) {
-        _selectedPaths.remove(entry.key);
+    for (final item in _itemsByPath.values) {
+      if (_selectedPaths.contains(item.path)) {
+        _deselectPath(item);
       } else {
-        _selectedPaths.add(entry.key);
+        _selectPath(item);
       }
-    }
-    for (final result in _results) {
-      _selectedCountByRule[result.rule.id] = result.items
-          .where((item) => _selectedPaths.contains(item.path))
-          .length;
     }
     _notify();
   }
@@ -730,29 +753,27 @@ class CleanController extends ChangeNotifier {
   void invertRuleSelection(String ruleId) {
     final result = _findResult(ruleId);
     if (result == null) return;
-    var selected = 0;
     for (final item in result.items) {
-      if (_selectedPaths.remove(item.path)) continue;
-      _selectedPaths.add(item.path);
-      selected++;
+      if (_selectedPaths.contains(item.path)) {
+        _deselectPath(item);
+      } else {
+        _selectPath(item);
+      }
     }
-    _selectedCountByRule[ruleId] = selected;
     _notify();
   }
 
   void clearRuleSelection() {
-    _selectedPaths.clear();
-    _selectedCountByRule.clear();
+    _clearSelectionState();
     _notify();
   }
 
   void _selectAllItems({required bool notify}) {
     for (final result in _results) {
       for (final item in result.items) {
-        _selectedPaths.add(item.path);
         _itemsByPath[item.path] = item;
+        _selectPath(item);
       }
-      _selectedCountByRule[result.rule.id] = result.items.length;
     }
     if (notify) _notify();
   }
@@ -763,11 +784,8 @@ class CleanController extends ChangeNotifier {
       for (final item in result.items) {
         _itemsByPath[item.path] = item;
         if (result.rule.risk != CleanRisk.safe) continue;
-        _selectedPaths.add(item.path);
+        _selectPath(item);
       }
-      _selectedCountByRule[result.rule.id] = result.rule.risk == CleanRisk.safe
-          ? result.items.length
-          : 0;
     }
     if (notify) _notify();
   }
@@ -778,19 +796,25 @@ class CleanController extends ChangeNotifier {
     for (final item in result.items) {
       _itemsByPath[item.path] = item;
       if (selected) {
-        _selectedPaths.add(item.path);
+        _selectPath(item);
       } else {
-        _selectedPaths.remove(item.path);
+        _deselectPath(item);
       }
     }
-    _selectedCountByRule[ruleId] = selected ? result.items.length : 0;
     if (notify) _notify();
   }
 
   void _resetSelection() {
+    _clearSelectionState();
+    _itemsByPath.clear();
+  }
+
+  void _clearSelectionState() {
     _selectedPaths.clear();
     _selectedCountByRule.clear();
-    _itemsByPath.clear();
+    _selectedBytes = 0;
+    _selectedBytesByRule.clear();
+    _selectedLockedCount = 0;
   }
 
   Future<void> cleanSelected() async {
@@ -899,7 +923,7 @@ class CleanController extends ChangeNotifier {
   void returnHome() {
     _resetLockProbeState();
     _phase = CleanPhase.idle;
-    _results = const [];
+    _replaceResults(const []);
     _resetSelection();
     _resetScanStreamState();
     _lastReport = null;
@@ -1125,6 +1149,12 @@ class CleanController extends ChangeNotifier {
     if (notify) _notify();
   }
 
+  /// Replaces the visible result set and invalidates derived views.
+  void _replaceResults(List<RuleResult> results) {
+    _results = results;
+    _itemsRevision++;
+  }
+
   RuleResult? _findResult(String ruleId) {
     for (final result in _results) {
       if (result.rule.id == ruleId) return result;
@@ -1181,6 +1211,7 @@ class CleanController extends ChangeNotifier {
     _possiblyLockedCount = 0;
     _lockedCountByRule.clear();
     _itemLocations.clear();
+    _selectedLockedCount = 0;
     final paths = <String>[];
     for (var ruleIndex = 0; ruleIndex < _results.length; ruleIndex++) {
       final items = _results[ruleIndex].items;
@@ -1195,6 +1226,9 @@ class CleanController extends ChangeNotifier {
         _possiblyLockedCount++;
         _lockedCountByRule[item.ruleId] =
             (_lockedCountByRule[item.ruleId] ?? 0) + 1;
+        // Rebuild the selected-locked aggregate from scratch: items restored
+        // from disk may already carry the flag from the previous session.
+        if (_selectedPaths.contains(item.path)) _selectedLockedCount++;
       }
     }
     if (paths.isEmpty) return;
@@ -1238,9 +1272,11 @@ class CleanController extends ChangeNotifier {
     final updated = current.copyWith(possiblyLocked: true);
     result.items[location.itemIndex] = updated;
     _itemsByPath[path] = updated;
+    _itemsRevision++;
     _possiblyLockedCount++;
     _lockedCountByRule[current.ruleId] =
         (_lockedCountByRule[current.ruleId] ?? 0) + 1;
+    if (_selectedPaths.contains(path)) _selectedLockedCount++;
   }
 
   @override

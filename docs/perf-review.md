@@ -71,6 +71,8 @@
 
 `pathAsc` 比其他排序慢 6 倍，原因是比较器内部对两个路径做 `.toLowerCase()`（`lib/ui/result_filters.dart:124/129`），一次排序产生数十万次字符串分配。
 
+这张表与后文的实施收益不是同一次运行的结果，绝对值不可直接相减。P0-3 / P0-4 的 A/B 用 `benchmark/ui_preview_benchmark.dart` 在同进程内交替测量改造前后的两套实现（旧实现作为参照副本保留在基准里），见对应小节。
+
 ### 内存（100 万条结果，`JunkItem`）
 
 | 结构 | 增量 |
@@ -227,30 +229,65 @@ flutter test benchmark/clean_attribution_test.dart
 
 **注意**：目录枚举的并发实验显示 OS 侧会串行化，因此这里不要假设 8 路能拿到 8 倍；先用 `benchmark/scan_benchmark.dart` 验证再投入。保守预期是 2–4 倍。
 
-### P0-3 UI 每帧重复做 O(N) 聚合（待实施）
+### P0-3 UI 每帧重复做 O(N) 聚合（已实施）
 
-`CleanController` 的三个聚合 getter 每次 `build` 都会全量遍历：
+**现象**：`CleanController` 的三个聚合 getter 每次 `build` 都会全量遍历：
 
-| 位置 | 实现 | 10 万条成本 |
+| getter | 原实现 | 10 万条成本 |
 | --- | --- | ---: |
-| `lib/ui/clean_controller.dart:242` | `selectedBytes` → `selectedItems` 先**分配全长列表**再 fold | 5.2 ms + 分配 |
-| `lib/ui/clean_controller.dart:213` | `selectedPossiblyLockedCount` 双层循环 + `Set.contains` | ~5 ms |
-| `lib/ui/clean_controller.dart:291` | `selectedBytesForRule` 单规则全量 | ~5 ms |
+| `selectedBytes` | `selectedItems` 先**分配全长列表**再 fold | 14.7 ms + 分配 |
+| `selectedPossiblyLockedCount` | 双层循环 + `Set.contains` | 1.5 ms |
+| `selectedBytesForRule` | 单规则全量 | 5.8 ms |
 
-调用点都在 `build` 里：`lib/ui/home_page.dart:2592/2598`、`lib/ui/rule_detail_page.dart:178`。而扫描结束后锁探测以 250 ms 节奏 `_notify()`（`clean_controller.dart:1215-1224`），于是 10 万条结果时每帧约 10 ms 纯浪费，100 万条时约 100 ms——用户感知即"结果出来了但界面发黏"。
+调用点都在 `build` 里：`lib/ui/home_page.dart:2592/2598`、`lib/ui/rule_detail_page.dart:178`。而扫描结束后锁探测以 250 ms 节奏 `_notify()`（`clean_controller.dart` 的 `_runLockProbe`），于是每次通知都重付一遍，合计约 **22 ms/次**（10 万条），用户感知即"结果出来了但界面发黏"。
 
-**改法**：改为增量维护。新增 `_selectedBytes`、`_selectedBytesByRule`、`_selectedLockedCount`，在 `toggleItem` / `_setRuleSelected` / `_selectAllItems` / `_resetSelection` / `_markPossiblyLocked` 中同步更新，getter 变成 O(1) 读字段。
+**改法**：改为增量维护，新增 `_selectedBytes`、`_selectedBytesByRule`、`_selectedLockedCount`，getter 变成字段读取。
 
-**风险**：中低。选择状态有多条写路径（全选、反选、规则级勾选、恢复上次扫描），需要用现有 widget 测试（`test/home_page_test.dart` 等）守住一致性；任何一条漏更新都会显示错误的体积。
+关键是**不要在多条写路径上各维护一份账本**。所有选择变更收敛到两个原语：
 
-### P0-4 规则详情页每次重建都重新过滤+排序（待实施）
+- `_selectPath(item)` / `_deselectPath(item)`：在同一个位置同时更新 `_selectedPaths`、`_selectedCountByRule`、字节总量、按规则字节、已选占用计数，并对"已选/未选"做幂等处理（返回 false 表示状态未改变）。
+- `toggleItem`、`setRuleSelected`、`invertSelection`、`invertRuleSelection`、`clearRuleSelection`、`_selectAllItems`、`_selectDefaultItems`、`_resetSelection` 全部改为调用它们，原先各自 `_selectedPaths.add/remove` + 手动改计数的写法删除。
+- `_startLockProbe` 在遍历条目重建 `_possiblyLockedCount` 时一并重算 `_selectedLockedCount`（覆盖"恢复上次扫描"时条目已带标记、且在此之前就被默认选中的情形）；`_markPossiblyLocked` 对已选条目加一。
 
-`lib/ui/rule_detail_page.dart:181` 在 `build` 里调用 `visibleResultItems(result.items, ...)`：空过滤 + 默认排序即 29.7 ms，用户切到"路径 A–Z"后为 207 ms/次。叠加 P0-3 的 250 ms 通知节奏，就是可见的卡顿。
+收益：10 万条 **22.0 ms → 0.000 ms**（10 万次读取不足 1 µs，基准里显示为 0）。
 
-**改法**：两件事分开做。
+**风险**：中低，实际比预期更低。原计划的"在每条写路径同步更新"最容易出的问题是漏更新，改成单一原语后这种可能被结构性消除——新增写路径如果绕过原语，`_selectedPaths` 本身也不会变，聚合值与选择状态会同时错，测试立刻能发现。回归用例用 `selectedItems`（由 `_results` 与 `_selectedPaths` 推导，与被优化的账本互相独立）作为 oracle，在"默认勾选 → 单项开关 → 规则勾选 → 规则反选 → 全局反选 → 清空 → 全选 → 规则取消"每一步后断言四个聚合值，并覆盖预先带占用标记的条目。
 
-1. 按 `(filter, sort, 数据版本号)` 缓存可见列表，只在输入变化时重算；`_markPossiblyLocked` 会改动条目，因此需要一个单调递增的版本号参与缓存键。
-2. 排序改为装饰-排序：先为每条算出一次小写路径或扩展名作为排序键，再按 key 排序，避免比较器内部重复 `toLowerCase()`。预计把 `pathAsc` 从 207 ms 降到 15 ms 量级。
+### P0-4 规则详情页每次重建都重新过滤+排序（已实施）
+
+**现象**：`lib/ui/rule_detail_page.dart` 的 `build` 直接调用 `visibleResultItems(result.items, ...)`（现为 `_visibleFor` → `VisibleItemsCache.resolve`）：空过滤 + 默认排序 55.7 ms，用户切到"路径 A–Z"后 405.1 ms/次（同轮实测）。叠加 P0-3 的 250 ms 通知节奏，就是可见的卡顿。
+
+**改法**：三件事，其中第 2 项与最初的设想不同。
+
+1. **缓存可见列表**。新增 `VisibleItemsCache`，按 `(source, filter, sort, version)` 记忆化；`ResultItemFilter` 补齐值相等语义，页面每次重建新建的 filter 实例仍能命中。`CleanController` 新增 `itemsRevision`，在结果集替换（`_replaceResults`）与 `_markPossiblyLocked` 时递增。
+2. **排序按"键是否已在条目上"分流**，而不是一律装饰-排序：
+   - `sizeDesc` / `sizeAsc` / `modifiedDesc` / `modifiedAsc`：直接比较 `JunkItem` 字段。装饰版本实测反而更慢（见下），因为键本来就在条目上，装饰只是多分配 10 万个对象。仅当两个键相等时才派生小写路径，并按条目身份（`Map.identity`）缓存，因此"一串等体积碎片"也只派生一次。
+   - `pathAsc` / `extensionAsc`：先为每条派生一次小写路径（扩展名序再派生扩展名），再按键排序。
+3. 缓存命中时"过滤 + 排序"整体为 0。
+
+**收益（同轮实测，10 万条，`dart run benchmark/ui_preview_benchmark.dart`，5 轮取中位数）**：
+
+| 操作 | 改造前 | 改造后 |
+| --- | ---: | ---: |
+| 三个选择聚合 getter（P0-3） | 22.0 ms | 0.000 ms |
+| `sortResultItems(sizeDesc)` | 55.7 ms | 39.9 ms |
+| `sortResultItems(pathAsc)` | 405.1 ms | 166.7 ms |
+| `sortResultItems(extensionAsc)` | 2,443.6 ms | 273.8 ms |
+| `sortResultItems(sizeDesc)`，全部同体积 | 452.3 ms | 369.6 ms |
+| `filter + sort` 默认视图，每次重建 | 50.4 ms | 0.000 ms（缓存命中） |
+| `filter + sort`，换成关键词 filter（未命中） | — | 28.8 ms |
+
+最后一行用的是"无匹配关键词"的 filter，28.8 ms 里几乎全是关键词逐条匹配的成本，不是排序——即未命中时也只付一次必要的过滤，排序对象已经为空。
+
+即每次重建从约 72 ms（三个 getter + 过滤排序）降到 0；`pathAsc` 每次切换的代价从 405 ms 降到 167 ms，`extensionAsc` 从 2.4 s 降到 274 ms。后者的 8.9 倍来自"扩展名 + 小写路径"原本在每次比较里各算一遍。
+
+**一处判断修正**：第一版把六种排序全部改成"装饰-排序"，基准显示 `sizeDesc` 反而从 46.4 ms 涨到 63.5 ms，而 `pathAsc` 只从 190 ms 降到 166 ms——装饰的成本是 O(N) 次对象分配，收益是省掉 O(N log N) 次派生，只有当派生比分配贵得多时才划算。改成按排序分流后才得到上表。
+
+**风险**：中低。
+
+- 缓存键含 `source` 的对象身份，页面被换上新结果集时不会显示旧数据；`_markPossiblyLocked` 递增版本号，锁标记能实时反映到已缓存的行。这一条是必需的：锁探测**替换**的是条目对象，若缓存只在输入变化时失效，行内"可能被占用"图标会停在旧值。
+- 缓存不参与 `olderThan` 的时间基准：页面停留期间"30 天前修改"的边界不会随真实时间推移而重算。改动前后都只在重建时判断，差异在秒级以内。
+- 回归用例：`test/result_filters_test.dart` 用改造前的比较器实现作 oracle，对 300 条含大量并列键的数据逐种排序断言顺序不变；缓存命中/失效计数逐次断言。`test/rule_detail_page_test.dart` 新增"锁探测在页面已打开后标记条目，行内锁图标随之出现且顺序不变"——把版本号写死为 0 时该用例失败，已确认。
 
 ### P1-5 分析工具没有复用扫描引擎的枚举能力（待实施）
 
@@ -294,7 +331,7 @@ flutter test benchmark/clean_attribution_test.dart
 
 1. **P0-1**（已实施）：纯浪费，改动局部，风险最低；实测 -12% 端到端清理耗时。
 2. **P0-5a–d**（已实施）：按"能整块删掉的调用"排序推进——`type` 复检、`position`、计划批写、哈希读取，四项合计约 380 µs/文件（14–16%）。互不冲突，各自带独立回归用例。
-3. **P0-3 + P0-4**：都是 UI 侧"重复计算"，合计能把预览页的可感知卡顿消掉，且能靠现有 widget 测试守住。
+3. **P0-3 + P0-4**（已实施）：都是 UI 侧"重复计算"。P0-3 把每次重建的三个聚合从 22 ms 降到 0；P0-4 把每次重建的过滤+排序从 50 ms 降到 0（缓存命中），并把 `pathAsc` 从 405 ms 降到 167 ms。
 4. **P1-5**：一次改动同时提速重复文件与大文件分析，收益明确。
 5. **P1-6 + P1-7**：内存优化，涉及模型调整，放在功能稳定后做。
 6. **P0-2 / P2-8 / P2-9**：需要基准验证或涉及原生侧，按实测收益排期。
@@ -304,6 +341,9 @@ flutter test benchmark/clean_attribution_test.dart
 - **P0-1 已落地**：`FsStat` 增加 `accessed` / `changed`；`FileMetadataAccess.read` 改为接收调用方已有的 `FsStat` 且不再自行查询；清理主循环合并为单次 `stat()`。`flutter analyze --fatal-infos` 与全量 `flutter test`（386 项）通过。
 - **P0-5 归因完成**：新增 `benchmark/clean_attribution_test.dart`，把 `clean()` 端到端 2,400 µs/文件拆到操作与阶段两级，余额归零。结论：rename 41.5% 不可压缩；`readBytes` 19.1% 中 30/31 花在 `open` 而不是 `sha256`；`position()` 确认是每文件一次独立系统调用（63 µs）；同时发现此前完全未计账的 `_pendingEntries` 全量 `type()` 复检（159 µs/文件）。
 - **P0-5a–d 已落地**：短路全成功批次的条目复检、日志偏移改为累计字节数、清理计划 64 行批写、新增 `BroomFileSystem.readBytesUpTo` 供哈希与撤销校验使用。调用次数上 `type` 1.01→0.01、`position` 1.00→0.00、日志与计划写入 2.00→1.02；哈希读取交错 A/B 为 515.5→434.0 µs（−81.4）。回归测试 `test/quarantine_clean_efficiency_test.dart`（10 项），全量 397 项通过。
+- **P0-3 已落地**：选择聚合改为增量维护。所有写路径收敛到 `_selectPath` / `_deselectPath` 两个原语（而不是在九条写路径上各改一遍），getter 由全量遍历变为字段读取；`_startLockProbe` 顺带重算已选占用计数。10 万条三个 getter 合计 22.0→0.000 ms。
+- **P0-4 已落地**：新增 `VisibleItemsCache`（按 `source` 身份 + filter 值 + sort + `itemsRevision` 记忆化）、`CleanController.itemsRevision`、`ResultItemFilter` 值相等。排序按"键是否已在条目上"分流：数值键直接比较并在并列时惰性缓存小写路径，路径/扩展名键先派生一次再排序。默认视图每次重建 50.4→0 ms；`pathAsc` 405.1→166.7 ms，`extensionAsc` 2,443.6→273.8 ms。新增 `benchmark/ui_preview_benchmark.dart`，把旧实现作为参照副本保留在基准内以便复现同轮 A/B。
+- 记录一处方向性修正：装饰-排序并非对所有排序都更快。数值键本来就在条目上，装饰只是多出 O(N) 次分配，`sizeDesc` 实测因此从 46.4 涨到 63.5 ms。收益成立的区间是"派生键比分配贵得多"（`pathAsc`、`extensionAsc`）与"键大量并列"（惰性缓存生效）。全量 403 项测试与 `flutter analyze --fatal-infos` 通过。
 - 评审过程中修正了一个判断：最初按单价推算认为"清理时间几乎全花在重复元数据查询上"，端到端 A/B 证明元数据只占约 12%，rename 与文件读取才是主体。文档中的收益数字以实测为准，未采用推算值。
 - 另一处修正：P0-1 时的单步归因把约 1,000 µs 记为"其余未归因"，其中相当一部分并非散落在循环里，而是两项此前没被列入分解的操作——`finalize` 阶段的逐条 `type()` 与清理计划文件的逐条写入。这说明"按已知项求和再取差额"容易把整类操作漏在统计口径之外，凡涉及归因应以"每一次调用都有账"的方式重做。
 - 方法上的修正：改造前后各跑一次端到端在这台机器上不可用（相邻运行之间未改动的 rename 单项波动可达 30%）。后续所有 A/B 都改为"调用次数 + 同轮交错计时"，端到端总时长只用于判断量级。

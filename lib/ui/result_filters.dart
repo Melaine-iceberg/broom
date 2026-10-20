@@ -58,6 +58,23 @@ class ResultItemFilter {
       lockedOnly: lockedOnly ?? this.lockedOnly,
     );
   }
+
+  /// Value equality, so derived lists can be cached against the filter that
+  /// produced them even though the widget rebuilds build a fresh instance.
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is ResultItemFilter &&
+        other.query == query &&
+        other.extension == extension &&
+        other.minimumSize == minimumSize &&
+        other.olderThan == olderThan &&
+        other.lockedOnly == lockedOnly;
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(query, extension, minimumSize, olderThan, lockedOnly);
 }
 
 String extensionOfPath(String path) {
@@ -108,34 +125,92 @@ bool _matchesQuery(JunkItem item, String query) {
   return normalized != query && path.contains(normalized);
 }
 
+/// A sort entry for the orders whose key has to be derived from the path.
+///
+/// The comparators used to call `toLowerCase()` (and `extensionOfPath`) inside
+/// the comparison, which for a 100k-row list means millions of string
+/// allocations per sort. Deriving the key once per item removes that, and it
+/// only pays for itself when the key is expensive: for the size and time
+/// orders the key is already a field on [JunkItem], so those sort the items
+/// directly and only derive a lowercase path for the rare equal-key comparison.
+class _SortEntry {
+  _SortEntry(this.item, {bool withExtension = false})
+    : lowerPath = item.path.toLowerCase(),
+      extension = withExtension ? extensionOfPath(item.path) : '';
+
+  final JunkItem item;
+  final String lowerPath;
+
+  /// Only derived for [ResultItemSort.extensionAsc].
+  final String extension;
+}
+
 List<JunkItem> sortResultItems(List<JunkItem> items, ResultItemSort sort) {
+  if (items.length < 2) return List<JunkItem>.of(items);
+
+  switch (sort) {
+    case ResultItemSort.sizeDesc:
+    case ResultItemSort.sizeAsc:
+    case ResultItemSort.modifiedDesc:
+    case ResultItemSort.modifiedAsc:
+      return _sortByOrdinal(items, sort);
+    case ResultItemSort.pathAsc:
+    case ResultItemSort.extensionAsc:
+      return _sortByPathKey(items, sort);
+  }
+}
+
+/// Sorts by a numeric key that is already stored on the item.
+///
+/// The tie-breaker still compares lowercase paths. It runs inside the
+/// comparator on purpose: the cache is only created when two keys actually
+/// collide, so a list with distinct sizes or timestamps allocates nothing,
+/// while a list of thousands of equal-sized cache fragments still derives each
+/// path at most once instead of once per comparison.
+List<JunkItem> _sortByOrdinal(List<JunkItem> items, ResultItemSort sort) {
   final copy = List<JunkItem>.of(items);
-  int comparison(JunkItem a, JunkItem b) {
-    switch (sort) {
-      case ResultItemSort.sizeDesc:
-        return b.size.compareTo(a.size);
-      case ResultItemSort.sizeAsc:
-        return a.size.compareTo(b.size);
-      case ResultItemSort.modifiedDesc:
-        return b.modified.compareTo(a.modified);
-      case ResultItemSort.modifiedAsc:
-        return a.modified.compareTo(b.modified);
-      case ResultItemSort.pathAsc:
-        return a.path.toLowerCase().compareTo(b.path.toLowerCase());
-      case ResultItemSort.extensionAsc:
-        final byExtension = extensionOfPath(a.path)
-            .compareTo(extensionOfPath(b.path));
-        if (byExtension != 0) return byExtension;
-        return a.path.toLowerCase().compareTo(b.path.toLowerCase());
-    }
+  Map<JunkItem, String>? lowerPaths;
+
+  String lowerPathOf(JunkItem item) {
+    final cache = lowerPaths ??= Map<JunkItem, String>.identity();
+    final cached = cache[item];
+    if (cached != null) return cached;
+    final value = item.path.toLowerCase();
+    cache[item] = value;
+    return value;
   }
 
   copy.sort((a, b) {
-    final result = comparison(a, b);
-    if (result != 0) return result;
-    return a.path.toLowerCase().compareTo(b.path.toLowerCase());
+    final primary = switch (sort) {
+      ResultItemSort.sizeDesc => b.size.compareTo(a.size),
+      ResultItemSort.sizeAsc => a.size.compareTo(b.size),
+      ResultItemSort.modifiedDesc => b.modified.compareTo(a.modified),
+      ResultItemSort.modifiedAsc => a.modified.compareTo(b.modified),
+      // The path orders are dispatched to _sortByPathKey before we get here.
+      ResultItemSort.pathAsc || ResultItemSort.extensionAsc => 0,
+    };
+    if (primary != 0) return primary;
+    return lowerPathOf(a).compareTo(lowerPathOf(b));
   });
   return copy;
+}
+
+/// Sorts by keys derived from the path, computed once per item.
+List<JunkItem> _sortByPathKey(List<JunkItem> items, ResultItemSort sort) {
+  final byExtension = sort == ResultItemSort.extensionAsc;
+  final entries = <_SortEntry>[
+    for (final item in items) _SortEntry(item, withExtension: byExtension),
+  ];
+  entries.sort((a, b) {
+    final primary = byExtension
+        ? a.extension.compareTo(b.extension)
+        : a.lowerPath.compareTo(b.lowerPath);
+    if (primary != 0) return primary;
+    // pathAsc is already ordered by the full path.
+    if (!byExtension) return 0;
+    return a.lowerPath.compareTo(b.lowerPath);
+  });
+  return [for (final entry in entries) entry.item];
 }
 
 List<JunkItem> visibleResultItems(
@@ -145,4 +220,63 @@ List<JunkItem> visibleResultItems(
   DateTime? now,
 }) {
   return sortResultItems(filterResultItems(items, filter, now: now), sort);
+}
+
+/// Memoises the filtered and sorted view of one rule's items.
+///
+/// Building a preview page runs [visibleResultItems] on every rebuild, and the
+/// controller notifies listeners at least every 250 ms while the lock probe is
+/// running. At 100k items that is tens of milliseconds of repeated work per
+/// notification for input that rarely changed, so the result is keyed on
+/// `(source, filter, sort, version)`.
+///
+/// [version] must be bumped by the controller whenever the content of the
+/// source items changes (`possiblyLocked` flips included), otherwise the cache
+/// would keep serving items with stale flags.
+class VisibleItemsCache {
+  List<JunkItem>? _visible;
+  List<JunkItem>? _source;
+  ResultItemFilter? _filter;
+  ResultItemSort? _sort;
+  int? _version;
+
+  /// How many times the visible list was actually recomputed. Kept for tests
+  /// and diagnostics: the whole point of this class is that it stays flat
+  /// across repeated rebuilds.
+  int get recomputeCount => _recomputeCount;
+  int _recomputeCount = 0;
+
+  List<JunkItem> resolve(
+    List<JunkItem> source,
+    ResultItemFilter filter,
+    ResultItemSort sort, {
+    required int version,
+    DateTime? now,
+  }) {
+    final cached = _visible;
+    if (cached != null &&
+        identical(_source, source) &&
+        _version == version &&
+        _sort == sort &&
+        _filter == filter) {
+      return cached;
+    }
+    final computed = visibleResultItems(source, filter, sort, now: now);
+    _source = source;
+    _visible = computed;
+    _filter = filter;
+    _sort = sort;
+    _version = version;
+    _recomputeCount++;
+    return computed;
+  }
+
+  /// Drops the memoised list, e.g. when the page is handed a different source.
+  void invalidate() {
+    _visible = null;
+    _source = null;
+    _filter = null;
+    _sort = null;
+    _version = null;
+  }
 }

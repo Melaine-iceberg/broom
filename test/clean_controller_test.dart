@@ -503,6 +503,158 @@ void main() {
     expect(controller.selectedBytesForRule(rule.id), 35);
   });
 
+  test('keeps selection aggregates in sync on every selection path', () async {
+    final safeRule = createRule();
+    final reviewRule = createRule(id: 'test.review', risk: CleanRisk.review);
+    JunkItem item(
+      CleanerRule rule,
+      String name,
+      int size, {
+      bool locked = false,
+    }) => JunkItem(
+      ruleId: rule.id,
+      rootPath: rootA.path,
+      path: p.windows.join(rootA.path, name),
+      size: size,
+      modified: DateTime(2026, 10, 18),
+      possiblyLocked: locked,
+    );
+    final safeItems = [
+      item(safeRule, 'a.tmp', 10, locked: true),
+      item(safeRule, 'b.tmp', 25),
+      item(safeRule, 'c.tmp', 40),
+    ];
+    final reviewItems = [
+      item(reviewRule, 'd.tmp', 7),
+      item(reviewRule, 'e.tmp', 90),
+    ];
+    final controller = createController(
+      exclusions: createStore(),
+      scanner: _RecordingScanService(items: [...safeItems, ...reviewItems]),
+      rules: [safeRule, reviewRule],
+      rootsByRule: {
+        safeRule.id: [rootA.path],
+        reviewRule.id: [rootB.path],
+      },
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    // Independent oracle: selectedItems is derived from _results and
+    // _selectedPaths, so it must agree with the incremental counters.
+    void expectAggregates(String step) {
+      final selected = controller.selectedItems;
+      expect(controller.selectedCount, selected.length, reason: '$step: count');
+      expect(
+        controller.selectedBytes,
+        selected.fold<int>(0, (total, item) => total + item.size),
+        reason: '$step: total bytes',
+      );
+      expect(
+        controller.selectedPossiblyLockedCount,
+        selected.where((item) => item.possiblyLocked).length,
+        reason: '$step: locked count',
+      );
+      for (final rule in [safeRule, reviewRule]) {
+        final ruleSelected = selected.where((item) => item.ruleId == rule.id);
+        expect(
+          controller.selectedCountForRule(rule.id),
+          ruleSelected.length,
+          reason: '$step: count for ${rule.id}',
+        );
+        expect(
+          controller.selectedBytesForRule(rule.id),
+          ruleSelected.fold<int>(0, (total, item) => total + item.size),
+          reason: '$step: bytes for ${rule.id}',
+        );
+      }
+    }
+
+    await controller.scan();
+    // Safe rules are selected by default; the pre-flagged item counts as
+    // possibly locked even before the probe runs.
+    expect(controller.selectedBytes, 75);
+    expect(controller.selectedPossiblyLockedCount, 1);
+    expectAggregates('default selection');
+
+    controller.toggleItem(safeItems.first.path);
+    expect(controller.selectedBytes, 65);
+    expect(controller.selectedPossiblyLockedCount, 0);
+    expectAggregates('toggle off');
+
+    controller.toggleItem(safeItems.first.path);
+    expect(controller.selectedBytes, 75);
+    expect(controller.selectedPossiblyLockedCount, 1);
+    expectAggregates('toggle on');
+
+    controller.setRuleSelected(reviewRule.id, true);
+    expect(controller.selectedBytes, 172);
+    expectAggregates('select review rule');
+
+    controller.invertRuleSelection(safeRule.id);
+    expect(controller.selectedBytes, 97);
+    expect(controller.selectedPossiblyLockedCount, 0);
+    expectAggregates('invert rule');
+
+    controller.invertSelection();
+    expect(controller.selectedBytes, 75);
+    expect(controller.selectedPossiblyLockedCount, 1);
+    expectAggregates('invert all');
+
+    controller.clearRuleSelection();
+    expect(controller.selectedBytes, 0);
+    expect(controller.selectedBytesForRule(safeRule.id), 0);
+    expectAggregates('clear');
+
+    controller.selectAllRules();
+    expect(controller.selectedBytes, 172);
+    expectAggregates('select all');
+
+    controller.toggleRule(safeRule.id);
+    expect(controller.selectedBytes, 97);
+    expect(controller.selectedPossiblyLockedCount, 0);
+    expectAggregates('toggle rule off');
+  });
+
+  test('bumps the items revision for new results and lock updates', () async {
+    final rule = createRule();
+    final first = JunkItem(
+      ruleId: rule.id,
+      rootPath: rootA.path,
+      path: p.windows.join(rootA.path, 'first.tmp'),
+      size: 10,
+      modified: DateTime(2026, 10, 18),
+    );
+    final second = JunkItem(
+      ruleId: rule.id,
+      rootPath: rootA.path,
+      path: p.windows.join(rootA.path, 'second.tmp'),
+      size: 25,
+      modified: DateTime(2026, 10, 18),
+    );
+    final controller = createController(
+      exclusions: createStore(),
+      scanner: _RecordingScanService(items: [first, second]),
+      rules: [rule],
+      rootsByRule: {
+        rule.id: [rootA.path],
+      },
+      lockProbe: _FakeLockProbe({first.path}),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    final beforeScan = controller.itemsRevision;
+    await controller.scan();
+    final afterScan = controller.itemsRevision;
+    expect(afterScan, greaterThan(beforeScan));
+
+    await pumpEventQueue();
+    expect(controller.possiblyLockedCount, 1);
+    expect(controller.itemsRevision, greaterThan(afterScan));
+    expect(controller.selectedPossiblyLockedCount, 1);
+  });
+
   test('scans review rules but leaves them unselected by default', () async {
     final safeRule = createRule();
     final reviewRule = createRule(id: 'test.review', risk: CleanRisk.review);

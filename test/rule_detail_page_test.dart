@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:broom/app.dart';
 import 'package:broom/core/models/cleaner_rule.dart';
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/platform/cleaner_platform.dart';
+import 'package:broom/core/platform/file_lock_probe.dart';
 import 'package:broom/core/safety/path_guard.dart';
 import 'package:broom/core/scan/ntfs_index.dart';
 import 'package:broom/core/scan/scan_service.dart';
@@ -112,6 +114,21 @@ class _FakeScanService extends ScanService {
   }
 }
 
+class _DeferredLockProbe implements FileLockProbe {
+  final Completer<List<bool>> completer = Completer<List<bool>>();
+  List<String> paths = const [];
+
+  @override
+  Future<List<bool>> probePossiblyLocked(List<String> paths) {
+    this.paths = List.of(paths);
+    return completer.future;
+  }
+
+  void completeWith(Set<String> lockedPaths) {
+    completer.complete([for (final path in paths) lockedPaths.contains(path)]);
+  }
+}
+
 void main() {
   testWidgets('selects individual files and keeps rule state in sync', (
     tester,
@@ -209,6 +226,92 @@ void main() {
     await tester.pump();
 
     expect(controller.selectedCount, 2);
+  });
+
+  testWidgets('reflects lock updates from the probe in the cached list', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final temp = Directory.systemTemp.createTempSync(
+      'broom_rule_detail_probe_',
+    );
+    addTearDown(() {
+      if (temp.existsSync()) temp.deleteSync(recursive: true);
+    });
+    final root = Directory(p.windows.join(temp.path, 'cache'))
+      ..createSync(recursive: true);
+    final small = JunkItem(
+      ruleId: 'test.cache',
+      rootPath: root.path,
+      path: p.windows.join(root.path, 'small.tmp'),
+      size: 10,
+      modified: DateTime(2026, 10, 18),
+    );
+    final large = JunkItem(
+      ruleId: 'test.cache',
+      rootPath: root.path,
+      path: p.windows.join(root.path, 'large.tmp'),
+      size: 25,
+      modified: DateTime(2026, 10, 18),
+    );
+    const rule = CleanerRule(
+      id: 'test.cache',
+      title: '测试缓存',
+      category: '测试',
+      description: '测试规则',
+      pathPatterns: [],
+    );
+    final exclusions = ExclusionStore(
+      filePath: p.windows.join(temp.path, 'exclusions.json'),
+    );
+    await exclusions.ensureLoaded();
+    final probe = _DeferredLockProbe();
+    final controller = CleanController(
+      platform: _Platform(rule: rule, roots: [root.path]),
+      guard: PathGuard(protectedRoots: const []),
+      quarantine: FakeQuarantineService(),
+      exclusions: exclusions,
+      scanServiceFactory: () => _FakeScanService([small, large]),
+      lockProbe: probe,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    await controller.scan();
+    expect(controller.lockProbeRunning, isTrue);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildBroomTheme(Brightness.light),
+        home: RuleDetailPage(
+          controller: controller,
+          result: controller.results.single,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Finder rowOf(JunkItem item) =>
+        find.byKey(ValueKey('rule-file-${item.path}'));
+    const lockedTooltip = '可能正被其他程序占用，清理时会跳过';
+    expect(find.byTooltip(lockedTooltip), findsNothing);
+
+    // The probe marks one file while the page is already showing a cached
+    // list; the cached rows must pick up the new flag.
+    probe.completeWith({small.path});
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byTooltip(lockedTooltip), findsOneWidget);
+    expect(find.textContaining('1 个可能被占用'), findsOneWidget);
+    // The size order does not depend on the lock flag, and the cache keeps it.
+    expect(
+      tester.getTopLeft(rowOf(large)).dy,
+      lessThan(tester.getTopLeft(rowOf(small)).dy),
+    );
   });
 
   testWidgets('marks files that may be locked', (tester) async {

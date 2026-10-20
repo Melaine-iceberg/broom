@@ -30,6 +30,7 @@ class RuleDetailPage extends StatefulWidget {
 class _RuleDetailPageState extends State<RuleDetailPage> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
+  final VisibleItemsCache _visibleItems = VisibleItemsCache();
   ResultItemSort _sort = ResultItemSort.sizeDesc;
   ResultItemFilter _filter = const ResultItemFilter();
   late final List<String> _extensions = availableExtensions(
@@ -51,10 +52,32 @@ class _RuleDetailPageState extends State<RuleDetailPage> {
   }
 
   @override
+  void didUpdateWidget(covariant RuleDetailPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.result.items, widget.result.items)) {
+      _visibleItems.invalidate();
+    }
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     _searchFocus.dispose();
     super.dispose();
+  }
+
+  /// Filtered and sorted rows, reused across rebuilds.
+  ///
+  /// The page rebuilds on every controller notification (the lock probe ticks
+  /// every 250 ms), while the visible order only changes when the filter, the
+  /// sort or the result content changes.
+  List<JunkItem> _visibleFor(ResultItemFilter filter) {
+    return _visibleItems.resolve(
+      result.items,
+      filter,
+      _sort,
+      version: controller.itemsRevision,
+    );
   }
 
   Future<void> _loadRoots() async {
@@ -178,11 +201,7 @@ class _RuleDetailPageState extends State<RuleDetailPage> {
         final selectedBytes = controller.selectedBytesForRule(rule.id);
         final lockedCount = controller.possiblyLockedCountForRule(rule.id);
         final effectiveFilter = _filter.copyWith(query: _searchController.text);
-        final visibleItems = visibleResultItems(
-          result.items,
-          effectiveFilter,
-          _sort,
-        );
+        final visibleItems = _visibleFor(effectiveFilter);
         final isFiltering =
             effectiveFilter.hasQuery || _filter.hasAdvancedFilters;
 
