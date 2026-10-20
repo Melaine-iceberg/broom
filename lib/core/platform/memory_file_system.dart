@@ -225,6 +225,15 @@ class MemoryFileSystem implements BroomFileSystem, DetailedDirectoryListing {
   }
 
   @override
+  Future<List<int>> readBytesUpTo(String path, int limit) async {
+    await _before('readBytesUpTo', path);
+    if (limit <= 0) return Uint8List(0);
+    final bytes = await _readFileBytes(path);
+    if (bytes.length <= limit) return bytes;
+    return Uint8List.sublistView(bytes, 0, limit);
+  }
+
+  @override
   Future<void> writeString(
     String path,
     String contents, {

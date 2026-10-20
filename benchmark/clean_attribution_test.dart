@@ -363,6 +363,25 @@ Future<void> _measureIoPrimitives(String base) async {
         : 0;
   });
 
+  // The end-to-end totals drift by more than 10% between runs on this machine
+  // (Defender load), so the A/B for the hash read is interleaved instead: both
+  // implementations run in the same loop, alternating which goes first, and
+  // only their difference is compared.
+  await _measurePair(
+    'readAsBytes (legacy hash read)',
+    () async {
+      _sink = (await probe.readAsBytes()).length;
+    },
+    'readBytesUpTo(size + 1)',
+    () async {
+      _sink = (await const IoFileSystem().readBytesUpTo(
+        probe.path,
+        _fileSize + 1,
+      )).length;
+    },
+    iterations: 300,
+  );
+
   // Repeated after the first pass so a cache or ordering effect shows up as a
   // difference between two readings of the same call, rather than being read
   // as a real gap between two APIs.
@@ -433,6 +452,55 @@ Future<void> _measureAsync(
     '${label.padRight(34)}'
     '${(stopwatch.elapsedMicroseconds / iterations).toStringAsFixed(1).padLeft(10)}'
     ' µs',
+  );
+}
+
+/// Times two implementations in the same loop, alternating which runs first, so
+/// machine-level drift cancels out and only the difference remains.
+Future<void> _measurePair(
+  String labelA,
+  Future<void> Function() a,
+  String labelB,
+  Future<void> Function() b, {
+  required int iterations,
+}) async {
+  for (var index = 0; index < 20; index++) {
+    await a();
+    await b();
+  }
+  final watchA = Stopwatch();
+  final watchB = Stopwatch();
+  for (var index = 0; index < iterations; index++) {
+    final aFirst = index.isEven;
+    if (aFirst) {
+      watchA.start();
+      await a();
+      watchA.stop();
+      watchB.start();
+      await b();
+      watchB.stop();
+    } else {
+      watchB.start();
+      await b();
+      watchB.stop();
+      watchA.start();
+      await a();
+      watchA.stop();
+    }
+  }
+  final microsA = watchA.elapsedMicroseconds / iterations;
+  final microsB = watchB.elapsedMicroseconds / iterations;
+  stdout.writeln(
+    '${labelA.padRight(34)}'
+    '${microsA.toStringAsFixed(1).padLeft(10)} µs',
+  );
+  stdout.writeln(
+    '${labelB.padRight(34)}'
+    '${microsB.toStringAsFixed(1).padLeft(10)} µs',
+  );
+  stdout.writeln(
+    '${'差值 (B - A)'.padRight(34)}'
+    '${(microsB - microsA).toStringAsFixed(1).padLeft(10)} µs',
   );
 }
 
@@ -609,7 +677,11 @@ class _TimingFileSystem implements BroomFileSystem {
 
   @override
   Future<List<int>> readBytes(String path) =>
-      _time('readBytes (integrity hash)', () => inner.readBytes(path));
+      _time('readBytes (full)', () => inner.readBytes(path));
+
+  @override
+  Future<List<int>> readBytesUpTo(String path, int limit) =>
+      _time('readBytesUpTo (hash)', () => inner.readBytesUpTo(path, limit));
 
   @override
   Future<void> writeString(

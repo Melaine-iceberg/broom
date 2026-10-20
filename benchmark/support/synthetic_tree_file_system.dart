@@ -121,6 +121,10 @@ class SyntheticTreeFileSystem implements BroomFileSystem {
       throw UnsupportedError('benchmark filesystem is read-only');
 
   @override
+  Future<List<int>> readBytesUpTo(String path, int limit) =>
+      throw UnsupportedError('benchmark filesystem is read-only');
+
+  @override
   Future<void> writeString(
     String path,
     String contents, {

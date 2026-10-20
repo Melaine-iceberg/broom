@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'directory_enum.dart';
 import 'windows_path.dart';
@@ -99,6 +100,14 @@ abstract interface class BroomFileSystem {
   Future<List<String>> readLines(String path);
 
   Future<List<int>> readBytes(String path);
+
+  /// Reads at most [limit] bytes from the start of [path].
+  ///
+  /// Callers that already know how many bytes they need (an integrity hash of a
+  /// file they just stat-ed) avoid the final zero-length read `readBytes` pays:
+  /// it only stops at EOF. Implementations must return exactly the file prefix
+  /// when it is shorter than [limit], and must not seek past the end.
+  Future<List<int>> readBytesUpTo(String path, int limit);
 
   Future<void> writeString(
     String path,
@@ -222,6 +231,24 @@ class IoFileSystem implements BroomFileSystem, DetailedDirectoryListing {
   @override
   Future<List<int>> readBytes(String path) =>
       File(WindowsPath.forIo(path)).readAsBytes();
+
+  @override
+  Future<List<int>> readBytesUpTo(String path, int limit) async {
+    if (limit <= 0) return Uint8List(0);
+    final file = File(WindowsPath.forIo(path));
+    final handle = await file.open();
+    try {
+      final builder = BytesBuilder(copy: false);
+      while (builder.length < limit) {
+        final chunk = await handle.read(limit - builder.length);
+        if (chunk.isEmpty) break;
+        builder.add(chunk);
+      }
+      return builder.takeBytes();
+    } finally {
+      await handle.close();
+    }
+  }
 
   @override
   Future<void> writeString(

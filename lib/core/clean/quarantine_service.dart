@@ -480,6 +480,10 @@ class QuarantineService {
       entriesFile = await _files.openAppend(
         p.windows.join(sessionDir.path, 'entries.jsonl'),
       );
+      // Only this process appends to the journal, so its write offset can be
+      // tracked locally. One query at open replaces one per file; the offset
+      // is still exact because every appended line is measured in UTF-8 bytes.
+      var journalOffset = await entriesFile.position();
 
       for (final item in items) {
         if (isCancelled?.call() ?? false) {
@@ -560,9 +564,14 @@ class QuarantineService {
         // Write the undo record before moving: a crash can leave an unused
         // record, but never an unrecorded file inside the quarantine.
         final writer = entriesFile;
-        final entryStart = await writer.position();
+        final line = '${jsonEncode(entry)}\n';
+        final entryStart = journalOffset;
         try {
-          await writer.writeString('${jsonEncode(entry)}\n');
+          await writer.writeString(line);
+          // Measuring the encoded length costs one small allocation, far less
+          // than the per-file `position()` it replaces, and keeps the offset
+          // exactly equal to what dart:io appended.
+          journalOffset += utf8.encode(line).length;
           unflushedJournalWrites++;
           if (unflushedJournalWrites >= _journalFlushInterval) {
             await writer.flush();
@@ -578,12 +587,13 @@ class QuarantineService {
         try {
           await _moveFile(item.path, destinationPath);
         } on FileSystemException catch (error) {
-          await _discardEntryWithoutStoredFile(
+          final discarded = await _discardEntryWithoutStoredFile(
             writer,
             entryStart,
             destinationPath,
             _files,
           );
+          if (discarded) journalOffset = entryStart;
           if (_isDiskFullError(error)) {
             // Stop before attempting more copies. The plan stays on disk and
             // the session becomes partial so cleanup can resume after the user
@@ -814,7 +824,26 @@ class QuarantineService {
     final journal = await _readEntryJournal(sessionDir);
     final entries = journal.entries;
     final restoredNames = await _readRestoredNames(sessionDir);
-    final pending = await _pendingEntries(sessionDir, entries, restoredNames);
+    // Every planned file was moved and the journal parsed cleanly, so the stored
+    // files exist by construction. Probing each one with a `type` call would
+    // cost one syscall per file to re-prove what the loop just did; only a
+    // failed, skipped or interrupted run needs the per-entry check. The
+    // difference is limited to files deleted behind our back right after being
+    // moved: here they stay pending, which is the more conservative outcome.
+    final movedEverything =
+        failureCount == 0 &&
+        skippedCount == 0 &&
+        remainingCount == 0 &&
+        journal.rejected == 0;
+    final List<_StoredEntry> pending;
+    if (movedEverything) {
+      pending = [
+        for (final entry in entries)
+          if (!restoredNames.contains(entry.storedName)) entry,
+      ];
+    } else {
+      pending = await _pendingEntries(sessionDir, entries, restoredNames);
+    }
     final pendingCount = pending.length + journal.rejected;
 
     // An entry is written before the move so a crash cannot lose undo data.
@@ -1655,7 +1684,10 @@ class QuarantineService {
   /// Removes the just-written undo record when a failed move left nothing in
   /// the quarantine. If a partial copy exists, the record is kept so the file
   /// can still be restored or purged.
-  static Future<void> _discardEntryWithoutStoredFile(
+  ///
+  /// Returns true when the record was removed, which lets the caller keep its
+  /// running journal offset in sync.
+  static Future<bool> _discardEntryWithoutStoredFile(
     FsFileWriter writer,
     int entryStart,
     String storedPath,
@@ -1663,12 +1695,14 @@ class QuarantineService {
   ) async {
     try {
       final type = await files.type(storedPath);
-      if (type != FsEntityType.notFound) return;
+      if (type != FsEntityType.notFound) return false;
       await writer.truncate(entryStart);
       await writer.setPosition(entryStart);
       await writer.flush();
+      return true;
     } on FileSystemException {
       // An extra entry without a stored file is harmless and can be purged.
+      return false;
     }
   }
 
@@ -1691,7 +1725,16 @@ class QuarantineService {
   Future<String?> _tryHashFile(String path, int size) async {
     if (size > _integrityHashLimitBytes) return null;
     try {
-      final bytes = await _files.readBytes(path);
+      // Ask for one byte past the recorded size: a shorter result proves the
+      // file still ends exactly there, so the common case is a single read.
+      // `readBytes` would need an extra read at EOF to learn the same thing.
+      final bytes = await _files.readBytesUpTo(path, size + 1);
+      if (bytes.length > size) {
+        // The file grew between the stat and the hash. Restore compares the
+        // digest of the whole stored file, so hash everything to stay byte
+        // exact instead of recording a truncated prefix.
+        return sha256.convert(await _files.readBytes(path)).toString();
+      }
       return sha256.convert(bytes).toString();
     } on FileSystemException {
       return null;
@@ -1731,7 +1774,9 @@ class QuarantineService {
     if (expectedDigest != null) {
       String actualDigest;
       try {
-        final bytes = await _files.readBytes(storedPath);
+        // The length check above already pinned the file at `size`, so reading
+        // that many bytes avoids the extra read `readBytes` makes at EOF.
+        final bytes = await _files.readBytesUpTo(storedPath, entry.size);
         actualDigest = sha256.convert(bytes).toString();
       } on FileSystemException catch (error) {
         return (missing: false, reason: '无法校验隔离文件：${_failureReason(error)}');
@@ -2115,17 +2160,39 @@ class QuarantineService {
     }
   }
 
+  /// How many plan lines are joined into a single append.
+  ///
+  /// The plan is written once, before the first file is touched, and is only
+  /// read by the resume path. Batching therefore changes nothing but the number
+  /// of write syscalls: one per line would cost one per file.
+  static const _planWriteBatch = 64;
+
   Future<void> _writePlan(Directory sessionDir, List<JunkItem> items) async {
     final planPath = p.windows.join(sessionDir.path, 'plan.jsonl');
     final tempPath = '$planPath.tmp';
     final writer = await _files.openWrite(tempPath);
     var closed = false;
     try {
+      final buffer = StringBuffer();
+      var batched = 0;
       for (final item in items) {
-        await writer.writeString(
-          '${jsonEncode({'originalPath': item.path, 'rootPath': item.rootPath, 'ruleId': item.ruleId, 'size': item.size, 'modified': item.modified.toUtc().toIso8601String()})}\n',
+        buffer.writeln(
+          jsonEncode({
+            'originalPath': item.path,
+            'rootPath': item.rootPath,
+            'ruleId': item.ruleId,
+            'size': item.size,
+            'modified': item.modified.toUtc().toIso8601String(),
+          }),
         );
+        batched++;
+        if (batched >= _planWriteBatch) {
+          await writer.writeString(buffer.toString());
+          buffer.clear();
+          batched = 0;
+        }
       }
+      if (batched > 0) await writer.writeString(buffer.toString());
       await writer.flush();
       await writer.close();
       closed = true;
