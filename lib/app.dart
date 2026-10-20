@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'core/analysis/analysis_service.dart';
 import 'core/clean/quarantine_retention_service.dart';
@@ -174,7 +175,7 @@ class _UnsupportedView extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.cleaning_services_rounded, size: 56),
+              const Icon(LucideIcons.sparkles, size: 56),
               const SizedBox(height: 20),
               Text(
                 strings.tf('Broom 暂不支持 {platform}', {'platform': platformName}),

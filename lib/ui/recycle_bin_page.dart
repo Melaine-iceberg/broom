@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../core/models/cleaner_rule.dart';
 import '../core/shell/system_shell.dart';
@@ -97,7 +98,7 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
       appBar: AppBar(
         leading: IconButton(
           onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.arrow_back_rounded),
+          icon: const Icon(LucideIcons.arrowLeft),
           tooltip: context.t('返回'),
         ),
         toolbarHeight: 76,
@@ -137,7 +138,7 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                     onPressed: _loading || _emptying
                         ? null
                         : () => _load(showLoading: false),
-                    icon: const Icon(Icons.refresh_rounded, size: 17),
+                    icon: const Icon(LucideIcons.refreshCw, size: 17),
                     label: Text(context.t('刷新')),
                   ),
                   const Spacer(),
@@ -159,7 +160,7 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                             height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.delete_forever_rounded, size: 19),
+                        : const Icon(LucideIcons.trash2, size: 19),
                     label: Text(
                       _emptying ? context.t('正在清空…') : context.t('清空回收站'),
                     ),
@@ -191,7 +192,7 @@ class _ReviewWarning extends StatelessWidget {
           const Padding(
             padding: EdgeInsets.only(top: 1),
             child: Icon(
-              Icons.warning_amber_rounded,
+              LucideIcons.triangleAlert,
               size: 15,
               color: BroomColors.warning,
             ),
@@ -236,9 +237,7 @@ class _RecycleBinCard extends StatelessWidget {
           Row(
             children: [
               IconTile(
-                icon: empty
-                    ? Icons.delete_sweep_outlined
-                    : Icons.delete_forever_rounded,
+                icon: empty ? LucideIcons.trash2 : LucideIcons.trash2,
                 size: 44,
                 color: empty ? BroomColors.accent : BroomColors.amber,
               ),
@@ -326,7 +325,7 @@ class _PolicyNote extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 2),
             child: Icon(
-              Icons.verified_user_outlined,
+              LucideIcons.shieldCheck,
               size: 13,
               color: BroomColors.inkFaint(context),
             ),
@@ -368,7 +367,7 @@ class _EmptyRecycleBinDialogState extends State<_EmptyRecycleBinDialog> {
     final scheme = theme.colorScheme;
 
     return AlertDialog(
-      icon: Icon(Icons.delete_forever_rounded, size: 30, color: scheme.error),
+      icon: Icon(LucideIcons.trash2, size: 30, color: scheme.error),
       title: Text(context.t('永久清空回收站？')),
       content: Column(
         mainAxisSize: MainAxisSize.min,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../core/analysis/analysis_service.dart';
 import '../core/models/analysis_models.dart';
@@ -64,7 +65,7 @@ class _DuplicateFinderPageState extends State<DuplicateFinderPage> {
       appBar: AppBar(
         leading: IconButton(
           onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.arrow_back_rounded),
+          icon: const Icon(LucideIcons.arrowLeft),
           tooltip: context.t('返回'),
         ),
         toolbarHeight: 76,
@@ -135,7 +136,7 @@ class _DuplicateFinderPageState extends State<DuplicateFinderPage> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 620),
           child: AnalysisProgressCard(
-            icon: Icons.content_copy_rounded,
+            icon: LucideIcons.copy,
             title: comparing ? context.t('正在核对文件内容') : context.t('正在遍历文件夹'),
             description: comparing
                 ? context.t('对大小相同的候选文件做部分指纹与完整哈希比对。')
@@ -261,7 +262,7 @@ class _ConfigPanel extends StatelessWidget {
               FilledButton.icon(
                 onPressed: controller.isRunning ? null : controller.scan,
                 icon: Icon(
-                  report == null ? Icons.search_rounded : Icons.refresh_rounded,
+                  report == null ? LucideIcons.search : LucideIcons.refreshCw,
                   size: 18,
                 ),
                 label: Text(
@@ -417,7 +418,7 @@ class _DuplicateGroupCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
-                    Icons.content_copy_rounded,
+                    LucideIcons.copy,
                     size: 18,
                     color: scheme.primary,
                   ),
@@ -513,11 +514,7 @@ class _DuplicateFileRow extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 7, 8, 7),
       child: Row(
         children: [
-          Icon(
-            Icons.insert_drive_file_outlined,
-            size: 16,
-            color: scheme.onSurfaceVariant,
-          ),
+          Icon(LucideIcons.file, size: 16, color: scheme.onSurfaceVariant),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -555,7 +552,7 @@ class _DuplicateFileRow extends StatelessWidget {
           ),
           IconButton(
             onPressed: () => onReveal(file.path),
-            icon: const Icon(Icons.folder_open_rounded, size: 17),
+            icon: const Icon(LucideIcons.folderOpen, size: 17),
             visualDensity: VisualDensity.compact,
             tooltip: context.t('在资源管理器中显示'),
           ),
@@ -590,7 +587,7 @@ class _NoDuplicates extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(
-                  Icons.check_circle_outline_rounded,
+                  LucideIcons.circleCheck,
                   size: 20,
                   color: BroomColors.inkMuted(context),
                 ),
@@ -642,7 +639,7 @@ class _IdleState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.content_copy_outlined,
+              LucideIcons.copy,
               size: 30,
               color: BroomColors.inkFaint(context),
             ),

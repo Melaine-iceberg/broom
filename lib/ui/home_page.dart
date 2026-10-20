@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../core/analysis/analysis_service.dart';
 import '../core/clean/quarantine_retention_service.dart';
@@ -180,7 +181,7 @@ class _HomePageState extends State<HomePage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         icon: Icon(
-          Icons.restore_rounded,
+          LucideIcons.undo2,
           size: 30,
           color: Theme.of(dialogContext).colorScheme.primary,
         ),
@@ -343,7 +344,7 @@ class _HomePageState extends State<HomePage> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setState) => AlertDialog(
-            icon: const Icon(Icons.cleaning_services_rounded, size: 30),
+            icon: const Icon(LucideIcons.sparkles, size: 30),
             title: Text(strings.t('移入隔离区？')),
             content: SizedBox(
               width: 480,
@@ -443,7 +444,7 @@ class _HomePageState extends State<HomePage> {
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          icon: const Icon(Icons.error_outline_rounded, size: 30),
+          icon: const Icon(LucideIcons.circleAlert, size: 30),
           title: Text(context.t('撤销失败')),
           content: Text('$failure'),
           actions: [
@@ -686,7 +687,7 @@ class _ScopeSectionState extends State<_ScopeSection> {
           Row(
             children: [
               Icon(
-                Icons.tune_rounded,
+                LucideIcons.slidersHorizontal,
                 size: 18,
                 color: BroomColors.inkMuted(context),
               ),
@@ -706,7 +707,7 @@ class _ScopeSectionState extends State<_ScopeSection> {
               TextButton.icon(
                 key: const ValueKey('open-exclusions'),
                 onPressed: widget.onOpenExclusions,
-                icon: const Icon(Icons.block_rounded, size: 14),
+                icon: const Icon(LucideIcons.ban, size: 14),
                 label: Text(
                   exclusionCount == 0
                       ? context.t('排除列表')
@@ -720,7 +721,7 @@ class _ScopeSectionState extends State<_ScopeSection> {
                 icon: AnimatedRotation(
                   turns: _expanded ? 0.5 : 0,
                   duration: const Duration(milliseconds: 160),
-                  child: const Icon(Icons.expand_more_rounded, size: 17),
+                  child: const Icon(LucideIcons.chevronDown, size: 17),
                 ),
                 label: Text(_expanded ? context.t('收起') : context.t('展开')),
               ),
@@ -948,7 +949,7 @@ class _RuleChip extends StatelessWidget {
           if (rule.risk == CleanRisk.review) ...[
             const SizedBox(width: 5),
             Icon(
-              Icons.shield_outlined,
+              LucideIcons.shield,
               size: 10,
               color: BroomColors.amber.withValues(alpha: 0.9),
             ),
@@ -1016,9 +1017,7 @@ class _InlineBanner extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            isError
-                ? Icons.error_outline_rounded
-                : (icon ?? Icons.info_outline_rounded),
+            isError ? LucideIcons.circleAlert : (icon ?? LucideIcons.info),
             size: 15,
             color: foreground,
           ),
@@ -1036,7 +1035,7 @@ class _InlineBanner extends StatelessWidget {
           if (onClose != null)
             IconButton(
               onPressed: onClose,
-              icon: const Icon(Icons.close_rounded, size: 15),
+              icon: const Icon(LucideIcons.x, size: 15),
               tooltip: context.t('关闭'),
             ),
         ],
@@ -1099,7 +1098,7 @@ class _ScanningView extends StatelessWidget {
                           ),
                         ),
                         Icon(
-                          Icons.travel_explore_rounded,
+                          LucideIcons.scanSearch,
                           size: 28,
                           color: scheme.primary,
                         ),
@@ -1265,7 +1264,7 @@ class _ScanningView extends StatelessWidget {
                             child: Row(
                               children: [
                                 Icon(
-                                  Icons.insert_drive_file_outlined,
+                                  LucideIcons.file,
                                   size: 13,
                                   color: scheme.onSurfaceVariant,
                                 ),
@@ -1498,7 +1497,7 @@ class _PreviewViewState extends State<_PreviewView> {
             if (controller.notice case final notice?)
               _InlineBanner(message: notice, onClose: controller.clearNotice),
           if (controller.scanPersistenceNotice case final notice?)
-            _InlineBanner(icon: Icons.save_outlined, message: notice),
+            _InlineBanner(icon: LucideIcons.save, message: notice),
           if (controller.scanDirectoryErrors > 0)
             _InlineBanner(
               message: context.tf('扫描时遇到 {count} 个路径问题，已跳过。', {
@@ -1550,7 +1549,7 @@ class _PreviewViewState extends State<_PreviewView> {
               OutlinedButton.icon(
                 key: const ValueKey('preview-back'),
                 onPressed: controller.returnHome,
-                icon: const Icon(Icons.arrow_back_rounded, size: 16),
+                icon: const Icon(LucideIcons.arrowLeft, size: 16),
                 label: Text(context.t('返回概览')),
               ),
               const SizedBox(width: 6),
@@ -1558,7 +1557,7 @@ class _PreviewViewState extends State<_PreviewView> {
                 message: context.t('F5 重新扫描'),
                 child: OutlinedButton.icon(
                   onPressed: controller.scan,
-                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  icon: const Icon(LucideIcons.refreshCw, size: 16),
                   label: Text(context.t('重新扫描')),
                 ),
               ),
@@ -1603,7 +1602,7 @@ class _PreviewViewState extends State<_PreviewView> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          Icons.check_circle_outline_rounded,
+                          LucideIcons.circleCheck,
                           size: 44,
                           color: scheme.primary,
                         ),
@@ -1626,7 +1625,7 @@ class _PreviewViewState extends State<_PreviewView> {
                           message: context.t('再扫描一次（F5）'),
                           child: FilledButton.tonalIcon(
                             onPressed: controller.scan,
-                            icon: const Icon(Icons.refresh_rounded, size: 18),
+                            icon: const Icon(LucideIcons.refreshCw, size: 18),
                             label: Text(context.t('再扫描一次')),
                           ),
                         ),
@@ -1647,7 +1646,7 @@ class _PreviewViewState extends State<_PreviewView> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                              Icons.search_off_rounded,
+                              LucideIcons.searchX,
                               size: 40,
                               color: scheme.onSurfaceVariant,
                             ),
@@ -1709,7 +1708,7 @@ class _PreviewViewState extends State<_PreviewView> {
         final theme = Theme.of(dialogContext);
         final scheme = theme.colorScheme;
         return AlertDialog(
-          icon: const Icon(Icons.report_problem_outlined, size: 30),
+          icon: const Icon(LucideIcons.triangleAlert, size: 30),
           title: Text(context.t('扫描问题明细')),
           content: SizedBox(
             width: 560,
@@ -1804,18 +1803,18 @@ String _scanIssueLabel(BuildContext context, ScanErrorKind kind) {
 
 IconData _scanIssueIcon(ScanErrorKind kind) {
   return switch (kind) {
-    ScanErrorKind.accessDenied => Icons.lock_outline_rounded,
-    ScanErrorKind.pathTooLong => Icons.straighten_rounded,
-    ScanErrorKind.notFound => Icons.search_off_rounded,
-    ScanErrorKind.deviceNotReady => Icons.usb_off_rounded,
-    ScanErrorKind.networkUnavailable => Icons.wifi_off_rounded,
-    ScanErrorKind.writeProtected => Icons.lock_clock_outlined,
-    ScanErrorKind.diskFull => Icons.sd_card_alert_outlined,
-    ScanErrorKind.unsupported => Icons.extension_off_outlined,
-    ScanErrorKind.sharingViolation => Icons.sync_problem_rounded,
-    ScanErrorKind.invalidName => Icons.short_text_rounded,
-    ScanErrorKind.ioError => Icons.error_outline_rounded,
-    ScanErrorKind.other => Icons.help_outline_rounded,
+    ScanErrorKind.accessDenied => LucideIcons.lock,
+    ScanErrorKind.pathTooLong => LucideIcons.ruler,
+    ScanErrorKind.notFound => LucideIcons.searchX,
+    ScanErrorKind.deviceNotReady => LucideIcons.usb,
+    ScanErrorKind.networkUnavailable => LucideIcons.wifiOff,
+    ScanErrorKind.writeProtected => LucideIcons.lock,
+    ScanErrorKind.diskFull => LucideIcons.hardDrive,
+    ScanErrorKind.unsupported => LucideIcons.unplug,
+    ScanErrorKind.sharingViolation => LucideIcons.fileLock2,
+    ScanErrorKind.invalidName => LucideIcons.alignLeft,
+    ScanErrorKind.ioError => LucideIcons.circleAlert,
+    ScanErrorKind.other => LucideIcons.circleHelp,
   };
 }
 
@@ -1853,13 +1852,13 @@ class _PreviewToolbar extends StatelessWidget {
             decoration: InputDecoration(
               labelText: context.t('搜索扫描结果'),
               hintText: context.t('规则名称、类别或路径模板'),
-              prefixIcon: const Icon(Icons.search_rounded, size: 19),
+              prefixIcon: const Icon(LucideIcons.search, size: 19),
               suffixIcon: searchController.text.isEmpty
                   ? null
                   : IconButton(
                       tooltip: context.t('清除搜索'),
                       onPressed: onClearQuery,
-                      icon: const Icon(Icons.close_rounded, size: 17),
+                      icon: const Icon(LucideIcons.x, size: 17),
                     ),
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(
@@ -1896,7 +1895,7 @@ class _PreviewToolbar extends StatelessWidget {
                     SizedBox(
                       width: 20,
                       child: value == sort
-                          ? const Icon(Icons.check_rounded, size: 17)
+                          ? const Icon(LucideIcons.check, size: 17)
                           : null,
                     ),
                     Text(switch (value) {
@@ -1922,7 +1921,7 @@ class _PreviewToolbar extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  Icons.swap_vert_rounded,
+                  LucideIcons.arrowUpDown,
                   size: 18,
                   color: scheme.onSurfaceVariant,
                 ),
@@ -1930,7 +1929,7 @@ class _PreviewToolbar extends StatelessWidget {
                 Text(sortLabel, style: Theme.of(context).textTheme.bodySmall),
                 const SizedBox(width: 4),
                 Icon(
-                  Icons.expand_more_rounded,
+                  LucideIcons.chevronDown,
                   size: 17,
                   color: scheme.onSurfaceVariant,
                 ),
@@ -1969,7 +1968,7 @@ class _PreviewNotices extends StatelessWidget {
         children: [
           if (controller.lockProbeRunning)
             _PreviewNotice(
-              icon: Icons.lock_outline_rounded,
+              icon: LucideIcons.lock,
               color: BroomColors.accent,
               text: context.tf('正在检测被占用的文件…（{checked} / {total}）', {
                 'checked': formatCount(controller.lockProbeChecked),
@@ -1978,7 +1977,7 @@ class _PreviewNotices extends StatelessWidget {
             )
           else if (controller.possiblyLockedCount > 0)
             _PreviewNotice(
-              icon: Icons.lock_outline_rounded,
+              icon: LucideIcons.lock,
               color: BroomColors.amber,
               text: context.tf('{count} 个文件可能正被占用，清理时会跳过', {
                 'count': formatCount(controller.possiblyLockedCount),
@@ -1989,7 +1988,7 @@ class _PreviewNotices extends StatelessWidget {
                 controller.possiblyLockedCount > 0)
               const SizedBox(height: 6),
             _PreviewNotice(
-              icon: Icons.shield_outlined,
+              icon: LucideIcons.shield,
               color: BroomColors.inkMuted(context),
               text: context.tf('扫描结果包含 {count} 条需确认规则，默认未勾选。', {
                 'count': controller.previewReviewRuleCount,
@@ -2181,9 +2180,7 @@ class _ScanSummaryCard extends StatelessWidget {
         Row(
           children: [
             Icon(
-              resultLimited
-                  ? Icons.content_cut_rounded
-                  : Icons.check_circle_outline_rounded,
+              resultLimited ? LucideIcons.scissors : LucideIcons.circleCheck,
               size: 16,
               color: resultLimited ? scheme.tertiary : scheme.primary,
             ),
@@ -2506,7 +2503,7 @@ class _RuleResultCard extends StatelessWidget {
                         Row(
                           children: [
                             Icon(
-                              Icons.lock_outline_rounded,
+                              LucideIcons.lock,
                               size: 13,
                               color: scheme.tertiary,
                             ),
@@ -2544,7 +2541,7 @@ class _RuleResultCard extends StatelessWidget {
                     children: [
                       Text(context.t('查看')),
                       const SizedBox(width: 2),
-                      const Icon(Icons.chevron_right_rounded, size: 17),
+                      const Icon(LucideIcons.chevronRight, size: 17),
                     ],
                   ),
                 ),
@@ -2607,11 +2604,7 @@ class _CleanActionBar extends StatelessWidget {
                   const SizedBox(height: 3),
                   Row(
                     children: [
-                      Icon(
-                        Icons.lock_outline_rounded,
-                        size: 13,
-                        color: scheme.tertiary,
-                      ),
+                      Icon(LucideIcons.lock, size: 13, color: scheme.tertiary),
                       const SizedBox(width: 4),
                       Flexible(
                         child: Text(
@@ -2633,7 +2626,7 @@ class _CleanActionBar extends StatelessWidget {
                   Row(
                     children: [
                       Icon(
-                        Icons.shield_outlined,
+                        LucideIcons.shield,
                         size: 13,
                         color: scheme.tertiary,
                       ),
@@ -2675,7 +2668,7 @@ class _CleanActionBar extends StatelessWidget {
                 onPressed: controller.selectedCount == 0
                     ? null
                     : onCleanRequested,
-                icon: const Icon(Icons.cleaning_services_rounded, size: 18),
+                icon: const Icon(LucideIcons.sparkles, size: 18),
                 label: Text(
                   context.tf('清理 {count} 项', {
                     'count': formatCount(controller.selectedCount),
@@ -2725,7 +2718,7 @@ class _CleaningView extends StatelessWidget {
                       color: scheme.primaryContainer.withValues(alpha: 0.55),
                     ),
                     child: Icon(
-                      Icons.cleaning_services_rounded,
+                      LucideIcons.sparkles,
                       size: 34,
                       color: scheme.primary,
                     ),
@@ -2808,7 +2801,7 @@ class _CleaningView extends StatelessWidget {
                     child: Row(
                       children: [
                         Icon(
-                          Icons.insert_drive_file_outlined,
+                          LucideIcons.file,
                           size: 14,
                           color: scheme.onSurfaceVariant,
                         ),
@@ -2838,7 +2831,7 @@ class _CleaningView extends StatelessWidget {
                       onPressed: controller.cleanCancelRequested
                           ? null
                           : controller.cancelCleaning,
-                      icon: const Icon(Icons.stop_circle_outlined, size: 17),
+                      icon: const Icon(LucideIcons.circleStop, size: 17),
                       label: Text(
                         controller.cleanCancelRequested
                             ? context.t('正在停止…')
@@ -2915,10 +2908,10 @@ class _DoneView extends StatelessWidget {
                     ),
                     child: Icon(
                       report.cancelled
-                          ? Icons.pause_rounded
+                          ? LucideIcons.pause
                           : report.spaceExhausted
-                          ? Icons.warning_amber_rounded
-                          : Icons.check_rounded,
+                          ? LucideIcons.triangleAlert
+                          : LucideIcons.check,
                       size: 36,
                       color: report.cancelled
                           ? scheme.onTertiaryContainer
@@ -3021,7 +3014,7 @@ class _DoneView extends StatelessWidget {
                         Row(
                           children: [
                             Icon(
-                              Icons.lock_outline_rounded,
+                              LucideIcons.lock,
                               size: 17,
                               color: scheme.onSecondaryContainer,
                             ),
@@ -3100,7 +3093,7 @@ class _DoneView extends StatelessWidget {
                         Row(
                           children: [
                             Icon(
-                              Icons.warning_amber_rounded,
+                              LucideIcons.triangleAlert,
                               size: 17,
                               color: scheme.onTertiaryContainer,
                             ),
@@ -3169,11 +3162,8 @@ class _DoneView extends StatelessWidget {
                       OutlinedButton.icon(
                         onPressed: onOpenQuarantine,
                         icon: controller.canResumeLastReport
-                            ? const Icon(
-                                Icons.play_circle_outline_rounded,
-                                size: 18,
-                              )
-                            : const Icon(Icons.inventory_2_outlined, size: 18),
+                            ? const Icon(LucideIcons.circlePlay, size: 18)
+                            : const Icon(LucideIcons.archive, size: 18),
                         label: Text(
                           controller.canResumeLastReport
                               ? context.t('继续清理')
@@ -3185,14 +3175,14 @@ class _DoneView extends StatelessWidget {
                         onPressed: controller.undoBusy
                             ? null
                             : () => onUndo(report.sessionId!),
-                        icon: const Icon(Icons.undo_rounded, size: 18),
+                        icon: const Icon(LucideIcons.undo2, size: 18),
                         label: Text(context.t('撤销本次清理')),
                       ),
                     Tooltip(
                       message: context.t('返回首页（Alt+← 或 Esc）'),
                       child: FilledButton.icon(
                         onPressed: controller.returnHome,
-                        icon: const Icon(Icons.home_outlined, size: 18),
+                        icon: const Icon(LucideIcons.house, size: 18),
                         label: Text(context.t('返回首页')),
                       ),
                     ),
@@ -3303,9 +3293,7 @@ class _UndoResultDialog extends StatelessWidget {
 
     return AlertDialog(
       icon: Icon(
-        report.sessionRemoved
-            ? Icons.restore_rounded
-            : Icons.info_outline_rounded,
+        report.sessionRemoved ? LucideIcons.undo2 : LucideIcons.info,
         size: 30,
         color: scheme.primary,
       ),
@@ -3407,37 +3395,37 @@ List<({String category, List<RuleResult> results})> _groupResults(
 IconData _categoryIcon(String category) {
   final lower = category.toLowerCase();
   if (category.contains('浏览器') || lower.contains('browser')) {
-    return Icons.public_rounded;
+    return LucideIcons.globe;
   }
   if (category.contains('日志') || lower.contains('log')) {
-    return Icons.receipt_long_outlined;
+    return LucideIcons.receiptText;
   }
   if (category.contains('缩略图') || lower.contains('thumbnail')) {
-    return Icons.image_outlined;
+    return LucideIcons.image;
   }
   if (category.contains('GPU') || lower.contains('graphics')) {
-    return Icons.memory_rounded;
+    return LucideIcons.cpu;
   }
   if (category.contains('应用') || lower.contains('app cache')) {
-    return Icons.apps_rounded;
+    return LucideIcons.layoutGrid;
   }
   if (category.contains('开发') || lower.contains('developer')) {
-    return Icons.code_rounded;
+    return LucideIcons.code;
   }
-  return Icons.folder_outlined;
+  return LucideIcons.folder;
 }
 
 IconData _ruleIcon(String ruleId) {
-  if (ruleId.startsWith('browser')) return Icons.public_rounded;
-  if (ruleId.startsWith('dev')) return Icons.terminal_rounded;
-  if (ruleId.startsWith('app')) return Icons.apps_rounded;
-  if (ruleId.startsWith('gpu')) return Icons.memory_rounded;
-  if (ruleId.startsWith('logs')) return Icons.receipt_long_outlined;
+  if (ruleId.startsWith('browser')) return LucideIcons.globe;
+  if (ruleId.startsWith('dev')) return LucideIcons.terminal;
+  if (ruleId.startsWith('app')) return LucideIcons.layoutGrid;
+  if (ruleId.startsWith('gpu')) return LucideIcons.cpu;
+  if (ruleId.startsWith('logs')) return LucideIcons.receiptText;
   return switch (ruleId) {
-    'windows.user_temp' => Icons.folder_open_outlined,
-    'windows.crash_dumps' => Icons.bug_report_outlined,
-    'windows.wer_reports' => Icons.error_outline_rounded,
-    'windows.thumbnail_icon_cache' => Icons.image_outlined,
-    _ => Icons.delete_outline_rounded,
+    'windows.user_temp' => LucideIcons.folderOpen,
+    'windows.crash_dumps' => LucideIcons.bug,
+    'windows.wer_reports' => LucideIcons.circleAlert,
+    'windows.thumbnail_icon_cache' => LucideIcons.image,
+    _ => LucideIcons.trash2,
   };
 }

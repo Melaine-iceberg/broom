@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../core/clean/clean_history_store.dart';
 import '../core/models/clean_history_models.dart';
@@ -62,7 +63,7 @@ class _CleanHistoryPageState extends State<CleanHistoryPage> {
       appBar: AppBar(
         leading: IconButton(
           onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.arrow_back_rounded),
+          icon: const Icon(LucideIcons.arrowLeft),
           tooltip: context.t('返回'),
         ),
         toolbarHeight: 76,
@@ -70,7 +71,7 @@ class _CleanHistoryPageState extends State<CleanHistoryPage> {
         actions: [
           IconButton(
             onPressed: _loading ? null : _load,
-            icon: const Icon(Icons.refresh_rounded),
+            icon: const Icon(LucideIcons.refreshCw),
             tooltip: context.t('刷新'),
           ),
           const SizedBox(width: 12),
@@ -152,7 +153,7 @@ class _HistoryCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const IconTile(icon: Icons.history_rounded, size: 36, radius: 10),
+              const IconTile(icon: LucideIcons.history, size: 36, radius: 10),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -201,7 +202,7 @@ class _HistoryCard extends StatelessWidget {
             runSpacing: 6,
             children: [
               _HistoryMetric(
-                icon: Icons.inventory_2_outlined,
+                icon: LucideIcons.archive,
                 label: context.tf('暂存 {count} 个文件（{bytes}）', {
                   'count': formatCount(record.movedCount),
                   'bytes': formatBytes(record.movedBytes),
@@ -209,21 +210,21 @@ class _HistoryCard extends StatelessWidget {
               ),
               if (record.skippedCount > 0)
                 _HistoryMetric(
-                  icon: Icons.lock_outline_rounded,
+                  icon: LucideIcons.lock,
                   label: context.tf('跳过 {count} 个', {
                     'count': formatCount(record.skippedCount),
                   }),
                 ),
               if (record.failureCount > 0)
                 _HistoryMetric(
-                  icon: Icons.warning_amber_rounded,
+                  icon: LucideIcons.triangleAlert,
                   label: context.tf('失败 {count} 个', {
                     'count': formatCount(record.failureCount),
                   }),
                 ),
               if (record.remainingCount > 0)
                 _HistoryMetric(
-                  icon: Icons.play_circle_outline_rounded,
+                  icon: LucideIcons.circlePlay,
                   label: context.tf('未处理 {count} 个', {
                     'count': formatCount(record.remainingCount),
                   }),
@@ -323,7 +324,7 @@ class _EmptyHistory extends StatelessWidget {
       child: Column(
         children: [
           Icon(
-            Icons.history_rounded,
+            LucideIcons.history,
             size: 28,
             color: BroomColors.inkFaint(context),
           ),

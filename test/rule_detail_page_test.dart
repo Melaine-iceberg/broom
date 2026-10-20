@@ -14,6 +14,7 @@ import 'package:broom/ui/rule_detail_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path/path.dart' as p;
 
 import 'support/quarantine_fakes.dart';
@@ -264,7 +265,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('1 个可能被占用'), findsOneWidget);
-    expect(find.byIcon(Icons.lock_outline_rounded), findsWidgets);
+    expect(find.byIcon(LucideIcons.lock), findsWidgets);
     expect(find.byTooltip('可能正被其他程序占用，清理时会跳过'), findsOneWidget);
     expect(find.textContaining('仍可勾选'), findsOneWidget);
   });

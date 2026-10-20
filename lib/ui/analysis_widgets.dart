@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../core/models/cleaner_rule.dart';
 import '../l10n/broom_strings.dart';
@@ -14,17 +15,17 @@ class RiskBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final (icon, label, color) = switch (risk) {
       CleanRisk.safe => (
-        Icons.undo_rounded,
+        LucideIcons.undo2,
         context.t('可撤销'),
         BroomColors.inkMuted(context),
       ),
       CleanRisk.review => (
-        Icons.shield_outlined,
+        LucideIcons.shield,
         context.t('需确认'),
         BroomColors.warning,
       ),
       CleanRisk.info => (
-        Icons.visibility_outlined,
+        LucideIcons.eye,
         context.t('只读'),
         BroomColors.inkMuted(context),
       ),
@@ -74,7 +75,7 @@ class AnalysisBanner extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            isError ? Icons.error_outline_rounded : Icons.info_outline_rounded,
+            isError ? LucideIcons.circleAlert : LucideIcons.info,
             size: 15,
             color: foreground,
           ),
@@ -91,7 +92,7 @@ class AnalysisBanner extends StatelessWidget {
           if (onClose != null)
             IconButton(
               onPressed: onClose,
-              icon: const Icon(Icons.close_rounded, size: 15),
+              icon: const Icon(LucideIcons.x, size: 15),
               tooltip: context.t('关闭'),
             ),
         ],
@@ -137,7 +138,7 @@ class FolderSelectionCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(13),
             ),
             child: Icon(
-              Icons.folder_open_rounded,
+              LucideIcons.folderOpen,
               size: 21,
               color: BroomColors.inkMuted(context),
             ),
@@ -174,7 +175,7 @@ class FolderSelectionCard extends StatelessWidget {
           const SizedBox(width: 10),
           OutlinedButton.icon(
             onPressed: enabled ? onPick : null,
-            icon: const Icon(Icons.drive_folder_upload_outlined, size: 16),
+            icon: const Icon(LucideIcons.folderUp, size: 16),
             label: Text(hasPath ? context.t('更改') : context.t('选择文件夹')),
           ),
         ],
@@ -298,7 +299,7 @@ class AnalysisProgressCard extends StatelessWidget {
               child: Row(
                 children: [
                   Icon(
-                    Icons.insert_drive_file_outlined,
+                    LucideIcons.file,
                     size: 14,
                     color: scheme.onSurfaceVariant,
                   ),
@@ -323,7 +324,7 @@ class AnalysisProgressCard extends StatelessWidget {
           const SizedBox(height: 18),
           TextButton.icon(
             onPressed: cancelRequested ? null : onCancel,
-            icon: const Icon(Icons.stop_circle_outlined, size: 17),
+            icon: const Icon(LucideIcons.circleStop, size: 17),
             label: Text(
               cancelRequested ? context.t('正在停止…') : context.t('停止分析'),
             ),

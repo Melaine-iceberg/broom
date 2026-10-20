@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../core/models/system_models.dart';
 import '../l10n/broom_strings.dart';
@@ -55,7 +56,7 @@ class _SystemCacheConfirmDialogState extends State<SystemCacheConfirmDialog> {
         .join(strings.t('、'));
 
     return AlertDialog(
-      icon: Icon(Icons.delete_forever_rounded, size: 30, color: scheme.error),
+      icon: Icon(LucideIcons.trash2, size: 30, color: scheme.error),
       title: Text(context.t('永久删除系统缓存？')),
       content: SingleChildScrollView(
         child: Column(

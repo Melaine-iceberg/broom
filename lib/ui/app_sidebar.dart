@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../l10n/broom_strings.dart';
 import 'glass_ui.dart';
@@ -59,7 +60,7 @@ class AppSidebar extends StatelessWidget {
         children: [
           _NavItem(
             key: const ValueKey('sidebar-clean'),
-            icon: Icons.cleaning_services_rounded,
+            icon: LucideIcons.sparkles,
             label: context.t('清理'),
             expanded: expanded,
             selected: section == AppSection.clean,
@@ -73,7 +74,7 @@ class AppSidebar extends StatelessWidget {
             ),
           _NavItem(
             key: const ValueKey('sidebar-system-cache'),
-            icon: Icons.admin_panel_settings_outlined,
+            icon: LucideIcons.database,
             label: context.t('系统缓存'),
             expanded: expanded,
             selected: section == AppSection.systemCache,
@@ -81,7 +82,7 @@ class AppSidebar extends StatelessWidget {
           ),
           _NavItem(
             key: const ValueKey('sidebar-recycle-bin'),
-            icon: Icons.delete_outline_rounded,
+            icon: LucideIcons.trash2,
             label: context.t('回收站'),
             expanded: expanded,
             selected: section == AppSection.recycleBin,
@@ -89,7 +90,7 @@ class AppSidebar extends StatelessWidget {
           ),
           _NavItem(
             key: const ValueKey('sidebar-duplicates'),
-            icon: Icons.copy_all_outlined,
+            icon: LucideIcons.copy,
             label: context.t('重复文件'),
             expanded: expanded,
             selected: section == AppSection.duplicates,
@@ -97,7 +98,7 @@ class AppSidebar extends StatelessWidget {
           ),
           _NavItem(
             key: const ValueKey('sidebar-large-files'),
-            icon: Icons.sd_storage_outlined,
+            icon: LucideIcons.hardDrive,
             label: context.t('大文件'),
             expanded: expanded,
             selected: section == AppSection.largeFiles,
@@ -111,7 +112,7 @@ class AppSidebar extends StatelessWidget {
             ),
           _NavItem(
             key: const ValueKey('sidebar-quarantine'),
-            icon: Icons.inventory_2_outlined,
+            icon: LucideIcons.archive,
             label: context.t('隔离区'),
             expanded: expanded,
             selected: section == AppSection.quarantine,
@@ -121,7 +122,7 @@ class AppSidebar extends StatelessWidget {
           if (showHistory)
             _NavItem(
               key: const ValueKey('sidebar-history'),
-              icon: Icons.history_rounded,
+              icon: LucideIcons.history,
               label: context.t('清理历史'),
               expanded: expanded,
               selected: section == AppSection.history,
@@ -136,7 +137,7 @@ class AppSidebar extends StatelessWidget {
           const SizedBox(height: 8),
           _NavItem(
             key: const ValueKey('open-settings'),
-            icon: Icons.settings_outlined,
+            icon: LucideIcons.settings,
             label: context.t('设置'),
             expanded: expanded,
             selected: section == AppSection.settings,

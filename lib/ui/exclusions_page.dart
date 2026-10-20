@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../core/shell/system_shell.dart';
 import '../l10n/broom_strings.dart';
@@ -60,7 +61,7 @@ class _ExclusionsPageState extends State<ExclusionsPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        icon: const Icon(Icons.restart_alt_rounded, size: 30),
+        icon: const Icon(LucideIcons.rotateCcw, size: 30),
         title: Text(context.t('重置排除列表？')),
         content: Text(
           context.t(
@@ -121,7 +122,7 @@ class _ExclusionsPageState extends State<ExclusionsPage> {
           appBar: AppBar(
             leading: IconButton(
               onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.arrow_back_rounded),
+              icon: const Icon(LucideIcons.arrowLeft),
               tooltip: context.t('返回'),
             ),
             toolbarHeight: 76,
@@ -160,11 +161,7 @@ class _ExclusionsPageState extends State<ExclusionsPage> {
                     const SizedBox(height: 18),
                     Row(
                       children: [
-                        Icon(
-                          Icons.block_rounded,
-                          size: 19,
-                          color: scheme.primary,
-                        ),
+                        Icon(LucideIcons.ban, size: 19, color: scheme.primary),
                         const SizedBox(width: 9),
                         Text(
                           context.t('排除项'),
@@ -195,7 +192,7 @@ class _ExclusionsPageState extends State<ExclusionsPage> {
                                     strokeWidth: 2,
                                   ),
                                 )
-                              : const Icon(Icons.add_rounded, size: 18),
+                              : const Icon(LucideIcons.plus, size: 18),
                           label: Text(context.t('添加文件夹')),
                         ),
                       ],
@@ -275,7 +272,7 @@ class _InfoCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.shield_outlined, size: 18, color: scheme.primary),
+          Icon(LucideIcons.shield, size: 18, color: scheme.primary),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -313,7 +310,7 @@ class _LoadErrorBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.error_outline_rounded, size: 18, color: scheme.error),
+          Icon(LucideIcons.circleAlert, size: 18, color: scheme.error),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -353,9 +350,7 @@ class _EmptyState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              hasError
-                  ? Icons.report_gmailerrorred_rounded
-                  : Icons.folder_off_outlined,
+              hasError ? LucideIcons.circleAlert : LucideIcons.folderX,
               size: 38,
               color: scheme.onSurfaceVariant,
             ),
@@ -378,7 +373,7 @@ class _EmptyState extends StatelessWidget {
               const SizedBox(height: 14),
               OutlinedButton.icon(
                 onPressed: onReset,
-                icon: const Icon(Icons.restart_alt_rounded, size: 17),
+                icon: const Icon(LucideIcons.rotateCcw, size: 17),
                 label: Text(context.t('重置排除列表')),
               ),
             ],
@@ -412,7 +407,7 @@ class _ExclusionRow extends StatelessWidget {
               borderRadius: BorderRadius.circular(9),
             ),
             child: Icon(
-              Icons.folder_off_outlined,
+              LucideIcons.folderX,
               size: 17,
               color: scheme.onTertiaryContainer,
             ),
@@ -433,7 +428,7 @@ class _ExclusionRow extends StatelessWidget {
           IconButton(
             onPressed: onRemove,
             tooltip: context.t('移除排除项'),
-            icon: const Icon(Icons.close_rounded, size: 18),
+            icon: const Icon(LucideIcons.x, size: 18),
             visualDensity: VisualDensity.compact,
           ),
         ],

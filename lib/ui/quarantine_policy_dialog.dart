@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../core/models/quarantine_policy_models.dart';
 import '../l10n/broom_strings.dart';
@@ -56,7 +57,7 @@ class _QuarantinePolicyDialogState extends State<_QuarantinePolicyDialog> {
     }.toList()..sort());
 
     return AlertDialog(
-      icon: Icon(Icons.auto_delete_outlined, size: 30, color: scheme.tertiary),
+      icon: Icon(LucideIcons.clock, size: 30, color: scheme.tertiary),
       title: Text(context.t('隔离区保留策略')),
       content: SizedBox(
         width: 500,
@@ -130,7 +131,7 @@ class _QuarantinePolicyDialogState extends State<_QuarantinePolicyDialog> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Icon(
-                        Icons.warning_amber_rounded,
+                        LucideIcons.triangleAlert,
                         size: 18,
                         color: scheme.onErrorContainer,
                       ),

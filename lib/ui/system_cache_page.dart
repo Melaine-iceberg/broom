@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../core/models/clean_models.dart';
 import '../core/models/cleaner_rule.dart';
@@ -66,7 +67,7 @@ class _SystemCachePageState extends State<SystemCachePage> {
           appBar: AppBar(
             leading: IconButton(
               onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.arrow_back_rounded),
+              icon: const Icon(LucideIcons.arrowLeft),
               tooltip: context.t('返回'),
             ),
             toolbarHeight: 76,
@@ -182,7 +183,7 @@ class _AdminGate extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const IconTile(
-                    icon: Icons.admin_panel_settings_outlined,
+                    icon: LucideIcons.database,
                     size: 42,
                     color: BroomColors.amber,
                   ),
@@ -244,7 +245,7 @@ class _AdminGate extends StatelessWidget {
                             height: 15,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.verified_user_outlined, size: 17),
+                        : const Icon(LucideIcons.shieldCheck, size: 17),
                     label: Text(
                       controller.relaunching
                           ? context.t('正在请求授权…')
@@ -255,7 +256,7 @@ class _AdminGate extends StatelessWidget {
                     onPressed: controller.relaunching
                         ? null
                         : controller.checkAccess,
-                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                    icon: const Icon(LucideIcons.refreshCw, size: 16),
                     label: Text(context.t('重新检测')),
                   ),
                   Padding(
@@ -300,7 +301,7 @@ class _AdminChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            Icons.verified_user_outlined,
+            LucideIcons.shieldCheck,
             size: 12,
             color: scheme.onPrimaryContainer,
           ),
@@ -333,7 +334,7 @@ class _ReviewWarning extends StatelessWidget {
           const Padding(
             padding: EdgeInsets.only(top: 1),
             child: Icon(
-              Icons.warning_amber_rounded,
+              LucideIcons.triangleAlert,
               size: 15,
               color: BroomColors.warning,
             ),
@@ -374,7 +375,7 @@ class _RuleOverview extends StatelessWidget {
           Row(
             children: [
               Icon(
-                Icons.folder_open_rounded,
+                LucideIcons.folderOpen,
                 size: 15,
                 color: BroomColors.inkMuted(context),
               ),
@@ -453,7 +454,7 @@ class _BoundaryNote extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 2),
             child: Icon(
-              Icons.verified_user_outlined,
+              LucideIcons.shieldCheck,
               size: 13,
               color: BroomColors.inkFaint(context),
             ),
@@ -525,7 +526,7 @@ class _IdleView extends StatelessWidget {
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Icon(
-                      Icons.cleaning_services_rounded,
+                      LucideIcons.sparkles,
                       size: 23,
                       color: scheme.primary,
                     ),
@@ -563,7 +564,7 @@ class _IdleView extends StatelessWidget {
               const SizedBox(height: 6),
               FilledButton.icon(
                 onPressed: controller.isBusy ? null : onScan,
-                icon: const Icon(Icons.search_rounded, size: 19),
+                icon: const Icon(LucideIcons.search, size: 19),
                 label: Text(context.t('扫描系统缓存')),
               ),
             ],
@@ -715,7 +716,7 @@ class _SystemRuleCard extends StatelessWidget {
                       Row(
                         children: [
                           Icon(
-                            Icons.lock_outline_rounded,
+                            LucideIcons.lock,
                             size: 13,
                             color: scheme.tertiary,
                           ),
@@ -756,7 +757,7 @@ class _PathLine extends StatelessWidget {
     return Row(
       children: [
         Icon(
-          Icons.folder_outlined,
+          LucideIcons.folder,
           size: 13,
           color: scheme.onSurfaceVariant.withValues(alpha: 0.85),
         ),
@@ -801,7 +802,7 @@ class _ScanningView extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(28, 8, 28, 28),
       children: [
         AnalysisProgressCard(
-          icon: Icons.admin_panel_settings_outlined,
+          icon: LucideIcons.database,
           title: context.t('正在扫描系统缓存'),
           description: scanningTitle == null
               ? context.t('正在准备系统缓存目录…')
@@ -964,7 +965,7 @@ class _PreviewView extends StatelessWidget {
                         const SizedBox(width: 12),
                         OutlinedButton.icon(
                           onPressed: controller.scan,
-                          icon: const Icon(Icons.refresh_rounded, size: 17),
+                          icon: const Icon(LucideIcons.refreshCw, size: 17),
                           label: Text(context.t('重新扫描')),
                         ),
                       ],
@@ -977,7 +978,7 @@ class _PreviewView extends StatelessWidget {
                           child: Column(
                             children: [
                               Icon(
-                                Icons.check_circle_outline_rounded,
+                                LucideIcons.circleCheck,
                                 size: 40,
                                 color: scheme.primary,
                               ),
@@ -1078,11 +1079,7 @@ class _ActionBar extends StatelessWidget {
                   const SizedBox(height: 3),
                   Row(
                     children: [
-                      Icon(
-                        Icons.lock_outline_rounded,
-                        size: 13,
-                        color: scheme.tertiary,
-                      ),
+                      Icon(LucideIcons.lock, size: 13, color: scheme.tertiary),
                       const SizedBox(width: 4),
                       Flexible(
                         child: Text(
@@ -1116,7 +1113,7 @@ class _ActionBar extends StatelessWidget {
               foregroundColor: scheme.onError,
               disabledBackgroundColor: scheme.error.withValues(alpha: 0.12),
             ),
-            icon: const Icon(Icons.delete_forever_rounded, size: 18),
+            icon: const Icon(LucideIcons.trash2, size: 18),
             label: Text(
               context.tf('永久删除 {count} 项', {
                 'count': formatCount(controller.selectedCount),
@@ -1161,7 +1158,7 @@ class _CleaningView extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(28, 8, 28, 28),
       children: [
         AnalysisProgressCard(
-          icon: Icons.delete_forever_rounded,
+          icon: LucideIcons.trash2,
           title: controller.cleanCancelRequested
               ? context.t('正在停止清理…')
               : stageLabel,
@@ -1201,7 +1198,7 @@ class _CleaningView extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(
-                Icons.info_outline_rounded,
+                LucideIcons.info,
                 size: 18,
                 color: scheme.onTertiaryContainer,
               ),
@@ -1270,9 +1267,7 @@ class _DoneView extends StatelessWidget {
                         : scheme.primaryContainer.withValues(alpha: 0.55),
                   ),
                   child: Icon(
-                    report.cancelled
-                        ? Icons.pause_rounded
-                        : Icons.check_rounded,
+                    report.cancelled ? LucideIcons.pause : LucideIcons.check,
                     size: 34,
                     color: report.cancelled
                         ? scheme.onTertiaryContainer
@@ -1330,7 +1325,7 @@ class _DoneView extends StatelessWidget {
               if (report.skippedCount > 0) ...[
                 const SizedBox(height: 14),
                 _IssuePanel(
-                  icon: Icons.lock_outline_rounded,
+                  icon: LucideIcons.lock,
                   title: context.tf('{count} 个文件已跳过', {
                     'count': report.skippedCount,
                   }),
@@ -1342,7 +1337,7 @@ class _DoneView extends StatelessWidget {
               if (report.failureCount > 0) ...[
                 const SizedBox(height: 14),
                 _IssuePanel(
-                  icon: Icons.warning_amber_rounded,
+                  icon: LucideIcons.triangleAlert,
                   title: context.tf('{count} 个文件删除失败', {
                     'count': report.failureCount,
                   }),
@@ -1354,7 +1349,7 @@ class _DoneView extends StatelessWidget {
               if (report.serviceIssues.isNotEmpty) ...[
                 const SizedBox(height: 14),
                 _IssuePanel(
-                  icon: Icons.sync_problem_rounded,
+                  icon: LucideIcons.fileLock2,
                   title: context.t('部分 Windows 服务未能恢复'),
                   body: context.t('请手动启动对应服务，或重启 Windows 以恢复。问题详情：'),
                   failures: [
@@ -1375,7 +1370,7 @@ class _DoneView extends StatelessWidget {
                 children: [
                   OutlinedButton.icon(
                     onPressed: controller.scan,
-                    icon: const Icon(Icons.refresh_rounded, size: 17),
+                    icon: const Icon(LucideIcons.refreshCw, size: 17),
                     label: Text(context.t('重新扫描')),
                   ),
                   FilledButton.icon(
@@ -1383,7 +1378,7 @@ class _DoneView extends StatelessWidget {
                       controller.returnToIdle();
                       Navigator.of(context).pop();
                     },
-                    icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                    icon: const Icon(LucideIcons.arrowLeft, size: 18),
                     label: Text(context.t('返回首页')),
                   ),
                 ],
@@ -1511,9 +1506,9 @@ class _DoneStat extends StatelessWidget {
 
 IconData _ruleIcon(String ruleId) {
   return switch (ruleId) {
-    'windows.update_cache' => Icons.system_update_alt_rounded,
-    'windows.delivery_optimization' => Icons.hub_outlined,
-    'windows.old' => Icons.history_rounded,
-    _ => Icons.admin_panel_settings_outlined,
+    'windows.update_cache' => LucideIcons.download,
+    'windows.delivery_optimization' => LucideIcons.network,
+    'windows.old' => LucideIcons.history,
+    _ => LucideIcons.database,
   };
 }

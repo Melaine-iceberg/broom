@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../core/models/cleaner_rule.dart';
 import '../l10n/broom_strings.dart';
@@ -159,7 +160,7 @@ class _DashboardBanner extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            isError ? Icons.error_outline_rounded : Icons.info_outline_rounded,
+            isError ? LucideIcons.circleAlert : LucideIcons.info,
             size: 17,
             color: foreground,
           ),
@@ -179,7 +180,7 @@ class _DashboardBanner extends StatelessWidget {
               iconSize: 17,
               visualDensity: VisualDensity.compact,
               tooltip: context.t('关闭'),
-              icon: const Icon(Icons.close_rounded),
+              icon: const Icon(LucideIcons.x),
             ),
         ],
       ),
@@ -260,7 +261,7 @@ class _ScanHero extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   BroomCardHeader(
-                    icon: Icons.radar_rounded,
+                    icon: LucideIcons.radar,
                     title: context.t('扫描'),
                     trailing: StatusChip(
                       label: context.t('准备就绪'),
@@ -480,8 +481,8 @@ class _ScanActionState extends State<_ScanAction> {
                         ),
                         Icon(
                           widget.busy
-                              ? Icons.hourglass_top_rounded
-                              : Icons.cleaning_services_rounded,
+                              ? LucideIcons.hourglass
+                              : LucideIcons.sparkles,
                           size: 34,
                           color: Colors.white,
                         ),
@@ -535,7 +536,7 @@ class _QuarantineCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               BroomCardHeader(
-                icon: Icons.inventory_2_outlined,
+                icon: LucideIcons.archive,
                 title: context.t('隔离区'),
                 trailing: unfinished > 0
                     ? StatusChip(
@@ -543,7 +544,7 @@ class _QuarantineCard extends StatelessWidget {
                         tone: BroomColors.warning,
                       )
                     : Icon(
-                        Icons.arrow_outward_rounded,
+                        LucideIcons.arrowUpRight,
                         size: 16,
                         color: BroomColors.inkFaint(context),
                       ),
@@ -594,9 +595,7 @@ class _QuarantineCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 10),
               ),
               icon: Icon(
-                hasItems
-                    ? Icons.inventory_2_outlined
-                    : Icons.arrow_forward_rounded,
+                hasItems ? LucideIcons.archive : LucideIcons.arrowRight,
                 size: 15,
               ),
               label: Text(hasItems ? context.t('管理') : context.t('打开')),
@@ -630,7 +629,7 @@ class _LastScanCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               BroomCardHeader(
-                icon: Icons.history_rounded,
+                icon: LucideIcons.history,
                 title: context.t('上次扫描'),
                 trailing: stale
                     ? StatusChip(
@@ -685,7 +684,7 @@ class _LastScanCard extends StatelessWidget {
                         height: 14,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.arrow_forward_rounded, size: 15),
+                    : const Icon(LucideIcons.arrowRight, size: 15),
                 label: Text(context.t('查看')),
               ),
             )
@@ -725,28 +724,28 @@ class _ToolsSection extends StatelessWidget {
           if (onOpenSystemCache != null)
             (
               key: 'tool-system-cache',
-              icon: Icons.admin_panel_settings_outlined,
+              icon: LucideIcons.database,
               title: context.t('系统级缓存'),
               description: context.t('Windows 更新与旧系统文件 · 需要管理员权限'),
               onTap: onOpenSystemCache!,
             ),
           (
             key: 'tool-recycle-bin',
-            icon: Icons.delete_outline_rounded,
+            icon: LucideIcons.trash2,
             title: context.t('回收站'),
             description: context.t('查看各磁盘回收站占用'),
             onTap: onOpenRecycleBin,
           ),
           (
             key: 'tool-duplicate-files',
-            icon: Icons.copy_all_outlined,
+            icon: LucideIcons.copy,
             title: context.t('重复文件'),
             description: context.t('按文件内容查找重复项'),
             onTap: onOpenDuplicateFinder,
           ),
           (
             key: 'tool-large-files',
-            icon: Icons.sd_storage_outlined,
+            icon: LucideIcons.hardDrive,
             title: context.t('大文件分析'),
             description: context.t('按体积排序，定位空间占用'),
             onTap: onOpenLargeFiles,
@@ -822,7 +821,7 @@ class _ToolCard extends StatelessWidget {
               IconTile(icon: icon, size: 40, radius: 12),
               const Spacer(),
               Icon(
-                Icons.arrow_outward_rounded,
+                LucideIcons.arrowUpRight,
                 size: 16,
                 color: BroomColors.inkFaint(context),
               ),

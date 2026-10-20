@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path/path.dart' as p;
 
 import '../core/app_info.dart';
@@ -69,7 +70,7 @@ class SettingsPage extends StatelessWidget {
           appBar: AppBar(
             leading: IconButton(
               onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.arrow_back_rounded),
+              icon: const Icon(LucideIcons.arrowLeft),
               tooltip: strings.t('返回'),
             ),
             toolbarHeight: 76,
@@ -93,7 +94,7 @@ class SettingsPage extends StatelessWidget {
                       isError: true,
                     ),
                   _Section(
-                    icon: Icons.palette_outlined,
+                    icon: LucideIcons.palette,
                     title: strings.t('外观'),
                     child: LayoutBuilder(
                       builder: (context, constraints) {
@@ -109,25 +110,19 @@ class SettingsPage extends StatelessWidget {
                                 ButtonSegment(
                                   value: AppThemePreference.system,
                                   icon: const Icon(
-                                    Icons.brightness_auto_outlined,
+                                    LucideIcons.sunMoon,
                                     size: 16,
                                   ),
                                   label: Text(strings.t('跟随系统')),
                                 ),
                                 ButtonSegment(
                                   value: AppThemePreference.light,
-                                  icon: const Icon(
-                                    Icons.light_mode_outlined,
-                                    size: 16,
-                                  ),
+                                  icon: const Icon(LucideIcons.sun, size: 16),
                                   label: Text(strings.t('浅色')),
                                 ),
                                 ButtonSegment(
                                   value: AppThemePreference.dark,
-                                  icon: const Icon(
-                                    Icons.dark_mode_outlined,
-                                    size: 16,
-                                  ),
+                                  icon: const Icon(LucideIcons.moon, size: 16),
                                   label: Text(strings.t('深色')),
                                 ),
                               ],
@@ -187,7 +182,7 @@ class SettingsPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 18),
                   _Section(
-                    icon: Icons.tune_rounded,
+                    icon: LucideIcons.slidersHorizontal,
                     title: strings.t('扫描引擎'),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -283,7 +278,7 @@ class SettingsPage extends StatelessWidget {
                           key: const ValueKey('settings-scan-limit'),
                           contentPadding: EdgeInsets.zero,
                           dense: true,
-                          leading: const Icon(Icons.speed_rounded, size: 20),
+                          leading: const Icon(LucideIcons.gauge, size: 20),
                           title: Text(strings.t('扫描结果数量上限')),
                           subtitle: Text(
                             settings.settings.scanItemLimit == null
@@ -314,7 +309,7 @@ class SettingsPage extends StatelessWidget {
                   ],
                   const SizedBox(height: 18),
                   _Section(
-                    icon: Icons.rule_rounded,
+                    icon: LucideIcons.listChecks,
                     title: strings.t('清理规则'),
                     subtitle: strings.t('关闭的规则不会参与扫描。'),
                     trailing: Row(
@@ -404,14 +399,14 @@ class SettingsPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 18),
                   _Section(
-                    icon: Icons.inventory_2_outlined,
+                    icon: LucideIcons.archive,
                     title: strings.t('扫描与隔离'),
                     child: Column(
                       children: [
                         ListTile(
                           key: const ValueKey('settings-exclusions'),
                           contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.block_rounded),
+                          leading: const Icon(LucideIcons.ban),
                           title: Text(strings.t('排除列表')),
                           subtitle: Text(
                             cleanController.exclusionCount == 0
@@ -420,17 +415,17 @@ class SettingsPage extends StatelessWidget {
                                     'count': cleanController.exclusionCount,
                                   }),
                           ),
-                          trailing: const Icon(Icons.chevron_right_rounded),
+                          trailing: const Icon(LucideIcons.chevronRight),
                           onTap: () => _openExclusions(context),
                         ),
                         const Divider(),
                         ListTile(
                           key: const ValueKey('settings-retention'),
                           contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.auto_delete_outlined),
+                          leading: const Icon(LucideIcons.clock),
                           title: Text(strings.t('隔离区保留策略')),
                           subtitle: Text(_retentionSummary(context)),
-                          trailing: const Icon(Icons.chevron_right_rounded),
+                          trailing: const Icon(LucideIcons.chevronRight),
                           enabled: retention != null,
                           onTap: retention == null
                               ? null
@@ -439,7 +434,7 @@ class SettingsPage extends StatelessWidget {
                         const Divider(),
                         ListTile(
                           contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.folder_outlined),
+                          leading: const Icon(LucideIcons.folder),
                           title: Text(strings.t('隔离区位置')),
                           subtitle: SelectableText(
                             cleanController.quarantine.quarantineRoot,
@@ -453,14 +448,14 @@ class SettingsPage extends StatelessWidget {
                               IconButton(
                                 key: const ValueKey('settings-copy-path'),
                                 tooltip: strings.t('复制路径'),
-                                icon: const Icon(Icons.copy_rounded, size: 18),
+                                icon: const Icon(LucideIcons.copy, size: 18),
                                 onPressed: () => _copyPath(context),
                               ),
                               IconButton(
                                 key: const ValueKey('settings-reveal-path'),
                                 tooltip: strings.t('在资源管理器中显示'),
                                 icon: const Icon(
-                                  Icons.open_in_new_rounded,
+                                  LucideIcons.externalLink,
                                   size: 18,
                                 ),
                                 onPressed: () => _revealPath(context),
@@ -488,7 +483,7 @@ class SettingsPage extends StatelessWidget {
                   ],
                   const SizedBox(height: 18),
                   _Section(
-                    icon: Icons.info_outline_rounded,
+                    icon: LucideIcons.info,
                     title: strings.t('关于'),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -520,7 +515,10 @@ class SettingsPage extends StatelessWidget {
                           OutlinedButton.icon(
                             key: const ValueKey('settings-onboarding'),
                             onPressed: onShowOnboarding,
-                            icon: const Icon(Icons.school_outlined, size: 18),
+                            icon: const Icon(
+                              LucideIcons.graduationCap,
+                              size: 18,
+                            ),
                             label: Text(strings.t('重新查看首次使用引导')),
                           ),
                         ],
@@ -682,7 +680,7 @@ class SettingsPage extends StatelessWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        icon: const Icon(Icons.system_update_alt_rounded, size: 30),
+        icon: const Icon(LucideIcons.download, size: 30),
         title: Text(context.t('应用规则更新？')),
         content: Text(
           context.tf(
@@ -912,7 +910,7 @@ class _RuleUpdateSection extends StatelessWidget {
     final canRestoreBuiltin = !catalog.isBuiltin && !updates.busy;
 
     return _Section(
-      icon: Icons.system_update_alt_rounded,
+      icon: LucideIcons.download,
       title: context.t('规则更新'),
       subtitle: context.t(
         '在线规则清单必须使用 HTTPS，并通过构建时注入的签名密钥校验。'
@@ -943,7 +941,7 @@ class _RuleUpdateSection extends StatelessWidget {
             _SettingsBanner(message: notice),
           ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.verified_outlined),
+            leading: const Icon(LucideIcons.shieldCheck),
             title: Text(
               context.tf('当前规则版本：{version}', {'version': catalog.version}),
             ),
@@ -957,7 +955,7 @@ class _RuleUpdateSection extends StatelessWidget {
           ListTile(
             key: const ValueKey('settings-rule-update-url'),
             contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.link_rounded),
+            leading: const Icon(LucideIcons.link),
             title: Text(context.t('规则更新地址')),
             subtitle: SelectableText(
               updates.updateUrl.isEmpty ? context.t('未设置') : updates.updateUrl,
@@ -984,7 +982,7 @@ class _RuleUpdateSection extends StatelessWidget {
               child: Row(
                 children: [
                   Icon(
-                    Icons.new_releases_outlined,
+                    LucideIcons.packageCheck,
                     size: 20,
                     color: scheme.primary,
                   ),
@@ -1012,7 +1010,7 @@ class _RuleUpdateSection extends StatelessWidget {
               OutlinedButton.icon(
                 key: const ValueKey('rule-update-check'),
                 onPressed: canCheck ? onCheck : null,
-                icon: const Icon(Icons.refresh_rounded, size: 17),
+                icon: const Icon(LucideIcons.refreshCw, size: 17),
                 label: Text(context.t('检查更新')),
               ),
               OutlinedButton.icon(
@@ -1020,7 +1018,7 @@ class _RuleUpdateSection extends StatelessWidget {
                 onPressed: updates.hasPrevious && !updates.busy
                     ? onRollback
                     : null,
-                icon: const Icon(Icons.undo_rounded, size: 17),
+                icon: const Icon(LucideIcons.undo2, size: 17),
                 label: Text(context.t('回滚上一版')),
               ),
               TextButton(
@@ -1209,7 +1207,7 @@ class _ConfigTransferSectionState extends State<_ConfigTransferSection> {
       builder: (dialogContext) {
         final strings = dialogContext.strings;
         return AlertDialog(
-          icon: const Icon(Icons.upload_file_rounded, size: 30),
+          icon: const Icon(LucideIcons.fileUp, size: 30),
           title: Text(strings.t('导入配置？')),
           content: SizedBox(
             width: 500,
@@ -1225,7 +1223,7 @@ class _ConfigTransferSectionState extends State<_ConfigTransferSection> {
                   ),
                   const SizedBox(height: 14),
                   _ImportSummaryLine(
-                    icon: Icons.palette_outlined,
+                    icon: LucideIcons.palette,
                     text: strings.tf('{theme} · {language}', {
                       'theme': _themeLabel(strings, bundle.settings.theme),
                       'language': _languageLabel(
@@ -1235,20 +1233,20 @@ class _ConfigTransferSectionState extends State<_ConfigTransferSection> {
                     }),
                   ),
                   _ImportSummaryLine(
-                    icon: Icons.rule_rounded,
+                    icon: LucideIcons.listChecks,
                     text: strings.tf('{rules} 条关闭规则 · {categories} 个关闭类别', {
                       'rules': bundle.settings.disabledRuleIds.length,
                       'categories': bundle.settings.disabledCategoryIds.length,
                     }),
                   ),
                   _ImportSummaryLine(
-                    icon: Icons.block_rounded,
+                    icon: LucideIcons.ban,
                     text: strings.tf('{count} 个排除目录（路径需与本机一致才会生效）', {
                       'count': bundle.exclusions.length,
                     }),
                   ),
                   _ImportSummaryLine(
-                    icon: Icons.auto_delete_outlined,
+                    icon: LucideIcons.clock,
                     text: retention.enabled
                         ? strings.tf(
                             '保留策略已开启（保留 {days} 天 · 上限 {bytes}），'
@@ -1312,7 +1310,7 @@ class _ConfigTransferSectionState extends State<_ConfigTransferSection> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        icon: const Icon(Icons.restart_alt_rounded, size: 30),
+        icon: const Icon(LucideIcons.rotateCcw, size: 30),
         title: Text(context.t('恢复默认配置？')),
         content: Text(
           context.t(
@@ -1421,7 +1419,7 @@ class _ConfigTransferSectionState extends State<_ConfigTransferSection> {
     final scheme = theme.colorScheme;
 
     return _Section(
-      icon: Icons.import_export_rounded,
+      icon: LucideIcons.arrowLeftRight,
       title: context.t('备份与恢复'),
       subtitle: context.t(
         '导出或导入主题、语言、规则开关、扫描设置、排除列表与保留策略。'
@@ -1444,13 +1442,13 @@ class _ConfigTransferSectionState extends State<_ConfigTransferSection> {
               OutlinedButton.icon(
                 key: const ValueKey('settings-config-export'),
                 onPressed: _blocked ? null : _export,
-                icon: const Icon(Icons.download_rounded, size: 17),
+                icon: const Icon(LucideIcons.download, size: 17),
                 label: Text(context.t('导出配置')),
               ),
               OutlinedButton.icon(
                 key: const ValueKey('settings-config-import'),
                 onPressed: _blocked ? null : _import,
-                icon: const Icon(Icons.upload_rounded, size: 17),
+                icon: const Icon(LucideIcons.upload, size: 17),
                 label: Text(context.t('导入配置')),
               ),
             ],
@@ -1477,10 +1475,7 @@ class _ConfigTransferSectionState extends State<_ConfigTransferSection> {
           ListTile(
             key: const ValueKey('settings-config-reset'),
             contentPadding: EdgeInsets.zero,
-            leading: Icon(
-              Icons.settings_backup_restore_rounded,
-              color: scheme.error,
-            ),
+            leading: Icon(LucideIcons.history, color: scheme.error),
             title: Text(context.t('恢复默认配置')),
             subtitle: Text(context.t('清除偏好设置与排除列表，并关闭自动保留策略；不会删除隔离区文件。')),
             trailing: TextButton(
@@ -1615,7 +1610,7 @@ class _DiagnosticsSectionState extends State<_DiagnosticsSection> {
     final scheme = theme.colorScheme;
     final enabled = widget.settings.diagnosticsEnabled;
     return _Section(
-      icon: Icons.bug_report_outlined,
+      icon: LucideIcons.bug,
       title: context.t('诊断与日志'),
       subtitle: context.t(
         '日志默认关闭，仅保存在本地，不记录文件内容。启用后仅记录操作事件、'
@@ -1649,7 +1644,7 @@ class _DiagnosticsSectionState extends State<_DiagnosticsSection> {
             child: OutlinedButton.icon(
               key: const ValueKey('settings-diagnostics-export'),
               onPressed: _busy ? null : _export,
-              icon: const Icon(Icons.download_rounded, size: 17),
+              icon: const Icon(LucideIcons.download, size: 17),
               label: Text(context.t('导出诊断信息')),
             ),
           ),
@@ -1787,7 +1782,7 @@ class _SettingsBanner extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            isError ? Icons.error_outline_rounded : Icons.info_outline_rounded,
+            isError ? LucideIcons.circleAlert : LucideIcons.info,
             size: 18,
             color: foreground,
           ),
@@ -1807,22 +1802,22 @@ class _SettingsBanner extends StatelessWidget {
 IconData _categoryIcon(String category) {
   final lower = category.toLowerCase();
   if (category.contains('浏览器') || lower.contains('browser')) {
-    return Icons.public_rounded;
+    return LucideIcons.globe;
   }
   if (category.contains('日志') || lower.contains('log')) {
-    return Icons.receipt_long_outlined;
+    return LucideIcons.receiptText;
   }
   if (category.contains('缩略图') || lower.contains('thumbnail')) {
-    return Icons.image_outlined;
+    return LucideIcons.image;
   }
   if (category.contains('GPU') || lower.contains('graphics')) {
-    return Icons.memory_rounded;
+    return LucideIcons.cpu;
   }
   if (category.contains('应用') || lower.contains('app cache')) {
-    return Icons.apps_rounded;
+    return LucideIcons.layoutGrid;
   }
   if (category.contains('开发') || lower.contains('developer')) {
-    return Icons.code_rounded;
+    return LucideIcons.code;
   }
-  return Icons.folder_outlined;
+  return LucideIcons.folder;
 }

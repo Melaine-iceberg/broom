@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../l10n/broom_strings.dart';
 
@@ -35,7 +36,7 @@ class _OnboardingDialogState extends State<OnboardingDialog> {
     final scheme = theme.colorScheme;
     final steps = <({IconData icon, String title, String body, String point})>[
       (
-        icon: Icons.search_rounded,
+        icon: LucideIcons.search,
         title: context.t('先扫描，再决定'),
         body: context.t(
           '扫描只读取文件信息，不会修改任何文件。结果先进入预览，'
@@ -44,7 +45,7 @@ class _OnboardingDialogState extends State<OnboardingDialog> {
         point: context.t('预览支持搜索、排序与逐文件勾选。'),
       ),
       (
-        icon: Icons.inventory_2_outlined,
+        icon: LucideIcons.archive,
         title: context.t('隔离区不是永久删除'),
         body: context.t(
           '清理时文件会移动到 Broom 隔离区，磁盘空间不会立即释放。'
@@ -53,7 +54,7 @@ class _OnboardingDialogState extends State<OnboardingDialog> {
         point: context.t('恢复冲突时可保留两者或覆盖；永久释放需要单独确认。'),
       ),
       (
-        icon: Icons.verified_user_outlined,
+        icon: LucideIcons.shieldCheck,
         title: context.t('安全边界'),
         body: context.t(
           'Broom 不会触碰文档、照片、程序和系统文件，也不会扫描浏览器密码、'
@@ -126,7 +127,7 @@ class _OnboardingDialogState extends State<OnboardingDialog> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Icon(
-                              Icons.check_circle_outline_rounded,
+                              LucideIcons.circleCheck,
                               size: 17,
                               color: scheme.primary,
                             ),

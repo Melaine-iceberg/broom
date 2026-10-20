@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../l10n/broom_strings.dart';
 import '../platform/window_chrome.dart';
@@ -72,7 +73,7 @@ class WindowTitleBar extends StatelessWidget {
                           excludeFromSemantics: true,
                           errorBuilder: (context, error, stackTrace) {
                             return Icon(
-                              Icons.cleaning_services_rounded,
+                              LucideIcons.sparkles,
                               size: 16,
                               color: scheme.onSurfaceVariant,
                             );

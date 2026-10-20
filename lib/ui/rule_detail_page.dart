@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../core/models/cleaner_rule.dart';
 import '../core/models/scan_models.dart';
@@ -119,7 +120,7 @@ class _RuleDetailPageState extends State<RuleDetailPage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         key: const ValueKey('rule-info-dialog'),
-        icon: const Icon(Icons.fact_check_outlined, size: 30),
+        icon: const Icon(LucideIcons.clipboardCheck, size: 30),
         title: Text(context.t('规则详情')),
         content: SizedBox(
           width: 640,
@@ -199,7 +200,7 @@ class _RuleDetailPageState extends State<RuleDetailPage> {
               appBar: AppBar(
                 leading: IconButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.arrow_back_rounded),
+                  icon: const Icon(LucideIcons.arrowLeft),
                   tooltip: context.t('返回（Esc）'),
                 ),
                 toolbarHeight: 76,
@@ -237,7 +238,7 @@ class _RuleDetailPageState extends State<RuleDetailPage> {
                     IconButton(
                       key: ValueKey('rule-audit-${rule.id}'),
                       onPressed: () => _showRuleAudit(context, rule),
-                      icon: const Icon(Icons.policy_outlined),
+                      icon: const Icon(LucideIcons.scrollText),
                       tooltip: context.t('规则审计'),
                     ),
                   const SizedBox(width: 8),
@@ -271,7 +272,7 @@ class _RuleDetailPageState extends State<RuleDetailPage> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Icon(
-                                  Icons.info_outline_rounded,
+                                  LucideIcons.info,
                                   size: 17,
                                   color: scheme.primary,
                                 ),
@@ -304,7 +305,7 @@ class _RuleDetailPageState extends State<RuleDetailPage> {
                                               CrossAxisAlignment.start,
                                           children: [
                                             Icon(
-                                              Icons.lock_outline_rounded,
+                                              LucideIcons.lock,
                                               size: 14,
                                               color: scheme.tertiary,
                                             ),
@@ -335,7 +336,7 @@ class _RuleDetailPageState extends State<RuleDetailPage> {
                                           onPressed: () =>
                                               _showRuleInfo(context),
                                           icon: const Icon(
-                                            Icons.fact_check_outlined,
+                                            LucideIcons.clipboardCheck,
                                             size: 16,
                                           ),
                                           label: Text(context.t('规则详情与清理后果')),
@@ -491,7 +492,7 @@ class _RuleDetailPageState extends State<RuleDetailPage> {
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Icon(
-                                            Icons.search_off_rounded,
+                                            LucideIcons.searchX,
                                             size: 34,
                                             color: scheme.onSurfaceVariant,
                                           ),
@@ -597,13 +598,13 @@ class _FileToolbar extends StatelessWidget {
             decoration: InputDecoration(
               labelText: context.t('搜索文件'),
               hintText: context.t('路径或扩展名，Ctrl+F 聚焦'),
-              prefixIcon: const Icon(Icons.search_rounded, size: 19),
+              prefixIcon: const Icon(LucideIcons.search, size: 19),
               suffixIcon: searchController.text.isEmpty
                   ? null
                   : IconButton(
                       tooltip: context.t('清除搜索'),
                       onPressed: onClearQuery,
-                      icon: const Icon(Icons.close_rounded, size: 17),
+                      icon: const Icon(LucideIcons.x, size: 17),
                     ),
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(
@@ -629,7 +630,7 @@ class _FileToolbar extends StatelessWidget {
         OutlinedButton.icon(
           key: const ValueKey('rule-file-filter'),
           onPressed: onOpenFilter,
-          icon: const Icon(Icons.filter_alt_outlined, size: 18),
+          icon: const Icon(LucideIcons.funnel, size: 18),
           label: Text(
             activeFilterCount == 0
                 ? context.t('筛选')
@@ -651,7 +652,7 @@ class _FileToolbar extends StatelessWidget {
                     SizedBox(
                       width: 20,
                       child: value == sort
-                          ? const Icon(Icons.check_rounded, size: 17)
+                          ? const Icon(LucideIcons.check, size: 17)
                           : null,
                     ),
                     Text(switch (value) {
@@ -679,7 +680,7 @@ class _FileToolbar extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  Icons.swap_vert_rounded,
+                  LucideIcons.arrowUpDown,
                   size: 18,
                   color: scheme.onSurfaceVariant,
                 ),
@@ -687,7 +688,7 @@ class _FileToolbar extends StatelessWidget {
                 Text(sortLabel, style: Theme.of(context).textTheme.bodySmall),
                 const SizedBox(width: 4),
                 Icon(
-                  Icons.expand_more_rounded,
+                  LucideIcons.chevronDown,
                   size: 17,
                   color: scheme.onSurfaceVariant,
                 ),
@@ -736,7 +737,7 @@ class _FileFilterDialogState extends State<_FileFilterDialog> {
     final muted = theme.colorScheme.onSurfaceVariant;
     return AlertDialog(
       key: const ValueKey('rule-file-filter-dialog'),
-      icon: const Icon(Icons.filter_alt_outlined, size: 28),
+      icon: const Icon(LucideIcons.funnel, size: 28),
       title: Text(context.t('筛选文件')),
       content: SizedBox(
         width: 460,
@@ -1033,7 +1034,7 @@ class _RuleInfoPanel extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(
-                Icons.info_outline_rounded,
+                LucideIcons.info,
                 size: 17,
                 color: scheme.onSecondaryContainer,
               ),
@@ -1061,7 +1062,7 @@ class _RuleInfoPanel extends StatelessWidget {
                       const SizedBox(height: 6),
                       TextButton.icon(
                         onPressed: () => _showRuleAudit(context, rule),
-                        icon: const Icon(Icons.policy_outlined, size: 16),
+                        icon: const Icon(LucideIcons.scrollText, size: 16),
                         label: Text(strings.t('查看规则审计')),
                         style: TextButton.styleFrom(
                           foregroundColor: scheme.onSecondaryContainer,
@@ -1177,7 +1178,7 @@ class _RootsView extends StatelessWidget {
           IconButton(
             onPressed: onRefresh,
             tooltip: context.t('重试'),
-            icon: const Icon(Icons.refresh_rounded, size: 17),
+            icon: const Icon(LucideIcons.refreshCw, size: 17),
           ),
         ],
       );
@@ -1197,9 +1198,9 @@ class _RootsView extends StatelessWidget {
               children: [
                 Icon(
                   switch (root.state) {
-                    RuleRootState.active => Icons.folder_open_outlined,
-                    RuleRootState.excluded => Icons.block_outlined,
-                    RuleRootState.protected => Icons.lock_outline_rounded,
+                    RuleRootState.active => LucideIcons.folderOpen,
+                    RuleRootState.excluded => LucideIcons.ban,
+                    RuleRootState.protected => LucideIcons.lock,
                   },
                   size: 15,
                   color: root.state == RuleRootState.active
@@ -1242,7 +1243,7 @@ class _RootsView extends StatelessWidget {
                     onPressed: () => onReveal(root.path),
                     tooltip: context.t('在资源管理器中显示'),
                     visualDensity: VisualDensity.compact,
-                    icon: const Icon(Icons.open_in_new_rounded, size: 15),
+                    icon: const Icon(LucideIcons.externalLink, size: 15),
                   ),
               ],
             ),
@@ -1252,7 +1253,7 @@ class _RootsView extends StatelessWidget {
           child: TextButton.icon(
             key: const ValueKey('rule-roots-refresh'),
             onPressed: onRefresh,
-            icon: const Icon(Icons.refresh_rounded, size: 15),
+            icon: const Icon(LucideIcons.refreshCw, size: 15),
             label: Text(context.t('重新解析目录')),
             style: TextButton.styleFrom(
               padding: EdgeInsets.zero,
@@ -1314,9 +1315,7 @@ class _FileRow extends StatelessWidget {
                 borderRadius: BorderRadius.circular(9),
               ),
               child: Icon(
-                item.possiblyLocked
-                    ? Icons.lock_outline_rounded
-                    : Icons.insert_drive_file_outlined,
+                item.possiblyLocked ? LucideIcons.lock : LucideIcons.file,
                 size: 17,
                 color: item.possiblyLocked
                     ? scheme.tertiary
@@ -1345,7 +1344,7 @@ class _FileRow extends StatelessWidget {
                         Tooltip(
                           message: context.t('可能正被其他程序占用，清理时会跳过'),
                           child: Icon(
-                            Icons.lock_outline_rounded,
+                            LucideIcons.lock,
                             size: 14,
                             color: scheme.tertiary,
                           ),
@@ -1393,7 +1392,7 @@ class _FileRow extends StatelessWidget {
                 onPressed: onReveal,
                 tooltip: context.t('在资源管理器中显示'),
                 visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                icon: const Icon(LucideIcons.externalLink, size: 16),
               )
             else
               const SizedBox(width: 10),
@@ -1414,7 +1413,7 @@ Future<void> _showRuleAudit(BuildContext context, CleanerRule rule) {
   return showDialog<void>(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      icon: const Icon(Icons.policy_outlined, size: 30),
+      icon: const Icon(LucideIcons.scrollText, size: 30),
       title: Text(
         strings.tf('{rule} · 规则审计', {'rule': strings.ruleTitle(rule)}),
       ),

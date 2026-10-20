@@ -12,6 +12,7 @@ import 'package:broom/core/shell/system_shell.dart';
 import 'package:broom/ui/quarantine_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path/path.dart' as p;
 
 import 'support/quarantine_fakes.dart';
@@ -537,7 +538,7 @@ void main() {
     expect(find.text('隔离区是空的'), findsOneWidget);
     expect(service.isEmpty, isTrue);
 
-    await tester.tap(find.byIcon(Icons.close_rounded));
+    await tester.tap(find.byIcon(LucideIcons.x));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('自动保留策略已永久释放'), findsNothing);

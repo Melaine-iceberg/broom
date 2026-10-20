@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path/path.dart' as p;
 
 import '../core/clean/quarantine_retention_service.dart';
@@ -311,7 +312,7 @@ class _QuarantinePageState extends State<QuarantinePage> {
       appBar: AppBar(
         leading: IconButton(
           onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.arrow_back_rounded),
+          icon: const Icon(LucideIcons.arrowLeft),
           tooltip: context.t('返回'),
         ),
         toolbarHeight: 76,
@@ -321,7 +322,7 @@ class _QuarantinePageState extends State<QuarantinePage> {
             onPressed: _loading || _busy
                 ? null
                 : () => _load(showLoading: false),
-            icon: const Icon(Icons.refresh_rounded),
+            icon: const Icon(LucideIcons.refreshCw),
             tooltip: context.t('刷新'),
           ),
           const SizedBox(width: 12),
@@ -389,7 +390,7 @@ class _QuarantinePageState extends State<QuarantinePage> {
               const SizedBox(height: 22),
               Row(
                 children: [
-                  Icon(Icons.restore_rounded, size: 20, color: scheme.primary),
+                  Icon(LucideIcons.inbox, size: 20, color: scheme.primary),
                   const SizedBox(width: 9),
                   Text(
                     context.t('待处理清理'),
@@ -723,9 +724,7 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         icon: Icon(
-          report.restoredCount > 0
-              ? Icons.restore_rounded
-              : Icons.info_outline_rounded,
+          report.restoredCount > 0 ? LucideIcons.undo2 : LucideIcons.info,
           size: 30,
         ),
         title: Text(
@@ -843,7 +842,7 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
       appBar: AppBar(
         leading: IconButton(
           onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.arrow_back_rounded),
+          icon: const Icon(LucideIcons.arrowLeft),
           tooltip: context.t('返回'),
         ),
         toolbarHeight: 76,
@@ -865,7 +864,7 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
             onPressed: _loading || _busy
                 ? null
                 : () => _load(showLoading: false),
-            icon: const Icon(Icons.refresh_rounded),
+            icon: const Icon(LucideIcons.refreshCw),
             tooltip: context.t('刷新'),
           ),
           const SizedBox(width: 12),
@@ -1012,7 +1011,7 @@ class _SummaryCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const IconTile(icon: Icons.restore_rounded, size: 36, radius: 10),
+              const IconTile(icon: LucideIcons.archive, size: 36, radius: 10),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -1050,12 +1049,12 @@ class _SummaryCard extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               _MetricChip(
-                icon: Icons.inventory_2_outlined,
+                icon: LucideIcons.archive,
                 label: context.t('暂存占用'),
                 value: formatBytes(pendingBytes),
               ),
               _MetricChip(
-                icon: Icons.restore_rounded,
+                icon: LucideIcons.inbox,
                 label: context.t('待处理'),
                 value: context.tf('{count} 个文件', {
                   'count': formatCount(pendingFiles),
@@ -1063,7 +1062,7 @@ class _SummaryCard extends StatelessWidget {
               ),
               if (resumableSessions > 0)
                 _MetricChip(
-                  icon: Icons.play_circle_outline_rounded,
+                  icon: LucideIcons.circlePlay,
                   label: context.t('可继续清理'),
                   value: context.tf('{count} 次', {
                     'count': formatCount(resumableSessions),
@@ -1071,7 +1070,7 @@ class _SummaryCard extends StatelessWidget {
                 ),
               if (disk != null)
                 _MetricChip(
-                  icon: Icons.sd_storage_outlined,
+                  icon: LucideIcons.hardDrive,
                   label: context.t('磁盘可用'),
                   value: formatBytes(disk!.freeBytes),
                 ),
@@ -1084,7 +1083,7 @@ class _SummaryCard extends StatelessWidget {
               child: TextButton.icon(
                 key: const ValueKey('clean-history-button'),
                 onPressed: busy ? null : onOpenHistory,
-                icon: const Icon(Icons.history_rounded, size: 17),
+                icon: const Icon(LucideIcons.history, size: 17),
                 label: Text(context.t('清理历史')),
               ),
             ),
@@ -1100,7 +1099,7 @@ class _SummaryCard extends StatelessWidget {
               child: Row(
                 children: [
                   Icon(
-                    Icons.auto_delete_outlined,
+                    LucideIcons.clock,
                     size: 16,
                     color: scheme.onSurfaceVariant,
                   ),
@@ -1147,7 +1146,7 @@ class _SummaryCard extends StatelessWidget {
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.delete_forever_rounded, size: 19),
+                    : const Icon(LucideIcons.trash2, size: 19),
                 label: Text(context.t('全部永久释放')),
               ),
             ),
@@ -1243,7 +1242,7 @@ class _SessionCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(9),
                   ),
                   child: Icon(
-                    Icons.inventory_2_outlined,
+                    LucideIcons.archive,
                     size: 18,
                     color: BroomColors.inkMuted(context),
                   ),
@@ -1299,7 +1298,7 @@ class _SessionCard extends StatelessWidget {
                     children: [
                       Text(context.t('查看文件')),
                       const SizedBox(width: 2),
-                      const Icon(Icons.chevron_right_rounded, size: 17),
+                      const Icon(LucideIcons.chevronRight, size: 17),
                     ],
                   ),
                 ),
@@ -1315,23 +1314,20 @@ class _SessionCard extends StatelessWidget {
                   TextButton.icon(
                     key: const ValueKey('resume-clean-button'),
                     onPressed: busy ? null : onResume,
-                    icon: const Icon(
-                      Icons.play_circle_outline_rounded,
-                      size: 17,
-                    ),
+                    icon: const Icon(LucideIcons.circlePlay, size: 17),
                     label: Text(context.t('继续清理')),
                   ),
                 TextButton.icon(
                   onPressed: busy || session.pendingCount == 0
                       ? null
                       : onRestore,
-                  icon: const Icon(Icons.restore_rounded, size: 17),
+                  icon: const Icon(LucideIcons.undo2, size: 17),
                   label: Text(context.t('恢复全部')),
                 ),
                 TextButton.icon(
                   onPressed: busy ? null : onPurge,
                   style: TextButton.styleFrom(foregroundColor: scheme.error),
-                  icon: const Icon(Icons.delete_forever_rounded, size: 17),
+                  icon: const Icon(LucideIcons.trash2, size: 17),
                   label: Text(context.t('永久释放')),
                 ),
               ],
@@ -1411,11 +1407,7 @@ class _SessionDetailHeader extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.info_outline_rounded,
-            size: 19,
-            color: scheme.onSurfaceVariant,
-          ),
+          Icon(LucideIcons.info, size: 19, color: scheme.onSurfaceVariant),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -1435,7 +1427,7 @@ class _SessionDetailHeader extends StatelessWidget {
           TextButton.icon(
             onPressed: busy ? null : onPurge,
             style: TextButton.styleFrom(foregroundColor: scheme.error),
-            icon: const Icon(Icons.delete_forever_rounded, size: 17),
+            icon: const Icon(LucideIcons.trash2, size: 17),
             label: Text(context.t('永久删除剩余')),
           ),
         ],
@@ -1511,7 +1503,7 @@ class _EntryTile extends StatelessWidget {
               ),
               const SizedBox(width: 2),
               Icon(
-                Icons.insert_drive_file_outlined,
+                LucideIcons.file,
                 size: 18,
                 color: enabled ? scheme.primary : scheme.onSurfaceVariant,
               ),
@@ -1605,7 +1597,7 @@ class _EntryTile extends StatelessWidget {
                               ),
                             ),
                             Icon(
-                              Icons.arrow_drop_down_rounded,
+                              LucideIcons.chevronDown,
                               size: 15,
                               color: onConflictPolicyChanged == null
                                   ? scheme.onSurfaceVariant
@@ -1695,12 +1687,12 @@ class _SessionActionBar extends StatelessWidget {
               ),
               OutlinedButton.icon(
                 onPressed: onRestoreSelected,
-                icon: const Icon(Icons.restore_rounded, size: 17),
+                icon: const Icon(LucideIcons.undo2, size: 17),
                 label: Text(context.t('恢复选中')),
               ),
               FilledButton.icon(
                 onPressed: onRestoreAll,
-                icon: const Icon(Icons.restore_page_rounded, size: 17),
+                icon: const Icon(LucideIcons.undo2, size: 17),
                 label: Text(context.t('恢复全部')),
               ),
             ],
@@ -1726,7 +1718,7 @@ class _EmptyState extends StatelessWidget {
           child: Column(
             children: [
               Icon(
-                Icons.restore_rounded,
+                LucideIcons.inbox,
                 size: 28,
                 color: BroomColors.inkFaint(context),
               ),
@@ -1787,7 +1779,7 @@ class _PolicyNote extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(top: 2),
           child: Icon(
-            Icons.lock_outline_rounded,
+            LucideIcons.lock,
             size: 15,
             color: scheme.onSurfaceVariant,
           ),
@@ -1828,7 +1820,7 @@ class _PurgeConfirmDialogState extends State<_PurgeConfirmDialog> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return AlertDialog(
-      icon: Icon(Icons.warning_amber_rounded, size: 30, color: scheme.error),
+      icon: Icon(LucideIcons.triangleAlert, size: 30, color: scheme.error),
       title: Text(widget.title),
       content: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1915,11 +1907,7 @@ Future<bool> _confirmOverwrite(BuildContext context, List<String> paths) async {
         final theme = Theme.of(context);
         final scheme = theme.colorScheme;
         return AlertDialog(
-          icon: Icon(
-            Icons.warning_amber_rounded,
-            size: 30,
-            color: scheme.error,
-          ),
+          icon: Icon(LucideIcons.triangleAlert, size: 30, color: scheme.error),
           title: Text(
             context.tf('覆盖 {count} 个原位置文件？', {'count': paths.length}),
           ),
@@ -2026,11 +2014,7 @@ class _ConflictResolutionDialogState extends State<_ConflictResolutionDialog> {
     final scheme = theme.colorScheme;
 
     return AlertDialog(
-      icon: Icon(
-        Icons.compare_arrows_rounded,
-        size: 30,
-        color: scheme.tertiary,
-      ),
+      icon: Icon(LucideIcons.arrowLeftRight, size: 30, color: scheme.tertiary),
       title: Text(
         context.tf('{count} 个文件的原位置已有内容', {'count': widget.conflictCount}),
       ),
@@ -2188,7 +2172,7 @@ Future<bool> _confirmResume(BuildContext context, int remaining) async {
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      icon: const Icon(Icons.play_circle_outline_rounded, size: 30),
+      icon: const Icon(LucideIcons.circlePlay, size: 30),
       title: Text(context.t('继续清理剩余文件？')),
       content: Text(
         context.tf('还有 {count} 个文件未处理。继续后会把这些文件移入隔离区，过程中可以停止。', {
@@ -2254,11 +2238,7 @@ class _ResumeBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.play_circle_outline_rounded,
-            size: 21,
-            color: scheme.primary,
-          ),
+          Icon(LucideIcons.circlePlay, size: 21, color: scheme.primary),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -2277,7 +2257,7 @@ class _ResumeBanner extends StatelessWidget {
           FilledButton.icon(
             key: const ValueKey('resume-clean-detail-button'),
             onPressed: busy ? null : onResume,
-            icon: const Icon(Icons.play_arrow_rounded, size: 18),
+            icon: const Icon(LucideIcons.play, size: 18),
             label: Text(context.t('继续清理')),
           ),
         ],
@@ -2313,11 +2293,7 @@ class _ResumeProgressCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(
-                Icons.cleaning_services_rounded,
-                size: 18,
-                color: scheme.primary,
-              ),
+              Icon(LucideIcons.sparkles, size: 18, color: scheme.primary),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(

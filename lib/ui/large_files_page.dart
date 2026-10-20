@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../core/analysis/analysis_service.dart';
 import '../core/models/analysis_models.dart';
@@ -64,7 +65,7 @@ class _LargeFilesPageState extends State<LargeFilesPage> {
       appBar: AppBar(
         leading: IconButton(
           onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.arrow_back_rounded),
+          icon: const Icon(LucideIcons.arrowLeft),
           tooltip: context.t('返回'),
         ),
         toolbarHeight: 76,
@@ -134,7 +135,7 @@ class _LargeFilesPageState extends State<LargeFilesPage> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 620),
           child: AnalysisProgressCard(
-            icon: Icons.sd_storage_rounded,
+            icon: LucideIcons.hardDrive,
             title: context.t('正在扫描大文件'),
             description: context.t('遍历目录并记录超过大小阈值的文件。'),
             progress: null,
@@ -272,7 +273,7 @@ class _ConfigPanel extends StatelessWidget {
               FilledButton.icon(
                 onPressed: controller.isRunning ? null : controller.scan,
                 icon: Icon(
-                  report == null ? Icons.search_rounded : Icons.refresh_rounded,
+                  report == null ? LucideIcons.search : LucideIcons.refreshCw,
                   size: 18,
                 ),
                 label: Text(
@@ -481,7 +482,7 @@ class _LargeFileRow extends StatelessWidget {
           ),
           IconButton(
             onPressed: () => onReveal(file.path),
-            icon: const Icon(Icons.folder_open_rounded, size: 17),
+            icon: const Icon(LucideIcons.folderOpen, size: 17),
             visualDensity: VisualDensity.compact,
             tooltip: context.t('在资源管理器中显示'),
           ),
@@ -516,7 +517,7 @@ class _NoLargeFiles extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(
-                  Icons.check_circle_outline_rounded,
+                  LucideIcons.circleCheck,
                   size: 20,
                   color: BroomColors.inkMuted(context),
                 ),
@@ -569,7 +570,7 @@ class _IdleState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.sd_storage_outlined,
+              LucideIcons.hardDrive,
               size: 30,
               color: BroomColors.inkFaint(context),
             ),

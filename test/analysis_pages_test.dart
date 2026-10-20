@@ -6,6 +6,7 @@ import 'package:broom/ui/duplicate_finder_page.dart';
 import 'package:broom/ui/large_files_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 class _FakeSystemShell implements SystemShell {
   @override
@@ -148,7 +149,7 @@ void main() {
     expect(find.text('清理'), findsNothing);
     expect(find.text('删除'), findsNothing);
     expect(
-      find.widgetWithIcon(IconButton, Icons.folder_open_rounded),
+      find.widgetWithIcon(IconButton, LucideIcons.folderOpen),
       findsNWidgets(2),
     );
   });
@@ -199,7 +200,7 @@ void main() {
     expect(find.text('只读'), findsOneWidget);
     expect(find.text('清理'), findsNothing);
     expect(
-      find.widgetWithIcon(IconButton, Icons.folder_open_rounded),
+      find.widgetWithIcon(IconButton, LucideIcons.folderOpen),
       findsNWidgets(2),
     );
   });
