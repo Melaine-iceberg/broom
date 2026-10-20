@@ -20,6 +20,7 @@ CleanController.scan()
 ```
 
 - `JunkScanner` 是唯一的候选文件收集器：普通路径使用逐目录遍历，索引路径只把 USN 结果当作候选集，仍会读取每个文件的真实 `stat`。
+- 普通遍历优先使用原生目录枚举（见第 5 节）：一次 `FindFirstFileW` 返回名称、大小、修改时间与属性，因此一个文件只产生一次系统调用，而不是“枚举 + `stat`”两次。
 - 扫描器跳过链接 / reparse point、越界路径、排除目录、被其他规则认领的子树、扩展名与修改时间不匹配的文件。
 - `ScanService` 对跨 worker 的重复路径按 `PathSemantics.key` 去重；worker 不保留完整结果，避免内存与 isolate 传输双份占用。
 - 控制器持有本轮唯一的内存结果集，分批聚合；最终预览与持久化都基于同一份去重结果。
@@ -53,7 +54,24 @@ CleanController.scan()
   - 不使用 `PROCESS_MODE_BACKGROUND_BEGIN`：它同时把进程 I/O 优先级压到 very low 并触发工作集裁剪，扫描自身的读取会排在所有进程之后，界面与光栅线程也会因为缺页而掉帧——两个症状都来自这一条调用。
 - 优先级调整失败不会阻塞扫描。该设置仍作用于整个进程，只是不再影响 I/O 与内存优先级。
 
-## 5. NTFS USN 索引（可选）
+## 5. 原生目录枚举（`broom/directory_enum`）
+
+与设置项无关，Windows 上默认启用。
+
+1. `ScanService` 派生 worker 之前，从根 isolate 调用一次 `ping` 探测通道是否存在；只有探测成功才允许 worker 使用它。旧版 runner、非 Windows 平台或单元测试环境探测失败时，扫描自动回落到 `Directory.list` + 逐文件 `stat`。
+2. worker isolate 通过 `RootIsolateToken` + `BackgroundIsolateBinaryMessenger.ensureInitialized` 取得平台通道。没有 token 的后台 isolate 直接发平台消息会**中止 isolate**，而不是抛出可捕获异常；因此“能否使用”必须由根 isolate 决定后显式下传（`_WorkerRequest.useDetailedListing`）。
+3. 原生侧在 4 个常驻线程上执行 `FindFirstFileW` / `FindNextFileW`，路径统一补 `\\?\` / `\\?\UNC\` 前缀，超过 `MAX_PATH` 的目录同样可枚举；结果通过 `PostMessage` 回到平台线程再回复通道，平台线程本身不执行枚举。
+4. 返回四个并行数组：`names`（UTF-16 → UTF-8）、`sizes`（Int64List）、`modified`（Int64List，Unix 微秒）、`attributes`（Int32List）。类型在 Dart 侧按属性位映射：`REPARSE_POINT` → link（不跟随）、`DIRECTORY` → directory，其余为 file。
+5. 空目录的 `FindFirstFileW` 返回 `ERROR_FILE_NOT_FOUND`，原生侧会再查一次路径属性以区分“空目录”和“路径不存在”；后者以 `PlatformException(code: win32, details: 错误码)` 返回，Dart 侧转成带 `OSError` 的 `FileSystemException`，沿用既有的错误分类。
+
+约束与取舍：
+
+- 每个目录一次通道往返，因此“目录少、文件多”的树收益最大（N 次 `stat` → 1 次调用）；只有一两个文件的目录与 `Directory.list` 大致持平。
+- 原生返回的修改时间是 UTC 微秒，Dart 侧转本地时间，与 `FileStat.modified` 语义一致。
+- 通道不可用属于降级而不是错误：两条路径共用同一套过滤、去重与上限逻辑，差异只在系统调用次数。`test/junk_scanner_detailed_listing_test.dart` 用注入文件系统断言详细枚举路径下 `stat` 调用为 0。
+- 空目录时四列都为空，此时代码改为返回普通空列表：零长度的类型化数组经标准编解码往返后 Dart 侧会解析失败（`Message corrupted`），而空列只会出现在空目录这一种情况。
+
+## 6. NTFS USN 索引（可选）
 
 设置项 `useNtfsIndex` 默认关闭。启用后：
 
@@ -75,7 +93,7 @@ CleanController.scan()
 - USN 索引是快照；扫描期间创建 / 删除的文件可能表现为“文件消失”或未发现，清理阶段仍会逐项校验。
 - 本索引不包含文件大小与最后写入时间，不能替代 `stat`。
 
-## 6. 扫描错误
+## 7. 扫描错误
 
 `ScanErrorKind` 的稳定取值：
 
@@ -96,7 +114,7 @@ CleanController.scan()
 
 扫描结果页面按类别汇总并展示最多 5 个示例路径。错误分类只影响报告，不会删除任何文件。
 
-## 7. 结果持久化
+## 8. 结果持久化
 
 目录：`%LOCALAPPDATA%\Broom\scans\`
 
@@ -124,7 +142,7 @@ scans/
 - `rulesVersion` 或规则 ID 与当前目录不一致时标记“规则已变化”，仍允许查看，但不自动恢复；清理前路径守卫、排除列表与隔离区逻辑会再次校验。
 - 新扫描成功发布后删除旧结果目录；只保留最近一次成功结果。
 
-## 8. 在线规则更新
+## 9. 在线规则更新
 
 ### 8.1 清单格式
 
@@ -176,7 +194,7 @@ flutter build windows --release \
 
 用户关闭的规则按稳定 ID 保存，排除列表按路径保存，二者独立于规则目录版本。
 
-## 9. 路径语义抽象
+## 10. 路径语义抽象
 
 `lib/core/platform/path_semantics.dart` 定义 `PathSemantics`：
 
@@ -188,7 +206,7 @@ flutter build windows --release \
 
 扫描器、路径守卫、规则解析器与结果存储都可以注入语义实现；默认使用 `WindowsPathSemantics`，测试使用 `PosixPathSemantics` 验证大小写敏感与分隔符差异。隔离区移动与分析遍历器仍是 Windows 专用，跨平台时需要单独的文件系统后端。
 
-## 10. 测试
+## 11. 测试
 
 ```bash
 flutter analyze

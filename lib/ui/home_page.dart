@@ -2751,11 +2751,12 @@ class _CleaningView extends StatelessWidget {
                         tween: Tween(end: value ?? 0),
                         duration: const Duration(milliseconds: 150),
                         curve: Curves.easeOut,
-                        builder: (context, animated, _) => LinearProgressIndicator(
-                          value: value == null ? null : animated,
-                          minHeight: 8,
-                          backgroundColor: scheme.surfaceContainerHighest,
-                        ),
+                        builder: (context, animated, _) =>
+                            LinearProgressIndicator(
+                              value: value == null ? null : animated,
+                              minHeight: 8,
+                              backgroundColor: scheme.surfaceContainerHighest,
+                            ),
                       ),
                     ),
                   ),

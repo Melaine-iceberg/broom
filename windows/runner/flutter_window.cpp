@@ -10,6 +10,7 @@
 #include <string>
 #include <utility>
 
+#include "directory_enum_channel.h"
 #include "file_lock_channel.h"
 #include "file_metadata_channel.h"
 #include "flutter/generated_plugin_registrant.h"
@@ -178,6 +179,8 @@ void FlutterWindow::SetUpWindowChannels() {
   file_lock_channel_ = std::make_unique<FileLockChannel>(messenger);
   ntfs_index_channel_ =
       std::make_unique<NtfsIndexChannel>(messenger, GetHandle());
+  directory_enum_channel_ =
+      std::make_unique<DirectoryEnumChannel>(messenger, GetHandle());
   scan_priority_channel_ = std::make_unique<ScanPriorityChannel>(messenger);
 }
 
@@ -204,6 +207,7 @@ void FlutterWindow::OnDestroy() {
   file_metadata_channel_.reset();
   file_lock_channel_.reset();
   ntfs_index_channel_.reset();
+  directory_enum_channel_.reset();
   scan_priority_channel_.reset();
 
   if (flutter_controller_) {
@@ -247,6 +251,13 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   if (message == NtfsIndexChannel::kPostedMessage) {
     if (ntfs_index_channel_ != nullptr) {
       ntfs_index_channel_->HandlePostedMessages();
+    }
+    return 0;
+  }
+
+  if (message == DirectoryEnumChannel::kPostedMessage) {
+    if (directory_enum_channel_ != nullptr) {
+      directory_enum_channel_->HandlePostedMessages();
     }
     return 0;
   }

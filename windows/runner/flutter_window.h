@@ -9,6 +9,7 @@
 #include "win32_window.h"
 
 class WindowStateEmitter;
+class DirectoryEnumChannel;
 class SystemShellChannel;
 class SystemAccessChannel;
 class FileMetadataChannel;
@@ -68,6 +69,7 @@ class FlutterWindow : public Win32Window {
   std::unique_ptr<FileMetadataChannel> file_metadata_channel_;
   std::unique_ptr<FileLockChannel> file_lock_channel_;
   std::unique_ptr<NtfsIndexChannel> ntfs_index_channel_;
+  std::unique_ptr<DirectoryEnumChannel> directory_enum_channel_;
   std::unique_ptr<ScanPriorityChannel> scan_priority_channel_;
 };
 

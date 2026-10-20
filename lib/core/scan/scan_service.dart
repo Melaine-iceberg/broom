@@ -2,7 +2,10 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:flutter/services.dart';
+
 import '../models/scan_models.dart';
+import '../platform/directory_enum.dart';
 import '../platform/path_semantics.dart';
 import '../platform/scan_priority.dart';
 import 'junk_scanner.dart';
@@ -129,7 +132,14 @@ class ScanService {
     if (useIndexedPath) {
       unawaited(_runIndexed(jobs, excludedPaths, options, ntfsIndex!));
     } else {
-      await _startWorkers(jobs, excludedPaths, options);
+      final detailedListing = await _probeDetailedListing();
+      if (_finished) return completer.future;
+      await _startWorkers(
+        jobs,
+        excludedPaths,
+        options,
+        detailedListing: detailedListing,
+      );
     }
 
     return completer.future;
@@ -147,6 +157,19 @@ class ScanService {
   void dispose() {
     if (_finished) return;
     _finish(error: StateError('扫描已中止'));
+  }
+
+  /// Decides once, from the root isolate, whether worker isolates may use the
+  /// native directory enumerator.
+  ///
+  /// A worker isolate can only reach the platform when the engine shares the
+  /// root isolate's messenger, and a message sent without one aborts the isolate
+  /// instead of raising a catchable error. Probing here also covers builds whose
+  /// runner predates the channel: they keep the `list` + `stat` path.
+  Future<bool> _probeDetailedListing() async {
+    if (!Platform.isWindows) return false;
+    if (RootIsolateToken.instance == null) return false;
+    return MethodChannelDirectoryEnumerator().probe();
   }
 
   Future<bool> _allRootsIndexable(List<ScanJob> jobs, NtfsIndex index) async {
@@ -213,8 +236,9 @@ class ScanService {
   Future<void> _startWorkers(
     List<ScanJob> jobs,
     List<String> excludedPaths,
-    ScanOptions options,
-  ) async {
+    ScanOptions options, {
+    required bool detailedListing,
+  }) async {
     final workerCount = _resolveWorkerCount(jobs.length, options.parallelism);
     final sliceSize = (jobs.length / workerCount).ceil();
     for (var workerId = 0; workerId < workerCount; workerId++) {
@@ -248,6 +272,12 @@ class ScanService {
             semantics: semantics,
             events: events.sendPort,
             control: control.sendPort,
+            // Lets the worker reach the platform channel for directory
+            // enumeration; null when the caller has no engine (tests).
+            rootIsolateToken: detailedListing
+                ? RootIsolateToken.instance
+                : null,
+            useDetailedListing: detailedListing,
           ),
           onError: errors.sendPort,
           onExit: exits.sendPort,
@@ -457,6 +487,18 @@ class ScanService {
 }
 
 void _scanWorkerEntry(_WorkerRequest request) async {
+  // Platform channels, and therefore the native directory enumerator, need the
+  // root isolate's messenger to be shared with this isolate. Without it the
+  // scanner simply keeps using `Directory.list` plus `stat`.
+  final token = request.rootIsolateToken;
+  if (token != null) {
+    try {
+      BackgroundIsolateBinaryMessenger.ensureInitialized(token);
+    } catch (_) {
+      // Enumeration falls back to dart:io when the messenger is unavailable.
+    }
+  }
+
   var cancelled = false;
   final control = ReceivePort();
   final subscription = control.listen((message) {
@@ -471,6 +513,7 @@ void _scanWorkerEntry(_WorkerRequest request) async {
       semantics: request.semantics,
       jobIndexBase: request.jobIndexBase,
       jobCountOverride: request.jobCount,
+      useDetailedListing: request.useDetailedListing,
     );
     final result = await scanner.scan(
       retainItems: false,
@@ -500,6 +543,8 @@ class _WorkerRequest {
     required this.semantics,
     required this.events,
     required this.control,
+    this.rootIsolateToken,
+    this.useDetailedListing = false,
   });
 
   final List<ScanJob> jobs;
@@ -510,6 +555,8 @@ class _WorkerRequest {
   final PathSemantics semantics;
   final SendPort events;
   final SendPort control;
+  final RootIsolateToken? rootIsolateToken;
+  final bool useDetailedListing;
 }
 
 class _WorkerHandle {

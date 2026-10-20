@@ -24,7 +24,7 @@ typedef FsOperationHook = FutureOr<void> Function(
 /// platform, so the same suite runs on CI without touching a real disk. Files
 /// store their reported length separately from their bytes; seeding a large
 /// file therefore does not allocate a huge buffer unless it is read.
-class MemoryFileSystem implements BroomFileSystem {
+class MemoryFileSystem implements BroomFileSystem, DetailedDirectoryListing {
   MemoryFileSystem({this.onOperation});
 
   FsOperationHook? onOperation;
@@ -153,6 +153,26 @@ class MemoryFileSystem implements BroomFileSystem {
       final child = _nodes[key];
       if (child == null) continue;
       yield FsEntry(path: child.path, type: child.kind);
+    }
+  }
+
+  @override
+  Stream<FsEntryDetail> listDetailed(String path) async* {
+    await _before('listDetailed', path);
+    final node = _nodes[_key(path)];
+    if (node == null || node.kind != FsEntityType.directory) {
+      throw FileSystemException('目录不存在', path, const OSError('文件系统操作失败', 3));
+    }
+    final children = node.children.toList()..sort();
+    for (final key in children) {
+      final child = _nodes[key];
+      if (child == null) continue;
+      yield FsEntryDetail(
+        name: _leaf(child.path),
+        type: child.kind,
+        size: child.kind == FsEntityType.file ? child.size : 0,
+        modified: child.modified,
+      );
     }
   }
 
@@ -427,6 +447,11 @@ class MemoryFileSystem implements BroomFileSystem {
       throw FileSystemException('路径不是文件', path, const OSError('文件系统操作失败', 5));
     }
     return node.size;
+  }
+
+  static String _leaf(String path) {
+    final cut = path.lastIndexOf(p.windows.separator);
+    return cut < 0 ? path : path.substring(cut + 1);
   }
 
   Future<void> _before(String operation, String path) async {

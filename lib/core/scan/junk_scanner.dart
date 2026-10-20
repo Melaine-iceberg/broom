@@ -30,6 +30,7 @@ class JunkScanner {
     this.jobIndexBase = 0,
     this.jobCountOverride,
     this.fileSystem = const IoFileSystem(),
+    this.useDetailedListing = true,
     this.statConcurrency = defaultStatConcurrency,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now {
@@ -51,6 +52,14 @@ class JunkScanner {
   final int jobIndexBase;
   final int? jobCountOverride;
   final BroomFileSystem fileSystem;
+
+  /// Whether a [DetailedDirectoryListing] file system may be used to obtain
+  /// sizes and timestamps from the directory enumeration itself.
+  ///
+  /// The scan coordinator turns this off for worker isolates that cannot reach
+  /// the platform channel; the listing plus per-file `stat` path stays correct
+  /// either way.
+  final bool useDetailedListing;
 
   /// Bounded parallelism for per-file `stat` calls inside one directory.
   final int statConcurrency;
@@ -169,22 +178,25 @@ class JunkScanner {
       if (stopped) throw const _LimitReached();
     }
 
-    /// Stats and accepts one chunk of already-filtered files.
+    /// Stats (when the listing did not provide them) and accepts one chunk of
+    /// already-filtered files.
     ///
-    /// `stat` calls run concurrently (bounded by [statConcurrency]); results
-    /// are consumed in listing order so dedupe and the item cap stay
-    /// deterministic. Returns true when the item limit stopped the scan; a
-    /// cancellation leaves the remaining entries unstat-ed and returns false,
-    /// the caller then checks `isCancelled` on its next iteration.
+    /// Enumerations that return metadata leave [files] entries with a stat, so
+    /// no extra call is needed at all; for plain listings the `stat` calls run
+    /// concurrently, bounded by [statConcurrency]. Results are consumed in
+    /// listing order so dedupe and the item cap stay deterministic. Returns true
+    /// when the item limit stopped the scan; a cancellation leaves the remaining
+    /// entries unfinished and returns false, the caller then checks
+    /// `isCancelled` on its next iteration.
     Future<bool> processFiles({
       required ScanJob job,
       required String root,
       required String rootKey,
-      required List<({String path, String key})> files,
+      required List<({String path, String key, FsStat? stat})> files,
       required int jobIndex,
     }) async {
       if (files.isEmpty) return false;
-      final stats = List<FsStat?>.filled(files.length, null);
+      final stats = <FsStat?>[for (final file in files) file.stat];
       final errors = List<FileSystemException?>.filled(files.length, null);
       var next = 0;
       final workers = statConcurrency < 1 ? 1 : statConcurrency;
@@ -194,10 +206,9 @@ class JunkScanner {
           if (isCancelled?.call() ?? false) return;
           final index = next++;
           if (index >= files.length) return;
-          final path = files[index].path;
-          scannedFiles++;
+          if (stats[index] != null) continue;
           try {
-            stats[index] = await fileSystem.stat(path);
+            stats[index] = await fileSystem.stat(files[index].path);
           } on FileSystemException catch (error) {
             errors[index] = error;
           }
@@ -205,10 +216,12 @@ class JunkScanner {
         }
       }
 
-      await Future.wait([
-        for (var index = 0; index < workers && index < files.length; index++)
-          statWorker(),
-      ]);
+      if (files.any((file) => file.stat == null)) {
+        await Future.wait([
+          for (var index = 0; index < workers && index < files.length; index++)
+            statWorker(),
+        ]);
+      }
 
       for (var index = 0; index < files.length; index++) {
         final error = errors[index];
@@ -238,6 +251,13 @@ class JunkScanner {
       }
       return false;
     }
+
+    // A backend that can return sizes and timestamps with the listing lets the
+    // scan skip the per-file `stat` entirely (see DetailedDirectoryListing).
+    final detailedListing =
+        useDetailedListing && fileSystem is DetailedDirectoryListing
+        ? fileSystem as DetailedDirectoryListing
+        : null;
 
     scanLoop:
     for (var localJobIndex = 0; localJobIndex < jobs.length; localJobIndex++) {
@@ -314,6 +334,29 @@ class JunkScanner {
         final pending = Queue<({String directory, String root})>();
         pending.add((directory: root, root: root));
 
+        Stream<({String path, FsEntityType type, FsStat? stat})> listingOf(
+          String directory,
+        ) {
+          if (detailedListing != null) {
+            return detailedListing
+                .listDetailed(directory)
+                .map(
+                  (entry) => (
+                    path: _join(directory, entry.name),
+                    type: entry.type,
+                    stat: FsStat(
+                      type: entry.type,
+                      size: entry.size,
+                      modified: entry.modified,
+                    ),
+                  ),
+                );
+          }
+          return fileSystem
+              .list(directory)
+              .map((entry) => (path: entry.path, type: entry.type, stat: null));
+        }
+
         while (pending.isNotEmpty) {
           if (isCancelled?.call() ?? false) {
             cancelled = true;
@@ -327,26 +370,27 @@ class JunkScanner {
 
           // Files are collected per directory and processed in chunks so the
           // per-file `stat` calls pipeline instead of serialising on latency.
-          final chunk = <({String path, String key})>[];
+          final chunk = <({String path, String key, FsStat? stat})>[];
           try {
-            await for (final entity in fileSystem.list(current.directory)) {
+            await for (final listed in listingOf(current.directory)) {
               if (isCancelled?.call() ?? false) {
                 cancelled = true;
                 break scanLoop;
               }
-              if (entity.type == FsEntityType.link) continue;
-              if (entity.type == FsEntityType.notFound) continue;
-              final entityPath = semantics.canonical(entity.path);
+              if (listed.type == FsEntityType.link) continue;
+              if (listed.type == FsEntityType.notFound) continue;
+              final entityPath = semantics.canonical(listed.path);
               final entityKey = _key(entityPath);
               if (_isExcluded(entityKey) || isJobExcluded(entityKey)) continue;
 
-              if (entity.type == FsEntityType.directory) {
+              if (listed.type == FsEntityType.directory) {
                 pending.add((directory: entityPath, root: current.root));
                 continue;
               }
-              if (entity.type != FsEntityType.file) continue;
+              if (listed.type != FsEntityType.file) continue;
               if (!_acceptsExtension(job, entityPath)) continue;
-              chunk.add((path: entityPath, key: entityKey));
+              scannedFiles++;
+              chunk.add((path: entityPath, key: entityKey, stat: listed.stat));
               if (chunk.length < _fileChunkSize) continue;
               final stopped = await processFiles(
                 job: job,
@@ -356,6 +400,7 @@ class JunkScanner {
                 jobIndex: localJobIndex,
               );
               chunk.clear();
+              report(jobIndex: localJobIndex);
               if (stopped) break scanLoop;
             }
             if (chunk.isNotEmpty) {
@@ -367,6 +412,7 @@ class JunkScanner {
                 jobIndex: localJobIndex,
               );
               chunk.clear();
+              report(jobIndex: localJobIndex);
               if (stopped) break scanLoop;
             }
           } on FileSystemException catch (error) {
@@ -403,6 +449,13 @@ class JunkScanner {
     final dot = path.lastIndexOf('.');
     if (dot <= path.lastIndexOf(semantics.separator) + 1) return false;
     return extensions.contains(path.substring(dot + 1).toLowerCase());
+  }
+
+  String _join(String directory, String name) {
+    final separator = semantics.separator;
+    return directory.endsWith(separator)
+        ? '$directory$name'
+        : '$directory$separator$name';
   }
 
   bool _isExcluded(String key) =>
