@@ -41,7 +41,7 @@ flutter test integration_test/app_smoke_test.dart -d windows
 - isolate 往返传输：100,000 个 `JunkItem`，每批 256 个，28–30 ms，约 0.26–0.31 µs/文件。扫描服务使用相同的分批边界，因此可以把该数字视为结果回传的近似成本。
 - UI 帧：5,000 条预览结果、40 次滚动，build p50 1.17 ms / p95 4.24 ms，total p50 2.53 ms / p95 13.72 ms。集成测试绑定不提供 raster 时间（输出为 0），GPU 光栅成本需在 `flutter run --profile` 中查看 DevTools 时间线。
 
-清理阶段（400 × 1 KiB，同卷 rename，3 轮均值，2026-10-20）：
+清理阶段（400 × 1 KiB，同卷 rename，3 轮均值，2026-10-20）。下表是 **P0-5a–d 改造前**的构成，用于定位优化项；改造后 `type`、`position()` 已从每文件调用中消失，日志与计划写入从 2.00 次/文件降到 1.02 次/文件：
 
 | 项 | µs/文件 | 占比 |
 | --- | ---: | ---: |
@@ -55,7 +55,9 @@ flutter test integration_test/app_smoke_test.dart -d windows
 | 非系统调用（CPU / 分配 / GC / 调度） | 278.4 | 11.6% |
 | **合计** | **2,399.5** | 100% |
 
-单次 `readAsBytes(1 KiB)` 为 437–446 µs，其中 `open + close` 已占 255 µs，`sha256` 仅 14.5 µs；`position()` 为 47.5 µs，`flush()` 为 201 µs。
+单次 `readAsBytes(1 KiB)` 为 437–446 µs，其中 `open + close` 已占 255 µs，`sha256` 仅 14.5 µs；`position()` 为 47.5 µs，`flush()` 为 201 µs。改造后同一轮内交错测量：`readAsBytes` 515.5 µs vs `readBytesUpTo(size + 1)` 434.0 µs。
+
+这台机器的端到端总时长在相邻运行之间会摆动 10% 以上（Defender 负载），因此**不要用两次整体运行的差值做 A/B**：未改动的 rename 单项在两次运行间就从 995 µs 变到 1,280 µs。可靠的比较来自调用次数与同一轮内的交错计时。
 
 ## 说明
 
