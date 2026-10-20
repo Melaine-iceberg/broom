@@ -14,6 +14,9 @@ String formatBytes(int bytes) {
   return '${value.toStringAsFixed(decimals)} ${units[unitIndex]}';
 }
 
+final _decimalFormats = <String, NumberFormat>{};
+final _compactFormats = <String, NumberFormat>{};
+
 String formatCount(int count) {
   final locale = Intl.defaultLocale ?? 'zh';
   if (locale.startsWith('zh')) {
@@ -22,9 +25,15 @@ String formatCount(int count) {
       return '${value.toStringAsFixed(count >= 1000000 ? 0 : 1)} 万';
     }
   } else if (count >= 100000) {
-    return NumberFormat.compact(locale: locale).format(count);
+    // Constructing a NumberFormat parses its pattern and symbols, so keep one
+    // per locale instead of rebuilding it on every live-updating label.
+    return _compactFormats
+        .putIfAbsent(locale, () => NumberFormat.compact(locale: locale))
+        .format(count);
   }
-  return NumberFormat.decimalPattern(locale).format(count);
+  return _decimalFormats
+      .putIfAbsent(locale, () => NumberFormat.decimalPattern(locale))
+      .format(count);
 }
 
 String formatDate(DateTime date) {

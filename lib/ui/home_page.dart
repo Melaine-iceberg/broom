@@ -1083,10 +1083,19 @@ class _ScanningView extends StatelessWidget {
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
-                        SizedBox.expand(
-                          child: CircularProgressIndicator(
-                            strokeWidth: 4,
-                            backgroundColor: scheme.surfaceContainerHighest,
+                        RepaintBoundary(
+                          child: TweenAnimationBuilder<double>(
+                            tween: Tween(end: _jobProgress(progress)),
+                            duration: const Duration(milliseconds: 320),
+                            curve: Curves.easeOutCubic,
+                            builder: (context, value, _) => SizedBox.expand(
+                              child: CircularProgressIndicator(
+                                value: value,
+                                strokeWidth: 4,
+                                strokeCap: StrokeCap.round,
+                                backgroundColor: scheme.surfaceContainerHighest,
+                              ),
+                            ),
                           ),
                         ),
                         Icon(
@@ -1143,9 +1152,19 @@ class _ScanningView extends StatelessWidget {
                           'total': progress.jobCount,
                         })
                       : null,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(999),
-                    child: const LinearProgressIndicator(minHeight: 7),
+                  child: RepaintBoundary(
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween(end: _jobProgress(progress)),
+                      duration: const Duration(milliseconds: 320),
+                      curve: Curves.easeOutCubic,
+                      builder: (context, value, _) => ClipRRect(
+                        borderRadius: BorderRadius.circular(999),
+                        child: LinearProgressIndicator(
+                          value: value,
+                          minHeight: 7,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 22),
@@ -1310,6 +1329,11 @@ class _ScanningView extends StatelessWidget {
       color: scheme.outlineVariant.withValues(alpha: 0.5),
     );
   }
+}
+
+double _jobProgress(ScanProgress? progress) {
+  if (progress == null || progress.jobCount <= 0) return 0;
+  return ((progress.jobIndex + 1) / progress.jobCount).clamp(0.0, 1.0);
 }
 
 class _ProgressStat extends StatelessWidget {

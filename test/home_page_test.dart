@@ -136,6 +136,35 @@ class _FixedScanService extends ScanService {
   }
 }
 
+class _SuspendedScanService extends ScanService {
+  _SuspendedScanService(this.progress);
+
+  final ScanProgress progress;
+  final release = Completer<void>();
+
+  @override
+  Future<ScanResult> scan({
+    required List<ScanJob> jobs,
+    required List<String> excludedPaths,
+    ScanOptions options = const ScanOptions(),
+    NtfsIndex? ntfsIndex,
+    void Function(ScanProgress progress)? onProgress,
+    void Function(List<JunkItem> items)? onItems,
+    void Function(ScanIssue issue)? onIssue,
+    bool retainItems = true,
+  }) async {
+    onProgress?.call(progress);
+    await release.future;
+    return ScanResult(
+      items: const [],
+      scannedFiles: progress.scannedFiles,
+      directoryErrors: 0,
+      truncated: false,
+      cancelled: false,
+    );
+  }
+}
+
 class _ReportingQuarantineService extends FakeQuarantineService {
   _ReportingQuarantineService(this.report);
 
@@ -732,6 +761,73 @@ void main() {
 
     expect(controller.phase, CleanPhase.idle);
     expect(find.text('开始扫描'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('renders determinate scan progress instead of looping spinners', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const root = r'C:\broom_widget_test\cache';
+    const rule = CleanerRule(
+      id: 'test.cache',
+      title: '测试缓存',
+      category: '测试',
+      description: '测试用缓存规则',
+      pathPatterns: [],
+    );
+    final service = _SuspendedScanService(
+      const ScanProgress(
+        jobIndex: 0,
+        jobCount: 2,
+        ruleId: 'test.cache',
+        scannedFiles: 120,
+        foundFiles: 8,
+        foundBytes: 4096,
+        workerCount: 2,
+      ),
+    );
+    final controller = CleanController(
+      platform: _FixedRootsPlatform(rule: rule, roots: [root]),
+      guard: PathGuard(protectedRoots: const []),
+      quarantine: FakeQuarantineService(),
+      exclusions: _exclusionsStore(),
+      scanServiceFactory: () => service,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    await tester.pumpWidget(
+      BroomApp(controller: controller, systemShell: _FakeSystemShell()),
+    );
+    await tester.pumpAndSettle();
+
+    unawaited(controller.scan());
+    await tester.pumpAndSettle();
+
+    expect(find.text('正在扫描'), findsOneWidget);
+    expect(find.text('第 1 / 2 组 · 2 个并行线程'), findsOneWidget);
+    expect(
+      tester
+          .widget<CircularProgressIndicator>(
+            find.byType(CircularProgressIndicator),
+          )
+          .value,
+      0.5,
+    );
+    expect(
+      tester
+          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
+          .value,
+      0.5,
+    );
+
+    service.release.complete();
+    await tester.pumpAndSettle();
+    expect(controller.phase, CleanPhase.preview);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('shows the first-use guide and persists completion', (

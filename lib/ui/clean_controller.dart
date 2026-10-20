@@ -101,6 +101,7 @@ class CleanController extends ChangeNotifier {
   final Map<ScanErrorKind, List<String>> _issueSamples = {};
   int _liveFoundCount = 0;
   int _liveFoundBytes = 0;
+  static const _streamNotifyInterval = Duration(milliseconds: 200);
   DateTime _lastStreamNotify = DateTime.fromMillisecondsSinceEpoch(0);
   Future<void> _persistQueue = Future<void>.value();
   String? _persistenceNotice;
@@ -489,11 +490,7 @@ class CleanController extends ChangeNotifier {
           options: settings.toOptions(),
           ntfsIndex: ntfsIndex,
           retainItems: false,
-          onProgress: (progress) {
-            _scanProgress = progress;
-            _scanDirectoryErrors = progress.errorCount;
-            _notify();
-          },
+          onProgress: _acceptScanProgress,
           onItems: (items) {
             _acceptScanBatch(items);
             if (writer != null && !writerFailed) {
@@ -579,6 +576,12 @@ class CleanController extends ChangeNotifier {
     _persistQueue = Future<void>.value();
   }
 
+  void _acceptScanProgress(ScanProgress progress) {
+    _scanProgress = progress;
+    _scanDirectoryErrors = progress.errorCount;
+    _maybeNotifyScanStream();
+  }
+
   void _acceptScanBatch(List<JunkItem> items) {
     if (items.isEmpty) return;
     for (final item in items) {
@@ -590,12 +593,7 @@ class CleanController extends ChangeNotifier {
     if (_recentScanItems.length > 8) {
       _recentScanItems.removeRange(8, _recentScanItems.length);
     }
-    final now = DateTime.now();
-    if (now.difference(_lastStreamNotify) >=
-        const Duration(milliseconds: 120)) {
-      _lastStreamNotify = now;
-      _notify();
-    }
+    _maybeNotifyScanStream();
   }
 
   void _acceptScanIssue(ScanIssue issue) {
@@ -605,12 +603,16 @@ class CleanController extends ChangeNotifier {
       samples.add(issue.path);
     }
     _scanDirectoryErrors = _issueCounts.values.fold(0, (a, b) => a + b);
+    _maybeNotifyScanStream();
+  }
+
+  // Progress, batches, and issues all feed the same live scanning surface, so
+  // they share one throttled notification instead of rebuilding it per event.
+  void _maybeNotifyScanStream() {
     final now = DateTime.now();
-    if (now.difference(_lastStreamNotify) >=
-        const Duration(milliseconds: 120)) {
-      _lastStreamNotify = now;
-      _notify();
-    }
+    if (now.difference(_lastStreamNotify) < _streamNotifyInterval) return;
+    _lastStreamNotify = now;
+    _notify();
   }
 
   void _queuePersist(ScanResultWriter writer, List<JunkItem> items) {
@@ -1202,7 +1204,7 @@ class CleanController extends ChangeNotifier {
           _markPossiblyLocked(path);
         }
         final now = DateTime.now();
-        if (now.difference(lastNotifyAt) >= const Duration(milliseconds: 120)) {
+        if (now.difference(lastNotifyAt) >= const Duration(milliseconds: 250)) {
           lastNotifyAt = now;
           _notify();
         }
