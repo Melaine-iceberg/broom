@@ -101,6 +101,7 @@ class CleanController extends ChangeNotifier {
   final Map<ScanErrorKind, List<String>> _issueSamples = {};
   int _liveFoundCount = 0;
   int _liveFoundBytes = 0;
+  double _scanCompletion = 0;
   static const _streamNotifyInterval = Duration(milliseconds: 200);
   DateTime _lastStreamNotify = DateTime.fromMillisecondsSinceEpoch(0);
   Future<void> _persistQueue = Future<void>.value();
@@ -160,6 +161,9 @@ class CleanController extends ChangeNotifier {
   String get rulesVersion => platform.rulesVersion;
   int get liveFoundCount => _liveFoundCount;
   int get liveFoundBytes => _liveFoundBytes;
+
+  /// Monotonic scan completion in `0..1`, derived from job boundaries.
+  double get scanCompletion => _scanCompletion;
   List<JunkItem> get recentScanItems => List.unmodifiable(_recentScanItems);
   Set<String> get activeCategoryIds => _activeCategoryIds;
   Map<String, int> get liveRuleCounts => {
@@ -572,6 +576,7 @@ class CleanController extends ChangeNotifier {
     _issueSamples.clear();
     _liveFoundCount = 0;
     _liveFoundBytes = 0;
+    _scanCompletion = 0;
     _lastStreamNotify = DateTime.fromMillisecondsSinceEpoch(0);
     _persistQueue = Future<void>.value();
   }
@@ -579,6 +584,15 @@ class CleanController extends ChangeNotifier {
   void _acceptScanProgress(ScanProgress progress) {
     _scanProgress = progress;
     _scanDirectoryErrors = progress.errorCount;
+    // Workers report their own job index, and each worker walks a different
+    // slice of the job list, so the raw index alternates between slices. Keep
+    // the highest fraction reached so the progress bar never moves backwards.
+    if (progress.jobCount > 0) {
+      final value = (progress.jobIndex + 1) / progress.jobCount;
+      if (value > _scanCompletion) {
+        _scanCompletion = value > 1 ? 1 : value;
+      }
+    }
     _maybeNotifyScanStream();
   }
 

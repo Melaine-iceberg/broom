@@ -48,11 +48,10 @@ CleanController.scan()
 
 - `parallelism = 0` 表示自动：按处理器数量选择 worker，上限 4 且不超过任务数。`1` 可强制单 worker。
 - 任务按连续切片分配给 worker；每个 job 保留原始索引用于进度显示。
-- 低优先级通过 `broom/scan_priority`：
-  1. 尝试 `SetPriorityClass(PROCESS_MODE_BACKGROUND_BEGIN)`（需要配额权限）；
-  2. 失败则回退 `BELOW_NORMAL_PRIORITY_CLASS`；
-  3. 记录进入前的优先级类，扫描结束 / 取消 / 失败时恢复。
-- 优先级调整失败不会阻塞扫描。该设置影响整个进程，包括界面线程，因此只应在后台扫描场景开启。
+- 单个 worker 内部，每个目录的 `stat` 调用按 `statConcurrency`（默认 8）流水线并发：目录枚举只给出名字，大小与时间戳必须逐文件查询，串行 `await` 时线程完全在等 I/O 延迟。结果按枚举顺序消费，因此去重与上限判定保持确定，`maxItems` 语义不变。
+- 低优先级通过 `broom/scan_priority` 只降低 **CPU** 调度优先级（`BELOW_NORMAL_PRIORITY_CLASS`），扫描结束 / 取消 / 失败时恢复。
+  - 不使用 `PROCESS_MODE_BACKGROUND_BEGIN`：它同时把进程 I/O 优先级压到 very low 并触发工作集裁剪，扫描自身的读取会排在所有进程之后，界面与光栅线程也会因为缺页而掉帧——两个症状都来自这一条调用。
+- 优先级调整失败不会阻塞扫描。该设置仍作用于整个进程，只是不再影响 I/O 与内存优先级。
 
 ## 5. NTFS USN 索引（可选）
 

@@ -24,7 +24,24 @@ const _maxFailureDetails = 100;
 const _maxAclLength = 64 * 1024;
 const _maxStoredNameLength = 200;
 const _maxSessionIdLength = 64;
-const _integrityHashLimitBytes = 32 * 1024 * 1024;
+
+/// Files below this size get a full SHA-256 in the undo record.
+///
+/// Hashing is a full read of the file that the move does not otherwise need,
+/// and this cleaner mostly handles caches with tens of thousands of small
+/// files. The digest runs on the UI isolate, so the cap also bounds the worst
+/// frame hitch to a few milliseconds; files above the cap are verified by size
+/// on restore, exactly like files above the former 32 MiB limit.
+const _integrityHashLimitBytes = 256 * 1024;
+
+/// How many undo records are appended before the journal is flushed to disk.
+///
+/// Each flush is a `FlushFileBuffers` on Windows — a device-wide barrier that
+/// costs about as much as the file move itself. Records still reach the OS
+/// before the file is moved, so a process crash leaves them intact; only a
+/// power loss can drop the last partial batch, and the affected files stay in
+/// the quarantine and can be restored or purged from their stored names.
+const _journalFlushInterval = 32;
 
 class QuarantineService {
   factory QuarantineService({
@@ -385,6 +402,7 @@ class QuarantineService {
     var spaceExhausted = false;
     var historyRecorded = false;
     var lastReportAt = DateTime.fromMillisecondsSinceEpoch(0);
+    var unflushedJournalWrites = 0;
     FsFileWriter? entriesFile;
 
     void recordFailure(String path, Object error) {
@@ -551,7 +569,11 @@ class QuarantineService {
         final entryStart = await writer.position();
         try {
           await writer.writeString('${jsonEncode(entry)}\n');
-          await writer.flush();
+          unflushedJournalWrites++;
+          if (unflushedJournalWrites >= _journalFlushInterval) {
+            await writer.flush();
+            unflushedJournalWrites = 0;
+          }
         } on FileSystemException catch (error) {
           recordFailure(item.path, '无法写入撤销记录：${_failureReason(error)}');
           report(force: true, currentPath: item.path);
@@ -587,6 +609,12 @@ class QuarantineService {
         report(currentPath: item.path);
       }
 
+      if (unflushedJournalWrites > 0) {
+        // Durability for the tail of the journal, matching what the previous
+        // per-entry flush guaranteed for the whole run.
+        await entriesFile.flush();
+        unflushedJournalWrites = 0;
+      }
       await entriesFile.close();
       entriesFile = null;
 

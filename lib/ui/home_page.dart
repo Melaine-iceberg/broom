@@ -1084,7 +1084,7 @@ class _ScanningView extends StatelessWidget {
                       children: [
                         RepaintBoundary(
                           child: TweenAnimationBuilder<double>(
-                            tween: Tween(end: _jobProgress(progress)),
+                            tween: Tween(end: controller.scanCompletion),
                             duration: const Duration(milliseconds: 320),
                             curve: Curves.easeOutCubic,
                             builder: (context, value, _) => SizedBox.expand(
@@ -1153,7 +1153,7 @@ class _ScanningView extends StatelessWidget {
                       : null,
                   child: RepaintBoundary(
                     child: TweenAnimationBuilder<double>(
-                      tween: Tween(end: _jobProgress(progress)),
+                      tween: Tween(end: controller.scanCompletion),
                       duration: const Duration(milliseconds: 320),
                       curve: Curves.easeOutCubic,
                       builder: (context, value, _) => ClipRRect(
@@ -1328,11 +1328,6 @@ class _ScanningView extends StatelessWidget {
       color: scheme.outlineVariant.withValues(alpha: 0.5),
     );
   }
-}
-
-double _jobProgress(ScanProgress? progress) {
-  if (progress == null || progress.jobCount <= 0) return 0;
-  return ((progress.jobIndex + 1) / progress.jobCount).clamp(0.0, 1.0);
 }
 
 class _ProgressStat extends StatelessWidget {
@@ -2749,10 +2744,19 @@ class _CleaningView extends StatelessWidget {
                   }),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(999),
-                    child: LinearProgressIndicator(
-                      value: value,
-                      minHeight: 8,
-                      backgroundColor: scheme.surfaceContainerHighest,
+                    child: RepaintBoundary(
+                      // Every processed file moves the bar; easing between
+                      // reports keeps it from stepping while moves are quick.
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween(end: value ?? 0),
+                        duration: const Duration(milliseconds: 150),
+                        curve: Curves.easeOut,
+                        builder: (context, animated, _) => LinearProgressIndicator(
+                          value: value == null ? null : animated,
+                          minHeight: 8,
+                          backgroundColor: scheme.surfaceContainerHighest,
+                        ),
+                      ),
                     ),
                   ),
                 ),

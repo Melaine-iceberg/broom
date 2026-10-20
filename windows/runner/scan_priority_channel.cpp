@@ -41,14 +41,15 @@ void ScanPriorityChannel::HandleMethodCall(
       previous_priority_class_ = NORMAL_PRIORITY_CLASS;
     }
 
-    // Background mode lowers both CPU and I/O priority but requires the
-    // SeIncreaseQuota privilege. Fall back to below-normal CPU priority for
-    // standard users; the scheduler still prefers foreground work.
+    // Only CPU scheduling is lowered. `PROCESS_MODE_BACKGROUND_BEGIN` would
+    // additionally drop the process I/O priority to "very low" and start
+    // trimming the working set: the scan's own reads would queue behind every
+    // other process, and the UI and raster threads would lose the pages they
+    // need to composite a frame, so the window visibly stutters for the whole
+    // scan. Background I/O priority is therefore never requested; below-normal
+    // CPU priority still yields to foreground work.
     std::string mode;
-    if (::SetPriorityClass(process, PROCESS_MODE_BACKGROUND_BEGIN)) {
-      mode = "background";
-      background_mode_ = true;
-    } else if (::SetPriorityClass(process, BELOW_NORMAL_PRIORITY_CLASS)) {
+    if (::SetPriorityClass(process, BELOW_NORMAL_PRIORITY_CLASS)) {
       mode = "below_normal";
     } else {
       result->Success(flutter::EncodableValue());
@@ -62,10 +63,6 @@ void ScanPriorityChannel::HandleMethodCall(
   if (call.method_name() == "end") {
     std::lock_guard<std::mutex> lock(mutex_);
     if (active_) {
-      if (background_mode_) {
-        ::SetPriorityClass(::GetCurrentProcess(), PROCESS_MODE_BACKGROUND_END);
-        background_mode_ = false;
-      }
       ::SetPriorityClass(::GetCurrentProcess(), previous_priority_class_);
       active_ = false;
     }

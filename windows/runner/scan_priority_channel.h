@@ -28,7 +28,6 @@ class ScanPriorityChannel {
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
   std::mutex mutex_;
   bool active_ = false;
-  bool background_mode_ = false;
   DWORD previous_priority_class_ = NORMAL_PRIORITY_CLASS;
 };
 

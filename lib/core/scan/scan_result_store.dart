@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import '../models/scan_models.dart';
 import '../platform/path_semantics.dart';
@@ -348,7 +349,10 @@ class ScanResultWriter {
     if (_closed || _persistenceLimited || items.isEmpty) return;
     final sink = _sink;
     if (sink == null) return;
-    final buffer = StringBuffer();
+    // Encode each line once and hand bytes to the sink. Encoding the line to
+    // measure it and then writing the joined String re-encoded the whole batch
+    // a second time, on the UI isolate, for every batch of every scan.
+    final buffer = BytesBuilder(copy: false);
     for (final item in items) {
       final line = jsonEncode({
         'ruleId': item.ruleId,
@@ -357,18 +361,21 @@ class ScanResultWriter {
         'size': item.size,
         'modified': item.modified.toUtc().toIso8601String(),
       });
-      final lineBytes = utf8.encode(line).length + 1;
-      if (_bytesWritten + lineBytes > _store.maxItemsFileBytes) {
+      final lineBytes = utf8.encode(line);
+      final cost = lineBytes.length + 1;
+      if (_bytesWritten + cost > _store.maxItemsFileBytes) {
         _persistenceLimited = true;
         break;
       }
-      buffer.writeln(line);
-      _bytesWritten += lineBytes;
+      buffer
+        ..add(lineBytes)
+        ..addByte(0x0A);
+      _bytesWritten += cost;
       _itemsWritten++;
     }
     try {
       if (buffer.isNotEmpty) {
-        sink.write(buffer.toString());
+        sink.add(buffer.takeBytes());
         await sink.flush();
       }
     } on FileSystemException catch (error) {

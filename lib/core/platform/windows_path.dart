@@ -21,7 +21,11 @@ abstract final class WindowsPath {
 
   /// Strips the extended-length prefix. Other paths are returned unchanged.
   static String canonical(String path) {
-    if (path.toLowerCase().startsWith(_uncExtendedPrefix.toLowerCase())) {
+    // Case-insensitive prefix match without allocating a lower-cased copy of
+    // the whole path: `canonical` runs several times per scanned file.
+    if (path.length >= _uncExtendedPrefix.length &&
+        path.startsWith(_extendedPrefix) &&
+        _matchesAsciiIgnoreCase(path, 'UNC\\', _extendedPrefix.length)) {
       return '\\\\${path.substring(_uncExtendedPrefix.length)}';
     }
     if (path.startsWith(_extendedPrefix)) {
@@ -29,6 +33,21 @@ abstract final class WindowsPath {
     }
     return path;
   }
+
+  /// ASCII-only case-insensitive comparison, matching the locale-independent
+  /// folding Windows applies to these prefixes.
+  static bool _matchesAsciiIgnoreCase(String value, String expected, int at) {
+    if (value.length < at + expected.length) return false;
+    for (var index = 0; index < expected.length; index++) {
+      final actual = _asciiLower(value.codeUnitAt(at + index));
+      final target = _asciiLower(expected.codeUnitAt(index));
+      if (actual != target) return false;
+    }
+    return true;
+  }
+
+  static int _asciiLower(int code) =>
+      code >= 0x41 && code <= 0x5A ? code + 0x20 : code;
 
   /// Returns a path that Windows file APIs can use. Long absolute paths get
   /// the extended-length prefix; short paths are left untouched.
