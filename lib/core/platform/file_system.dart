@@ -17,12 +17,22 @@ class FsStat {
     required this.size,
     required this.modified,
     this.mode = 0,
+    this.accessed,
+    this.changed,
   });
 
   final FsEntityType type;
   final int size;
   final DateTime modified;
   final int mode;
+
+  /// Last access time. Carried by the same query as [modified] on both
+  /// backends, so the clean loop reads it for free.
+  final DateTime? accessed;
+
+  /// Creation time on Windows (`FILE_BASIC_INFO.ChangeTime` in dart:io's
+  /// mapping). Null when the backend cannot report it.
+  final DateTime? changed;
 }
 
 class FsEntry {
@@ -141,6 +151,8 @@ class IoFileSystem implements BroomFileSystem, DetailedDirectoryListing {
       size: stat.size,
       modified: stat.modified,
       mode: stat.mode,
+      accessed: stat.accessed,
+      changed: stat.changed,
     );
   }
 

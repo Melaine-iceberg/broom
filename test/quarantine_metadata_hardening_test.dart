@@ -337,4 +337,30 @@ void main() {
     expect(sessions.single.id, report.sessionId);
     expect(sessions.any((session) => session.id == sessionId), isFalse);
   });
+
+  test('reads each cleaned file once', () async {
+    final path = '$sourceRoot\\cache.bin';
+    fs.seedFile(path, contents: 'hello');
+    final probes = <String>[];
+    fs.onOperation = (operation, target) async {
+      if (target.toLowerCase() != path.toLowerCase()) return;
+      probes.add(operation);
+    };
+
+    final report = await service.clean([
+      JunkItem(
+        ruleId: 'test.rule',
+        rootPath: sourceRoot,
+        path: path,
+        size: 5,
+        modified: DateTime.utc(2026, 10, 19),
+      ),
+    ]);
+
+    expect(report.movedCount, 1);
+    // Type, size and timestamps come from a single query. A separate `type`
+    // probe, or a stat inside the metadata layer, would show up here.
+    expect(probes.where((operation) => operation == 'stat'), hasLength(1));
+    expect(probes, isNot(contains('type')));
+  });
 }

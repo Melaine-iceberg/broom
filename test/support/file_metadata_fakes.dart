@@ -1,4 +1,5 @@
 import 'package:broom/core/clean/file_metadata.dart';
+import 'package:broom/core/platform/file_system.dart';
 
 class FakeFileMetadataAccess implements FileMetadataAccess {
   FakeFileMetadataAccess({this.metadata, this.readError, this.applyError});
@@ -10,7 +11,11 @@ class FakeFileMetadataAccess implements FileMetadataAccess {
   final List<({String path, FileMetadata metadata})> applies = [];
 
   @override
-  Future<FileMetadata?> read(String path, {required bool captureAcl}) async {
+  Future<FileMetadata?> read(
+    String path, {
+    required FsStat stat,
+    required bool captureAcl,
+  }) async {
     reads.add((path: path, captureAcl: captureAcl));
     if (readError != null) throw readError!;
     return metadata;

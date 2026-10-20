@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
+import '../platform/file_system.dart';
 import '../platform/windows_path.dart';
 import '../safety/path_guard.dart';
 
@@ -32,7 +33,17 @@ class FileMetadata {
 }
 
 abstract interface class FileMetadataAccess {
-  Future<FileMetadata?> read(String path, {required bool captureAcl});
+  /// Returns the values an undo needs that [stat] does not already carry.
+  ///
+  /// [stat] is the query the clean loop has already performed for the same
+  /// file, so implementations must not stat again: one file, one metadata
+  /// query. On Windows the only thing left to fetch is the DACL, and only when
+  /// a cross-volume copy will replace it.
+  Future<FileMetadata?> read(
+    String path, {
+    required FsStat stat,
+    required bool captureAcl,
+  });
 
   Future<void> apply(String path, FileMetadata metadata);
 }
@@ -50,9 +61,11 @@ class LocalFileMetadataAccess implements FileMetadataAccess {
   const LocalFileMetadataAccess();
 
   @override
-  Future<FileMetadata?> read(String path, {required bool captureAcl}) async {
-    final stat = await File(WindowsPath.forIo(path)).stat();
-    if (stat.type != FileSystemEntityType.file) return null;
+  Future<FileMetadata?> read(
+    String path, {
+    required FsStat stat,
+    required bool captureAcl,
+  }) async {
     return FileMetadata(
       created: stat.changed,
       modified: stat.modified,
@@ -80,10 +93,11 @@ class MethodChannelFileMetadataAccess implements FileMetadataAccess {
   static const channel = MethodChannel('broom/file_metadata');
 
   @override
-  Future<FileMetadata?> read(String path, {required bool captureAcl}) async {
-    final stat = await File(WindowsPath.forIo(path)).stat();
-    if (stat.type != FileSystemEntityType.file) return null;
-
+  Future<FileMetadata?> read(
+    String path, {
+    required FsStat stat,
+    required bool captureAcl,
+  }) async {
     String? acl;
     var aclUnavailable = false;
     if (captureAcl) {

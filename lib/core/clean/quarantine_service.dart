@@ -500,20 +500,10 @@ class QuarantineService {
           continue;
         }
 
-        FsEntityType type;
-        try {
-          type = await _files.type(item.path);
-        } on FileSystemException catch (error) {
-          recordAttemptError(item.path, error);
-          report(currentPath: item.path);
-          continue;
-        }
-        if (type != FsEntityType.file) {
-          recordSkip(item.path, '文件已不存在或不是普通文件');
-          report(currentPath: item.path);
-          continue;
-        }
-
+        // One metadata query per file: the stat below carries the type, the
+        // size and the timestamps, and `_captureMetadata` only adds what a
+        // stat cannot report (a cross-volume DACL). Probing type and size with
+        // separate calls cost two extra syscalls per file.
         int size;
         FileMetadata? metadata;
         try {
@@ -524,9 +514,13 @@ class QuarantineService {
             continue;
           }
           size = stat.size;
-          metadata = await _captureMetadata(item.path);
+          metadata = await _captureMetadata(item.path, stat);
         } on FileSystemException catch (error) {
-          recordAttemptError(item.path, error);
+          if (_isMissingError(error)) {
+            recordSkip(item.path, '文件已不存在或不是普通文件');
+          } else {
+            recordAttemptError(item.path, error);
+          }
           report(currentPath: item.path);
           continue;
         }
@@ -1645,6 +1639,12 @@ class QuarantineService {
 
   static bool _isSkippableError(Object error) {
     if (isFileLockConflict(error)) return true;
+    return _isMissingError(error);
+  }
+
+  /// A path that vanished between preview and clean. Reported as a skip rather
+  /// than a failure: the user already got what they wanted for that entry.
+  static bool _isMissingError(Object error) {
     if (error is FileSystemException) {
       final code = error.osError?.errorCode;
       return code == 2 || code == 3;
@@ -1672,10 +1672,15 @@ class QuarantineService {
     }
   }
 
-  Future<FileMetadata?> _captureMetadata(String path) async {
+  /// Adds the undo values a [stat] cannot report, reusing that same query.
+  ///
+  /// Metadata is best effort: a failure here degrades the undo record (it
+  /// falls back to the scanned modification time) but must not stop the clean.
+  Future<FileMetadata?> _captureMetadata(String path, FsStat stat) async {
     try {
       return await _metadata.read(
         path,
+        stat: stat,
         captureAcl: shouldCaptureAcl(path, quarantineRoot),
       );
     } catch (_) {

@@ -138,6 +138,11 @@ class MemoryFileSystem implements BroomFileSystem, DetailedDirectoryListing {
       size: node.kind == FsEntityType.file ? node.size : 0,
       modified: node.modified,
       mode: node.readOnly ? 0x1 : 0,
+      // The in-memory backend models a single timestamp: creation and last
+      // access follow the modification time so the clean loop always has the
+      // restorable values it would get from a real stat.
+      accessed: node.modified,
+      changed: node.modified,
     );
   }
 

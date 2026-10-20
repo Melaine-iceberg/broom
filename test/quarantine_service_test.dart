@@ -8,6 +8,7 @@ import 'package:broom/core/clean/quarantine_session_schema.dart';
 import 'package:broom/core/models/clean_history_models.dart';
 import 'package:broom/core/models/clean_models.dart';
 import 'package:broom/core/models/scan_models.dart';
+import 'package:broom/core/platform/file_system.dart';
 import 'package:broom/core/safety/path_exclusions.dart';
 import 'package:broom/core/safety/path_guard.dart';
 import 'package:crypto/crypto.dart';
@@ -436,6 +437,27 @@ void main() {
       expect(await file.readAsString(), 'alpha');
     },
   );
+
+  test('derives undo metadata from the supplied stat', () async {
+    final file = await createFile('derived.txt', 'alpha');
+    final stat = await const IoFileSystem().stat(file.path);
+
+    final captured = await const MethodChannelFileMetadataAccess().read(
+      file.path,
+      stat: stat,
+      captureAcl: false,
+    );
+
+    // The metadata layer must not query the file again: every restorable value
+    // comes from the stat the clean loop already performed.
+    expect(captured, isNotNull);
+    expect(captured!.created, stat.changed);
+    expect(captured.modified, stat.modified);
+    expect(captured.accessed, stat.accessed);
+    expect(captured.readOnly, isFalse);
+    expect(captured.acl, isNull);
+    expect(captured.aclUnavailable, isFalse);
+  });
 
   test('reports metadata failures without failing the restore', () async {
     final file = await createFile('meta.txt', 'alpha');

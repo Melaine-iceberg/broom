@@ -270,6 +270,7 @@ integration_test/                  # 真实 Windows 窗口冒烟与预览帧率�
 benchmark/                         # 10 万 / 100 万文件扫描、RSS 与 isolate 传输基准
 .github/workflows/windows.yml      # Windows CI：格式、严格分析、测试、构建与产物上传
 docs/engineering.md                # 测试、可注入文件系统、并发、日志、基准与 CI 说明
+docs/perf-review.md                # 性能评审：实测基线、优化清单与落地状态
 docs/roadmap.md                    # 未实现目标与非目标
 docs/filesystem-validation.md      # 长路径 / UNC / FAT / 网络盘 / 只读介质验证说明
 ```
