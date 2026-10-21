@@ -75,7 +75,7 @@
 - [x] **空目录清理**：清理或续跑完成后删除规则根内因文件移出而变空的目录，撤销时重建。
       - 已实现：只处理仍然空且位于规则根内、并作为已移动文件祖先的目录；规则根本身、清理前已存在的空目录，以及仍含未选中、跳过或失败文件的目录都会保留。删除前把 `path` / `rootPath` 追加写入会话的 `removed_dirs.jsonl`，删除失败会回滚记录；清理被取消时不执行，留给续跑完成时处理。撤销时只重建仍与会话条目相关的记录，并再次校验路径守卫与排除列表；`UndoReport` 新增重建数量、失败数量与明细，完成页、撤销结果和隔离区提示会展示。目录重建失败不改变文件恢复状态。
 - [x] **规则审计机制**：每条规则需有评审说明、风险等级、反向证据和回归测试样例，避免新增规则时扩大删除面。
-      - 已实现：`CleanerRule` 与 `SystemCacheRule` 新增 `audit` 字段，包含中英双语评审说明、反向证据，以及带路径模板、命中预期与文件年龄的 `RuleAuditSample`。当前 43 条生产规则（40 条用户规则 + 3 条管理员规则）全部补齐；`test/rule_audit_test.dart` 强制规则编号唯一、审计字段完整、每个路径模板至少覆盖一个正例与一个反例，并用真实的 `WindowsRuleResolver` / `JunkScanner` 在临时文件树上验证样例的实际扫描结果。规则详情页新增“规则审计”对话框，展示风险等级、评审说明、反向证据与正反样例数量。
+      - 已实现：`CleanerRule` 与 `SystemCacheRule` 新增 `audit` 字段，包含中英双语评审说明、反向证据，以及带路径模板、命中预期与文件年龄的 `RuleAuditSample`。当前 47 条生产规则（44 条用户规则 + 3 条管理员规则）全部补齐；`test/rule_audit_test.dart` 强制规则编号唯一、审计字段完整、每个路径模板至少覆盖一个正例与一个反例，并用真实的 `WindowsRuleResolver` / `JunkScanner` 在临时文件树上验证样例的实际扫描结果。规则详情页新增“规则审计”对话框，展示风险等级、评审说明、反向证据与正反样例数量。
 
 ## 2. 清理能力与规则（P1）
 
@@ -98,6 +98,7 @@
 - [x] **应用缓存**：已新增 Teams、Slack、Discord、Spotify、VS Code 规则，仅覆盖明确的缓存子目录；进程占用由既有锁探测处理。
 - [x] **开发缓存扩展**：已新增 Yarn、pnpm、Bun、Composer、Cargo registry、Go、NuGet、Maven、JetBrains 规则；Cargo / Go / NuGet / Maven / JetBrains 为 Review 级。Docker 仅处理 Windows 侧日志，WSL 仅处理崩溃转储；镜像、容器、发行版文件系统与虚拟磁盘不直接删除。
       - 第二批（包管理器与工具链下载缓存）：新增 Electron / electron-builder、Scoop、uv、Poetry、node-gyp、vcpkg、Deno、Corepack 八条 Safe 规则，以及 Playwright 浏览器缓存的 Review 规则。规则根一律精确到缓存子目录，避开与缓存同级的安装与可运行内容：`uv\python`、`uv\tools`、`pypoetry\virtualenvs`、`vcpkg\installed`、`scoop\apps` 与 `scoop\persist` 均不在扫描范围内。Playwright 因重新下载体积大且会中断端到端测试，保持 Review 级、默认不勾选。各条目的路径已按官方安装器与本机实际目录核对，Electron（151 MB）与 Playwright（718 MB / 606 个文件）在本机完成只读扫描验证。
+      - 第三批（Review 级大件缓存）：新增 Hugging Face（`hub` / `xet`）、conda（`pkgs`）、Coursier（`cache`）与 Kotlin/Native（`.konan\dependencies`）四条 Review 规则。同样只指向缓存子目录，并避开同目录中的凭据与可运行内容：`.cache\huggingface\token` 登录凭据、`.conda\environments.txt` 环境清单与 `Coursier\data` 配置凭据都不在范围内。Kotlin/Native 的 `kotlin-native-prebuilt-*` 编译器分发未纳入清理，因为末段通配符会同时匹配同级的相似目录，无法用审计样例稳定排除。四条均默认不勾选，需要用户显式选择并二次确认。
 - [x] **浏览器扩展缓存**：已新增 Chromium `ScriptCache` 规则，只清理可重建的脚本缓存；扩展程序、状态、设置与存储数据不在范围内。
 - [ ] **浏览器扩展旧版本目录**：仍需要按浏览器版本验证旧扩展目录结构，暂不删除。
 - [x] **系统级缓存（管理员模式）**：已提供独立提权流程、固定规则集、默认不勾选、逐文件校验与单独确认；不把提权作为“清理更多”的默认路径。现已扩展 Windows.old。

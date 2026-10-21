@@ -1710,6 +1710,166 @@ final windowsReviewRules = <CleanerRule>[
       patterns: [r'%LOCALAPPDATA%\ms-playwright'],
     ),
   ),
+  CleanerRule(
+    id: 'dev.huggingface',
+    title: 'Hugging Face 模型缓存',
+    titleEn: 'Hugging Face model cache',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    description:
+        'Hugging Face Hub 下载的模型、数据集与 Xet 传输缓存；'
+        '清理后再次加载模型需要重新下载，体积可能达到数十 GB。',
+    descriptionEn:
+        'Models, datasets, and Xet transfer caches downloaded from Hugging '
+        'Face Hub. Loading a model again downloads it once more and can reach '
+        'tens of GB.',
+    risk: CleanRisk.review,
+    pathPatterns: [
+      r'%USERPROFILE%\.cache\huggingface\hub',
+      r'%USERPROFILE%\.cache\huggingface\xet',
+    ],
+    note:
+        'Review：模型与数据集通常很大，重新下载耗时且依赖网络；'
+        '登录凭据（.cache\\huggingface\\token）与项目代码不受影响。'
+        '自定义 HF_HOME 不在 Broom 范围内。',
+    noteEn:
+        'Review: models and datasets are usually large, so re-downloading is '
+        'slow and network-bound. The sign-in token '
+        '(.cache\\huggingface\\token) and project code are unaffected. A custom '
+        'HF_HOME is outside Broom.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 .cache\\huggingface 下的 hub 与 xet 缓存；token 登录凭据、'
+          'assets 目录与自定义 HF_HOME 不在范围内。',
+      reviewNotesEn:
+          'Covers only hub and xet under .cache\\huggingface. The token file, '
+          'the assets folder, and a custom HF_HOME are out of scope.',
+      reverseEvidence:
+          '.cache\\huggingface\\token 保存登录凭据，必须保留；assets 与相邻的'
+          ' hubExtra、xetExtra 目录不会被命中。',
+      reverseEvidenceEn:
+          '.cache\\huggingface\\token holds the sign-in credential and must be '
+          'kept. assets and the adjacent hubExtra / xetExtra folders do not '
+          'match.',
+      patterns: [
+        r'%USERPROFILE%\.cache\huggingface\hub',
+        r'%USERPROFILE%\.cache\huggingface\xet',
+      ],
+    ),
+  ),
+  CleanerRule(
+    id: 'dev.conda',
+    title: 'conda 包缓存',
+    titleEn: 'conda package cache',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    description: 'conda 下载与解压的包缓存（pkgs）；清理后安装或更新环境需要重新下载。',
+    descriptionEn:
+        'Package cache downloaded and extracted by conda (pkgs). Installing or '
+        'updating environments downloads packages again.',
+    risk: CleanRisk.review,
+    pathPatterns: [r'%USERPROFILE%\.conda\pkgs'],
+    note:
+        'Review：环境通过硬链接引用缓存文件，删除后环境仍可运行；'
+        '可用 conda clean --packages 达到同样效果。'
+        '.conda\\environments.txt 与环境目录不受影响。',
+    noteEn:
+        'Review: environments reference cached files through hard links, so '
+        'they keep working after cleaning. conda clean --packages achieves the '
+        'same result. .conda\\environments.txt and environment folders are '
+        'unaffected.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 ~/.conda/pkgs；.conda\\environments.txt 中的环境清单、'
+          'envs 目录与 conda 安装目录不在范围内。',
+      reviewNotesEn:
+          'Covers only ~/.conda/pkgs. The environment list in '
+          '.conda\\environments.txt, envs folders, and the conda installation '
+          'are out of scope.',
+      reverseEvidence:
+          '.conda\\environments.txt 记录已创建的环境，必须保留；'
+          '相邻的 pkgsExtra 目录不会被命中。',
+      reverseEvidenceEn:
+          '.conda\\environments.txt records created environments and must be '
+          'kept. The adjacent pkgsExtra folder does not match.',
+      patterns: [r'%USERPROFILE%\.conda\pkgs'],
+    ),
+  ),
+  CleanerRule(
+    id: 'dev.coursier',
+    title: 'Coursier 缓存',
+    titleEn: 'Coursier cache',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    description:
+        'Coursier 下载的 JVM 依赖与元数据缓存；'
+        '清理后下次构建或启动 Scala / JVM 工具需要重新下载。',
+    descriptionEn:
+        'JVM dependency and metadata caches downloaded by Coursier. The next '
+        'build or Scala / JVM tool start downloads them again.',
+    risk: CleanRisk.review,
+    pathPatterns: [r'%LOCALAPPDATA%\Coursier\cache'],
+    note: 'Review：依赖体积可能较大；Coursier 配置与凭据（Coursier\\data）不在清理范围。',
+    noteEn:
+        'Review: dependencies can be large. Coursier configuration and '
+        'credentials (Coursier\\data) are out of scope.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 Coursier\\cache；Coursier\\data 中的配置与凭据、'
+          '项目构建产物与 sbt / Mill / Gradle 缓存不在范围内。',
+      reviewNotesEn:
+          'Covers only Coursier\\cache. Configuration and credentials under '
+          'Coursier\\data, project build output, and sbt / Mill / Gradle caches '
+          'are out of scope.',
+      reverseEvidence:
+          'Coursier\\data 保存配置与凭据，必须保留；相邻的 cacheExtra 目录'
+          '不会被命中。',
+      reverseEvidenceEn:
+          'Coursier\\data holds configuration and credentials and must be kept. '
+          'The adjacent cacheExtra folder does not match.',
+      patterns: [r'%LOCALAPPDATA%\Coursier\cache'],
+    ),
+  ),
+  CleanerRule(
+    id: 'dev.konan',
+    title: 'Kotlin/Native 工具链缓存',
+    titleEn: 'Kotlin/Native toolchain cache',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    description:
+        'Kotlin/Native 为编译原生目标下载的 LLVM 等工具链依赖；'
+        '清理后编译原生目标需要重新下载。',
+    descriptionEn:
+        'LLVM and other toolchain dependencies downloaded by Kotlin/Native to '
+        'build native targets. The next native build downloads them again.',
+    risk: CleanRisk.review,
+    pathPatterns: [r'%USERPROFILE%\.konan\dependencies'],
+    note:
+        'Review：重新下载通常 1 GB 量级；项目代码、Gradle 缓存与已编译产物'
+        '不受影响。预编译编译器分发目录不在清理范围。',
+    noteEn:
+        'Review: re-downloading is usually around 1 GB. Project code, Gradle '
+        'caches, and compiled output are unaffected. Prebuilt compiler '
+        'distribution folders are out of scope.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 .konan\\dependencies 中下载的工具链依赖；'
+          'kotlin-native-prebuilt-* 分发、.konan 下的其他文件、项目代码与 '
+          'Gradle 缓存不在范围内。',
+      reviewNotesEn:
+          'Covers only the toolchain dependencies under .konan\\dependencies. '
+          'kotlin-native-prebuilt-* distributions, other files under .konan, '
+          'project code, and Gradle caches are out of scope.',
+      reverseEvidence:
+          'kotlin-native-prebuilt-* 目录保存编译器分发，不纳入清理；'
+          '相邻的 dependenciesExtra 目录不会被命中。',
+      reverseEvidenceEn:
+          'kotlin-native-prebuilt-* folders hold the compiler distribution and '
+          'are not cleaned. The adjacent dependenciesExtra folder does not '
+          'match.',
+      patterns: [r'%USERPROFILE%\.konan\dependencies'],
+    ),
+  ),
 ];
 
 final windowsCleanupRules = <CleanerRule>[
