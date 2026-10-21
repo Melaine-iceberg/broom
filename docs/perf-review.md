@@ -421,9 +421,30 @@ flutter test benchmark/scan_restore_benchmark_test.dart
 
 原生侧 `listDirectory` 每次只接受一个路径（`windows/runner/directory_enum_channel.cpp:132`）。本机 `%TEMP%` 单目录均摊 340 µs，其中通道往返占几十微秒量级，比例有限，因此优先级低于前几项。若要进一步压缩，可让原生侧接受路径数组，或提供"递归枚举 + 批量回调"。
 
-### P2-10 系统缓存清理器的 type + length 双查询（待实施）
+### P2-10 系统缓存清理器的 type + length 双查询（已实施，采用并发查询）
 
-`lib/core/clean/system_cache_cleaner.dart:144-173` 先 `FileSystemEntity.type()` 再 `File.length()`，可合并为一次 `FileStat.stat()`（112 µs vs 155 µs）。唯一的顾虑是 `FileStat.stat` 无法区分符号链接，而现有代码显式跳过链接；直接替换会改变链接语义，因此需要先确认 `stat` 的链接行为再做，暂不纳入本轮。
+**现象**：`lib/core/clean/system_cache_cleaner.dart` 先 `FileSystemEntity.type(path, followLinks: false)` 再 `File.length()`，每个文件两次串行的元数据查询。原设想是合并为一次 `FileStat.stat()`（约 112 µs vs 155 µs），但它必须先确认链接语义。
+
+**核查**：`FileStat.stat` 会解析符号链接。`dart:io` 文档明确写明这一点，本机实测也一致：文件符号链接返回目标文件的 `type=file`、`size=123`，断链返回 `notFound`。因此直接替换会失去"跳过链接与 junction"的检查，并把目标文件大小计入已释放字节，语义不可接受。
+
+**改法**：保留 `type(followLinks: false)` 作为链接判定，同时启动 `File.length()`，让两次元数据查询重叠而不是串行等待。长度结果仍然只用于确认是普通文件之后的删除计数，错误分类与跳过文案不变；如果条目最终是链接或目录，长度查询的结果会被丢弃。
+
+**收益（`dart run benchmark/system_cache_metadata_benchmark.dart`，500 个真实文件，5 轮中位数，3 次运行）**：
+
+| 查询方式 | 耗时 |
+| --- | ---: |
+| 串行 `type` + `length`（旧） | 112.1–130.5 µs/文件 |
+| 并发 `type` + `length`（新） | 82.1–104.5 µs/文件 |
+| `FileStat.stat`（参考，会解析链接） | 70.7–108.8 µs/文件 |
+| 仅 `type`（参考） | 55.0–57.0 µs/文件 |
+
+即每文件省 26–42 µs，与原先估算的 43 µs 同一量级，同时保留链接语义。该清理器只处理系统缓存这一局部流程，收益随条目数线性增长。
+
+**风险**：低。
+
+- 链接与 junction 仍按 `type(followLinks: false)` 跳过，目标文件不会被删除；新增"删除时重新读取体积"用例，确认报告不用扫描时的旧尺寸。
+- 若条目是链接，长度查询可能在类型判定前已发出；它只读取目标元数据且结果被丢弃，不影响删除决策。
+- 回归：`test/system_cache_cleaner_test.dart` 既有的链接跳过用例与新尺寸用例通过；`flutter analyze --fatal-infos` 无问题。
 
 ### P2-11 规则详情页每次打开都重新扫描扩展名（已实施）
 
@@ -466,7 +487,8 @@ flutter test benchmark/scan_restore_benchmark_test.dart
 6. **P0-2**（已实施）：索引路径复用目录遍历的 8 路 stat 流水线；2 万真实文件两次实测 8 路为串行的 2.54× / 2.64×，10 万候选约省 8–9 s。
 7. **P2-8**（已实施）：写侧编码进 writer isolate，读侧解析、过滤、分组排序进 `Isolate.run`；1M 条总恢复时长持平，UI isolate 的连续解析归零，收尾停顿从 0.83 s 降到 0.40–0.65 s。
 8. **P2-11**（已实施）：扩展名集合改在扫描/恢复的既有循环里维护，页面直接读取；10 万条页面打开从 37 ms 降为 0，100 万条省下每次约 0.4 s 的重复遍历。
-9. **P2-9 / P2-10**：需要原生侧改动或只影响系统缓存清理，按实测收益排期。
+9. **P2-10**（已实施）：保留 no-follow 类型检查，把体积查询与它并发执行；每文件省 26–42 µs，链接语义不变。
+10. **P2-9**：需要原生侧批量枚举接口，当前不排期。
 
 ## 变更记录
 
@@ -480,6 +502,7 @@ flutter test benchmark/scan_restore_benchmark_test.dart
 - **P0-2 已落地**：索引枚举按 512 条攒批交给 `processFiles` 的 8 路 stat 流水线，删除逐条 `processCandidate` 与 `_LimitReached`；根包含、排除、扩展名与年龄过滤、去重、上限与索引失败回退语义不变。新增 `benchmark/ntfs_index_benchmark_test.dart`（2 万真实文件，1 / 2 / 4 / 8 路交错 3 轮）与 `test/junk_scanner_ntfs_pipeline_test.dart`（5 项）。两次运行的 8 路分别为 2.54× 与 2.64×（2 路两次都是 2.01×）；全量 418 项测试与 `flutter analyze --fatal-infos` 通过。
 - **P2-8 已落地**：新增 `ScanWriterIsolate`，每个 writer 的 isolate 自己编码并写 `items.jsonl`；`ScanResultStore.load` 改为 `Isolate.run` 内解析、按允许规则过滤、分组与排序，`CleanController` 直接消费分组并删除 `_groupResults`。改造后 10 万 / 100 万条：`load` 583–638 / 5,656–5,749 ms，完整 restore 585–611 / 6,148–6,445 ms，主线程收尾 ≤2 ms / 0.40–0.65 s；总时长与改造前持平。新增分组/过滤用例，全量 419 项测试与 `flutter analyze --fatal-infos` 通过。
 - **P2-11 已落地**：`extensionOfPath` 下沉到 core；扫描时 `CleanController` 在接入批次时按规则维护扩展名集合，恢复时 `ScanResultStore` 在 worker 分组阶段顺带收集，`RuleResult.extensions` 直接供规则详情页筛选菜单使用。10 万条同轮 A/B：旧页面打开 `availableExtensions` 36.2–38.5 ms → 新读取 0 ms，增量维护一次性成本 19.7–22.4 ms。新增/更新扩展名语义、worker 收集与扫描/恢复用例。
+- **P2-10 已落地**：核查确认 `FileStat.stat` 会解析符号链接（文档与本机符号链接实测一致），不能直接替代 no-follow 类型检查；改为并发启动 `type(followLinks: false)` 与 `File.length()`，保留链接跳过与删除时重读体积的语义。500 个真实文件实测每文件 112.1–130.5 → 82.1–104.5 µs（省 26–42 µs）；新增 `benchmark/system_cache_metadata_benchmark.dart` 与"删除时尺寸"用例，既有链接用例继续通过。
 - 记录一处方向性修正：装饰-排序并非对所有排序都更快。数值键本来就在条目上，装饰只是多出 O(N) 次分配，`sizeDesc` 实测因此从 46.4 涨到 63.5 ms。收益成立的区间是"派生键比分配贵得多"（`pathAsc`、`extensionAsc`）与"键大量并列"（惰性缓存生效）。全量 403 项测试与 `flutter analyze --fatal-infos` 通过。
 - 评审过程中修正了一个判断：最初按单价推算认为"清理时间几乎全花在重复元数据查询上"，端到端 A/B 证明元数据只占约 12%，rename 与文件读取才是主体。文档中的收益数字以实测为准，未采用推算值。
 - 另一处修正：P0-1 时的单步归因把约 1,000 µs 记为"其余未归因"，其中相当一部分并非散落在循环里，而是两项此前没被列入分解的操作——`finalize` 阶段的逐条 `type()` 与清理计划文件的逐条写入。这说明"按已知项求和再取差额"容易把整类操作漏在统计口径之外，凡涉及归因应以"每一次调用都有账"的方式重做。

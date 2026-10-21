@@ -178,6 +178,28 @@ void main() {
     expect(await file.exists(), isTrue);
   });
 
+  test(
+    'reports the size observed at deletion time, not the scan size',
+    () async {
+      final file = await createFile(root, 'grown.cab');
+      final item = await itemFor(file);
+      const grown = 'a longer payload than before';
+      await file.writeAsString(grown);
+
+      final report = await cleaner.clean(
+        items: [item],
+        roots: roots,
+        rootsByRule: {
+          'windows.update_cache': [root.path],
+        },
+        serviceNames: const [],
+      );
+
+      expect(report.deletedCount, 1);
+      expect(report.deletedBytes, grown.length);
+    },
+  );
+
   test('reports files that already disappeared', () async {
     final missing = File(p.join(root.path, 'missing.cab'));
     final report = await cleaner.clean(

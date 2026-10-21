@@ -147,12 +147,16 @@ class FileSystemCacheCleaner implements SystemCacheCleaner {
           continue;
         }
 
+        final ioPath = WindowsPath.forIo(item.path);
+        // `FileStat.stat` folds type and size into one call, but it resolves
+        // links before reporting the type, so it cannot feed the link skip.
+        // Keep the no-follow type check and overlap the length query with it.
+        final typeFuture = FileSystemEntity.type(ioPath, followLinks: false);
+        final lengthFuture = _tryFileLength(ioPath);
+
         final FileSystemEntityType type;
         try {
-          type = await FileSystemEntity.type(
-            WindowsPath.forIo(item.path),
-            followLinks: false,
-          );
+          type = await typeFuture;
         } on FileSystemException catch (error) {
           recordAttemptError(item.path, error);
           report(currentPath: item.path);
@@ -169,17 +173,16 @@ class FileSystemCacheCleaner implements SystemCacheCleaner {
           continue;
         }
 
-        int size;
-        try {
-          size = await File(WindowsPath.forIo(item.path)).length();
-        } on FileSystemException catch (error) {
+        final length = await lengthFuture;
+        if (length.error case final error?) {
           recordAttemptError(item.path, error);
           report(currentPath: item.path);
           continue;
         }
+        final size = length.size!;
 
         try {
-          await File(WindowsPath.forIo(item.path)).delete();
+          await File(ioPath).delete();
         } on FileSystemException catch (error) {
           recordAttemptError(item.path, error);
           report(currentPath: item.path);
@@ -203,6 +206,19 @@ class FileSystemCacheCleaner implements SystemCacheCleaner {
     }
 
     return buildReport();
+  }
+
+  /// Starts the size query for a path that may turn out to be a link or a
+  /// directory. Errors are returned instead of thrown so a skipped entry never
+  /// leaves an unhandled future behind.
+  static Future<({int? size, FileSystemException? error})> _tryFileLength(
+    String path,
+  ) async {
+    try {
+      return (size: await File(path).length(), error: null);
+    } on FileSystemException catch (error) {
+      return (size: null, error: error);
+    }
   }
 
   static String? _pathFailure(
