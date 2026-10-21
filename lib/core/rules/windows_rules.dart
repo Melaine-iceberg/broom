@@ -1262,6 +1262,255 @@ final windowsSafeRules = <CleanerRule>[
       ],
     ),
   ),
+  CleanerRule(
+    id: 'dev.electron',
+    title: 'Electron 下载缓存',
+    titleEn: 'Electron download cache',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    description:
+        'Electron 与 electron-builder 在打包时下载的运行时二进制与构建工具缓存；'
+        '清理后下次打包会重新下载。',
+    descriptionEn:
+        'Electron runtime binaries and build tooling downloaded while '
+        'packaging with Electron or electron-builder. They are downloaded again '
+        'on the next build.',
+    pathPatterns: [
+      r'%LOCALAPPDATA%\electron\Cache',
+      r'%LOCALAPPDATA%\electron-builder\Cache',
+    ],
+    note: '项目中的 node_modules 与打包产物不受影响。',
+    noteEn: 'Project node_modules and packaged output are unaffected.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 electron 与 electron-builder 下的 Cache 目录；'
+          '同级的 dist、项目 node_modules 与打包产物不在范围内。',
+      reviewNotesEn:
+          'Covers only the Cache folders under electron and electron-builder. '
+          'Sibling dist folders, project node_modules, and packaged output are '
+          'out of scope.',
+      reverseEvidence: 'electron\\dist、electron\\CacheExtra 与 electron-builder\\CacheExtra 不会被命中。',
+      reverseEvidenceEn:
+          'electron\\dist, electron\\CacheExtra, and electron-builder\\CacheExtra '
+          'do not match.',
+      patterns: [
+        r'%LOCALAPPDATA%\electron\Cache',
+        r'%LOCALAPPDATA%\electron-builder\Cache',
+      ],
+    ),
+  ),
+  CleanerRule(
+    id: 'dev.scoop',
+    title: 'Scoop 安装包缓存',
+    titleEn: 'Scoop package cache',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    description: 'Scoop 下载的安装包缓存；清理后重新安装应用时需要重新下载。',
+    descriptionEn:
+        'Installer packages downloaded by Scoop. Reinstalling an application '
+        'downloads the package again.',
+    pathPatterns: [r'%USERPROFILE%\scoop\cache'],
+    note: '已安装的应用、persist 数据与 scoop\\apps 不受影响。',
+    noteEn:
+        'Installed applications, persist data, and scoop\\apps are unaffected.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 scoop\\cache 中的安装包；scoop\\apps、scoop\\persist 与 '
+          'scoop\\buckets 不在范围内。',
+      reviewNotesEn:
+          'Covers only installer packages in scoop\\cache. scoop\\apps, '
+          'scoop\\persist, and scoop\\buckets are out of scope.',
+      reverseEvidence:
+          'scoop\\apps 中的已安装程序、scoop\\persist 中的用户数据与相邻的 '
+          'cacheExtra 目录都不会被命中。',
+      reverseEvidenceEn:
+          'Programs in scoop\\apps, user data in scoop\\persist, and the '
+          'adjacent cacheExtra folder do not match.',
+      patterns: [r'%USERPROFILE%\scoop\cache'],
+    ),
+  ),
+  CleanerRule(
+    id: 'dev.uv',
+    title: 'uv 缓存',
+    titleEn: 'uv cache',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    description: 'uv 的包下载与解压缓存；清理后下次同步依赖需要重新下载。',
+    descriptionEn:
+        'Package download and extraction cache used by uv. Dependencies are '
+        'downloaded again on the next sync.',
+    pathPatterns: [r'%LOCALAPPDATA%\uv\cache'],
+    note: 'uv 管理的 Python 解释器（uv\\python）与工具环境（uv\\tools）不受影响。',
+    noteEn:
+        'Python interpreters managed by uv (uv\\python) and tool environments '
+        '(uv\\tools) are unaffected.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 uv\\cache；uv\\python 中由 uv 管理的解释器、uv\\tools 中的'
+          '工具环境与项目虚拟环境不在范围内。',
+      reviewNotesEn:
+          'Covers only uv\\cache. Interpreters managed under uv\\python, tool '
+          'environments under uv\\tools, and project virtual environments are '
+          'out of scope.',
+      reverseEvidence:
+          'uv\\python 与 uv\\tools 是安装而非缓存，必须保留；相邻的 '
+          'cacheExtra 目录不会被命中。',
+      reverseEvidenceEn:
+          'uv\\python and uv\\tools are installations rather than caches and '
+          'must be kept. The adjacent cacheExtra folder does not match.',
+      patterns: [r'%LOCALAPPDATA%\uv\cache'],
+    ),
+  ),
+  CleanerRule(
+    id: 'dev.poetry',
+    title: 'Poetry 缓存',
+    titleEn: 'Poetry cache',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    description: 'Poetry 的包下载与元数据缓存；清理后下次安装依赖需要重新下载。',
+    descriptionEn:
+        'Poetry package download and metadata caches. Dependencies are '
+        'downloaded again on the next install.',
+    pathPatterns: [r'%LOCALAPPDATA%\pypoetry\Cache'],
+    note: 'Poetry 创建的虚拟环境（pypoetry\\virtualenvs）不受影响。',
+    noteEn: 'Virtual environments created by Poetry (pypoetry\\virtualenvs) are unaffected.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 pypoetry\\Cache；pypoetry\\virtualenvs 中的虚拟环境与 '
+          'Poetry 配置不在范围内。',
+      reviewNotesEn:
+          'Covers only pypoetry\\Cache. Virtual environments under '
+          'pypoetry\\virtualenvs and Poetry configuration are out of scope.',
+      reverseEvidence:
+          'pypoetry\\virtualenvs 保存的是可运行环境而非缓存，必须保留；'
+          '相邻的 CacheExtra 目录不会被命中。',
+      reverseEvidenceEn:
+          'pypoetry\\virtualenvs holds runnable environments rather than '
+          'caches and must be kept. The adjacent CacheExtra folder does not '
+          'match.',
+      patterns: [r'%LOCALAPPDATA%\pypoetry\Cache'],
+    ),
+  ),
+  CleanerRule(
+    id: 'dev.node_gyp',
+    title: 'node-gyp 头文件缓存',
+    titleEn: 'node-gyp header cache',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    description: 'node-gyp 下载的 Node 头文件与库缓存；清理后编译原生模块时会重新下载。',
+    descriptionEn:
+        'Node headers and libraries downloaded by node-gyp. Building native '
+        'modules downloads them again.',
+    pathPatterns: [r'%LOCALAPPDATA%\node-gyp\Cache'],
+    note: '已构建的原生模块与项目中的 build 目录不受影响。',
+    noteEn: 'Built native modules and project build folders are unaffected.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 node-gyp\\Cache 中的头文件与库归档；项目 build 目录与已编译的 '
+          '.node 文件不在范围内。',
+      reviewNotesEn:
+          'Covers only header and library archives in node-gyp\\Cache. Project '
+          'build folders and compiled .node files are out of scope.',
+      reverseEvidence: 'node-gyp\\CacheExtra 与项目中的 build 目录不会被命中。',
+      reverseEvidenceEn:
+          'node-gyp\\CacheExtra and project build folders do not match.',
+      patterns: [r'%LOCALAPPDATA%\node-gyp\Cache'],
+    ),
+  ),
+  CleanerRule(
+    id: 'dev.vcpkg',
+    title: 'vcpkg 缓存',
+    titleEn: 'vcpkg cache',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    description: 'vcpkg 的二进制缓存与源码下载缓存；清理后下次安装依赖需要重新编译或下载。',
+    descriptionEn:
+        'vcpkg binary and source download caches. Dependencies are rebuilt or '
+        'downloaded again on the next install.',
+    pathPatterns: [
+      r'%LOCALAPPDATA%\vcpkg\archives',
+      r'%LOCALAPPDATA%\vcpkg\downloads',
+    ],
+    note: 'vcpkg\\installed 中已构建的库、triplet 与项目清单不受影响。',
+    noteEn:
+        'Built libraries under vcpkg\\installed, triplets, and project manifests '
+        'are unaffected.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 vcpkg 的 archives 与 downloads 缓存；vcpkg\\installed、'
+          'vcpkg\\buildtrees 与 vcpkg\\ports 不在范围内。',
+      reviewNotesEn:
+          'Covers only the archives and downloads caches. vcpkg\\installed, '
+          'vcpkg\\buildtrees, and vcpkg\\ports are out of scope.',
+      reverseEvidence:
+          'vcpkg\\installed 中的已构建库与 vcpkg\\ports 中的端口定义必须保留；'
+          '相邻的 archivesExtra 目录不会被命中。',
+      reverseEvidenceEn:
+          'Built libraries in vcpkg\\installed and port definitions in '
+          'vcpkg\\ports must be kept. The adjacent archivesExtra folder does '
+          'not match.',
+      patterns: [
+        r'%LOCALAPPDATA%\vcpkg\archives',
+        r'%LOCALAPPDATA%\vcpkg\downloads',
+      ],
+    ),
+  ),
+  CleanerRule(
+    id: 'dev.deno',
+    title: 'Deno 缓存',
+    titleEn: 'Deno cache',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    description: 'Deno 的远程依赖与编译缓存（DENO_DIR）；清理后下次运行会重新下载与编译。',
+    descriptionEn:
+        'Deno remote dependency and compilation caches (DENO_DIR). They are '
+        'downloaded and compiled again on the next run.',
+    pathPatterns: [r'%LOCALAPPDATA%\deno\cache', r'%LOCALAPPDATA%\deno\gen'],
+    note: 'DENO_DIR 位于其他位置时不在 Broom 范围内；Deno 可执行文件不受影响。',
+    noteEn:
+        'A DENO_DIR pointing elsewhere is outside Broom. The Deno executable is '
+        'unaffected.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖默认 DENO_DIR（%LOCALAPPDATA%\\deno）下的 cache 与 gen；'
+          'registries 元数据与自定义 DENO_DIR 不在范围内。',
+      reviewNotesEn:
+          'Covers only cache and gen under the default DENO_DIR '
+          '(%LOCALAPPDATA%\\deno). Registry metadata and a custom DENO_DIR are '
+          'out of scope.',
+      reverseEvidence: 'deno\\registries 与相邻的 cacheExtra 目录不会被命中。',
+      reverseEvidenceEn:
+          'deno\\registries and the adjacent cacheExtra folder do not match.',
+      patterns: [r'%LOCALAPPDATA%\deno\cache', r'%LOCALAPPDATA%\deno\gen'],
+    ),
+  ),
+  CleanerRule(
+    id: 'dev.corepack',
+    title: 'Corepack 缓存',
+    titleEn: 'Corepack cache',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    description: 'Corepack 下载的 pnpm / Yarn 分发包缓存；清理后下次使用会重新下载。',
+    descriptionEn:
+        'pnpm and Yarn distributions downloaded by Corepack. They are '
+        'downloaded again on the next use.',
+    pathPatterns: [r'%LOCALAPPDATA%\node\corepack'],
+    note: 'Node 本身、项目 lockfile 与已安装的依赖不受影响。',
+    noteEn: 'Node itself, project lockfiles, and installed dependencies are unaffected.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 node\\corepack 中 Corepack 下载的分发包；Node 安装目录、'
+          '全局 npm 目录与项目依赖不在范围内。',
+      reviewNotesEn:
+          'Covers only distributions downloaded by Corepack under '
+          'node\\corepack. The Node installation, global npm folder, and '
+          'project dependencies are out of scope.',
+      reverseEvidence: 'node\\corepackExtra 与其他 node 子目录不会被命中。',
+      reverseEvidenceEn:
+          'node\\corepackExtra and other node subfolders do not match.',
+      patterns: [r'%LOCALAPPDATA%\node\corepack'],
+    ),
+  ),
 ];
 
 final windowsReviewRules = <CleanerRule>[
@@ -1421,6 +1670,44 @@ final windowsReviewRules = <CleanerRule>[
           'plugins, log, and adjacent cachesExtra folders under the same '
           'product do not match.',
       patterns: [r'%LOCALAPPDATA%\JetBrains\*\caches'],
+    ),
+  ),
+  CleanerRule(
+    id: 'dev.playwright',
+    title: 'Playwright 浏览器缓存',
+    titleEn: 'Playwright browser cache',
+    category: '开发工具缓存',
+    categoryEn: 'Developer tool cache',
+    description:
+        'Playwright 下载的浏览器与驱动二进制；清理后需要重新运行 '
+        'playwright install 才能继续执行端到端测试。',
+    descriptionEn:
+        'Browser and driver binaries downloaded by Playwright. End-to-end '
+        'tests fail until playwright install runs again.',
+    risk: CleanRisk.review,
+    pathPatterns: [r'%LOCALAPPDATA%\ms-playwright'],
+    note:
+        'Review：单个浏览器通常数百 MB，重新下载耗时；项目代码、测试配置、'
+        'node_modules 与已安装的系统浏览器不受影响。',
+    noteEn:
+        'Review: a single browser is often hundreds of MB and slow to '
+        're-download. Project code, test configuration, node_modules, and '
+        'installed system browsers are unaffected.',
+    audit: _directoryAudit(
+      reviewNotes:
+          '仅覆盖 ms-playwright 中的浏览器与驱动二进制；项目代码、测试配置、'
+          'node_modules 与系统浏览器不在范围内。',
+      reviewNotesEn:
+          'Covers only browser and driver binaries under ms-playwright. '
+          'Project code, test configuration, node_modules, and system browsers '
+          'are out of scope.',
+      reverseEvidence:
+          '系统安装的 Chrome / Edge 位于 Program Files，不在本规则根下；'
+          '相邻的 ms-playwrightExtra 目录不会被命中。',
+      reverseEvidenceEn:
+          'System Chrome and Edge live under Program Files and are outside this '
+          'rule root. The adjacent ms-playwrightExtra folder does not match.',
+      patterns: [r'%LOCALAPPDATA%\ms-playwright'],
     ),
   ),
 ];
