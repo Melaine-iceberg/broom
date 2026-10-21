@@ -2,7 +2,7 @@
 
 基准直接驱动扫描引擎与 Flutter 桌面运行时，不使用真实缓存目录：文件树由 `benchmark/support/synthetic_tree_file_system.dart` 按需生成，因此结果可以重复，也不会把机器上的真实文件带入测试。
 
-例外是需要真实系统调用计时的两项。`benchmark/clean_attribution_test.dart` 的开销几乎全部来自真实的系统调用（rename、open、Defender 过滤驱动）；`benchmark/ntfs_index_benchmark_test.dart` 的每个索引候选都要 `stat`，同样只能用真实文件测。两者都在系统临时目录下自建文件并在结束后删除。
+例外是需要在真实文件上测量的三项：`benchmark/clean_attribution_test.dart` 的开销几乎全部来自真实的系统调用（rename、open、Defender 过滤驱动）；`benchmark/ntfs_index_benchmark_test.dart` 的每个索引候选都要 `stat`；`benchmark/scan_restore_benchmark_test.dart` 需要真实的 `items.jsonl`（1M 条约 231 MiB）。三者都在系统临时目录下自建文件并在结束后删除。
 
 `benchmark/ui_preview_benchmark.dart` 也是合成的：10 万条 `JunkItem` 在内存里生成，只测选择聚合与过滤/排序的 CPU 成本，不碰磁盘。
 
@@ -20,6 +20,9 @@ flutter test benchmark/clean_attribution_test.dart
 
 # NTFS 索引路径的 stat 流水线 A/B（真实临时文件，需要 Flutter）
 flutter test benchmark/ntfs_index_benchmark_test.dart
+
+# 恢复侧解析 A/B：主 isolate vs 后台 isolate 流式解析（10 万 / 100 万条）
+flutter test benchmark/scan_restore_benchmark_test.dart
 
 # UI 侧选择聚合与过滤/排序（纯 CPU，可指定条目数）
 dart run benchmark/ui_preview_benchmark.dart
@@ -92,6 +95,15 @@ NTFS 索引 stat 流水线（P0-2，2026-10-21，2 万个真实文件，交错 3
 | 8 | 1,080 ms | 54.0 | 2.54× |
 
 索引枚举本身是假的（原生 USN 不在测量范围内），但每个路径都指向真实文件，每次 `stat` 都是真实的 `FileStat.stat`。1 路到 2 路收益最大，4 路接近饱和，8 路只再快 1–3%，说明剩余瓶颈在 OS 侧元数据查询排队。同日复跑（另一批 2 万文件）的 8 路为 2.64×、2 路为 2.01×，排序一致。结论见 `docs/perf-review.md` 的 P0-2。
+
+恢复侧解析（P2-8 候选，2026-10-21，真实 `items.jsonl`，3 轮交错取中位数）：
+
+| 条数 | 文件 | 当前 `store.load` | isolate 流式解析 | 主 isolate 纯接收上界 |
+| ---: | ---: | ---: | ---: | ---: |
+| 100,000 | 23.0 MiB | 588 ms | 542 ms | 7 ms |
+| 1,000,000 | 230.6 MiB | 5,384 ms | 5,222 ms | 103 ms |
+
+当前路径的解析全部落在调用方（UI）isolate；后台 isolate 方案总耗时不变或略优，主 isolate 只剩批量接收。基准不含 `_groupResults`、默认选择与首帧构建。结论见 `docs/perf-review.md` 的 P2-8。
 
 ## 说明
 
