@@ -52,3 +52,13 @@ app.*.map.json
 
 # Local Qoder MCP configuration (machine-specific tool paths)
 /.qoder/settings.local.json
+
+# Packaging output and signing material (never commit private keys)
+/dist/
+*.pfx
+*.cer
+*.msix
+*.msixbundle
+
+# Signing material: private keys never leave the build machine
+/signing/
