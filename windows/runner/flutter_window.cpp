@@ -14,6 +14,7 @@
 #include "file_lock_channel.h"
 #include "file_metadata_channel.h"
 #include "flutter/generated_plugin_registrant.h"
+#include "installed_apps_channel.h"
 #include "ntfs_index_channel.h"
 #include "scan_priority_channel.h"
 #include "system_access_channel.h"
@@ -182,6 +183,8 @@ void FlutterWindow::SetUpWindowChannels() {
   directory_enum_channel_ =
       std::make_unique<DirectoryEnumChannel>(messenger, GetHandle());
   scan_priority_channel_ = std::make_unique<ScanPriorityChannel>(messenger);
+  installed_apps_channel_ =
+      std::make_unique<InstalledAppsChannel>(messenger);
 }
 
 void FlutterWindow::OnDestroy() {
@@ -209,6 +212,7 @@ void FlutterWindow::OnDestroy() {
   ntfs_index_channel_.reset();
   directory_enum_channel_.reset();
   scan_priority_channel_.reset();
+  installed_apps_channel_.reset();
 
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
