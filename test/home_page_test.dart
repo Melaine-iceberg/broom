@@ -173,6 +173,7 @@ class _ReportingQuarantineService extends FakeQuarantineService {
   @override
   Future<CleanReport> clean(
     List<JunkItem> items, {
+    required ScanRoots roots,
     void Function(CleanProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) async => report;
@@ -201,6 +202,7 @@ class _ProgressQuarantineService extends FakeQuarantineService {
   @override
   Future<CleanReport> clean(
     List<JunkItem> items, {
+    required ScanRoots roots,
     void Function(CleanProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) async {
@@ -522,11 +524,10 @@ void main() {
 
     const root = r'C:\broom_widget_test\cache';
     final item = JunkItem(
-      ruleId: 'test.cache',
-      rootPath: root,
+      rootIndex: 0,
       path: p.windows.join(root, 'locked.tmp'),
       size: 42,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     const rule = CleanerRule(
       id: 'test.cache',
@@ -585,11 +586,10 @@ void main() {
 
     const root = r'C:\broom_widget_test\review-cache';
     final item = JunkItem(
-      ruleId: 'test.review',
-      rootPath: root,
+      rootIndex: 0,
       path: p.windows.join(root, 'offline-cache.bin'),
       size: 128,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     const rule = CleanerRule(
       id: 'test.review',
@@ -650,11 +650,10 @@ void main() {
 
     const root = r'C:\broom_widget_test\cache';
     final item = JunkItem(
-      ruleId: 'test.cache',
-      rootPath: root,
+      rootIndex: 0,
       path: p.windows.join(root, 'nested', 'cache.tmp'),
       size: 42,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     const rule = CleanerRule(
       id: 'test.cache',
@@ -705,11 +704,10 @@ void main() {
 
     const root = r'C:\broom_widget_test\cache';
     final item = JunkItem(
-      ruleId: 'test.cache',
-      rootPath: root,
+      rootIndex: 0,
       path: p.windows.join(root, 'cache.tmp'),
       size: 4096,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     const rule = CleanerRule(
       id: 'test.cache',
@@ -898,18 +896,16 @@ void main() {
     const root = r'C:\broom_widget_test\cache';
     final items = [
       JunkItem(
-        ruleId: 'test.cache',
-        rootPath: root,
+        rootIndex: 0,
         path: p.windows.join(root, 'first.tmp'),
         size: 32,
-        modified: DateTime(2026, 10, 18),
+        modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
       ),
       JunkItem(
-        ruleId: 'test.cache',
-        rootPath: root,
+        rootIndex: 0,
         path: p.windows.join(root, 'second.tmp'),
         size: 32,
-        modified: DateTime(2026, 10, 18),
+        modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
       ),
     ];
     const rule = CleanerRule(

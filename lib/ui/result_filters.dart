@@ -102,7 +102,7 @@ List<JunkItem> filterResultItems(
 }) {
   final query = filter.query.trim().toLowerCase();
   final wantedExtension = filter.extension?.toLowerCase();
-  final clock = now ?? DateTime.now();
+  final clock = (now ?? DateTime.now()).microsecondsSinceEpoch;
   return [
     for (final item in items)
       if (_matchesQuery(item, query) &&
@@ -110,7 +110,8 @@ List<JunkItem> filterResultItems(
               extensionOfPath(item.path) == wantedExtension) &&
           item.size >= filter.minimumSize &&
           (filter.olderThan == null ||
-              clock.difference(item.modified) >= filter.olderThan!) &&
+              clock - item.modifiedMicros >=
+                  filter.olderThan!.inMicroseconds) &&
           (!filter.lockedOnly || item.possiblyLocked))
         item,
   ];
@@ -184,8 +185,12 @@ List<JunkItem> _sortByOrdinal(List<JunkItem> items, ResultItemSort sort) {
     final primary = switch (sort) {
       ResultItemSort.sizeDesc => b.size.compareTo(a.size),
       ResultItemSort.sizeAsc => a.size.compareTo(b.size),
-      ResultItemSort.modifiedDesc => b.modified.compareTo(a.modified),
-      ResultItemSort.modifiedAsc => a.modified.compareTo(b.modified),
+      ResultItemSort.modifiedDesc => b.modifiedMicros.compareTo(
+        a.modifiedMicros,
+      ),
+      ResultItemSort.modifiedAsc => a.modifiedMicros.compareTo(
+        b.modifiedMicros,
+      ),
       // The path orders are dispatched to _sortByPathKey before we get here.
       ResultItemSort.pathAsc || ResultItemSort.extensionAsc => 0,
     };

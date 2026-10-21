@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:broom/core/clean/quarantine_service.dart';
+import 'package:broom/core/models/clean_models.dart';
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/platform/file_system.dart';
 import 'package:broom/core/platform/memory_file_system.dart';
@@ -15,9 +16,23 @@ void main() {
   const quarantineRoot = r'C:\BroomTest\quarantine';
   const sourceRoot = r'C:\BroomTest\source';
   const storedPath = '$quarantineRoot\\$sessionId\\files\\000001_notes.txt';
+  const testRoots = ScanRoots([
+    ScanRoot(ruleId: 'test.rule', rootPath: sourceRoot),
+  ]);
 
   late MemoryFileSystem fs;
   late QuarantineService service;
+
+  Future<CleanReport> clean(
+    List<JunkItem> items, {
+    void Function(CleanProgress progress)? onProgress,
+    bool Function()? isCancelled,
+  }) => service.clean(
+    items,
+    roots: testRoots,
+    onProgress: onProgress,
+    isCancelled: isCancelled,
+  );
 
   String sessionPath([String child = '']) => child.isEmpty
       ? p.windows.join(quarantineRoot, sessionId)
@@ -319,15 +334,14 @@ void main() {
   test('keeps the quarantine service usable after refused metadata', () async {
     writeSession({'status': 'quantum'});
     final item = JunkItem(
-      ruleId: 'test.rule',
-      rootPath: sourceRoot,
+      rootIndex: 0,
       path: '$sourceRoot\\fresh.txt',
       size: 5,
-      modified: DateTime.utc(2026, 10, 19),
+      modifiedMicros: DateTime.utc(2026, 10, 19).microsecondsSinceEpoch,
     );
     fs.seedFile('$sourceRoot\\fresh.txt', contents: 'fresh');
 
-    final report = await service.clean([item]);
+    final report = await clean([item]);
     expect(report.sessionId, isNotNull);
     expect(report.movedCount, 1);
     expect(report.failureCount, 0);
@@ -347,13 +361,12 @@ void main() {
       probes.add(operation);
     };
 
-    final report = await service.clean([
+    final report = await clean([
       JunkItem(
-        ruleId: 'test.rule',
-        rootPath: sourceRoot,
+        rootIndex: 0,
         path: path,
         size: 5,
-        modified: DateTime.utc(2026, 10, 19),
+        modifiedMicros: DateTime.utc(2026, 10, 19).microsecondsSinceEpoch,
       ),
     ]);
 

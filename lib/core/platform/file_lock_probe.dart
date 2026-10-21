@@ -56,15 +56,16 @@ FileLockProbe createFileLockProbe() => Platform.isWindows
     ? const MethodChannelFileLockProbe()
     : const NoopFileLockProbe();
 
-/// Probes [paths] in batches and reports locked paths. Probe errors stop the
-/// run silently: the preview stays usable and cleanup still classifies every
-/// file. Returns the number of paths for which a result was received.
+/// Probes [paths] in batches and reports the indexes of locked paths.
+///
+/// Probe errors stop the run silently: the preview stays usable and cleanup
+/// still classifies every file. Returns the number of paths for which a result
+/// was received.
 Future<int> runLockProbe({
   required FileLockProbe probe,
   required List<String> paths,
   required bool Function() isActive,
-  required Future<void> Function(List<String> lockedPaths, int checked)?
-  onBatch,
+  required Future<void> Function(List<int> lockedIndexes, int checked)? onBatch,
   int batchSize = 512,
 }) async {
   assert(batchSize > 0);
@@ -80,9 +81,9 @@ Future<int> runLockProbe({
       return checked;
     }
     if (!isActive()) return checked;
-    final locked = <String>[
+    final locked = <int>[
       for (var index = 0; index < batch.length; index++)
-        if (results[index]) batch[index],
+        if (results[index]) start + index,
     ];
     checked = end;
     await onBatch?.call(locked, checked);

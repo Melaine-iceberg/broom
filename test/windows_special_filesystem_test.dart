@@ -102,7 +102,7 @@ Future<({String filePath, List<int> content})> _roundTrip({
     guard: PathGuard(protectedRoots: const []),
     metadataAccess: FakeFileMetadataAccess(),
   );
-  final report = await quarantine.clean([item]);
+  final report = await quarantine.clean([item], roots: scan.roots);
   expect(report.movedCount, 1, reason: '${report.failures}');
   expect(report.failureCount, 0, reason: '${report.failures}');
   expect(await File(WindowsPath.forIo(filePath)).exists(), isFalse);
@@ -150,15 +150,17 @@ void main() {
           metadataAccess: FakeFileMetadataAccess(),
         );
         final stat = await File(WindowsPath.forIo(filePath)).stat();
+        final roots = ScanRoots([
+          ScanRoot(ruleId: 'fs.test', rootPath: testRoot),
+        ]);
         final report = await quarantine.clean([
           JunkItem(
-            ruleId: 'test.long',
-            rootPath: testRoot,
+            rootIndex: 0,
             path: filePath,
             size: stat.size,
-            modified: stat.modified,
+            modifiedMicros: stat.modified.microsecondsSinceEpoch,
           ),
-        ]);
+        ], roots: roots);
         expect(report.movedCount, 1);
         expect(report.removedDirectoryCount, 3);
         expect(await Directory(WindowsPath.forIo(deepRoot)).exists(), isFalse);
@@ -289,15 +291,15 @@ void main() {
           guard: PathGuard(protectedRoots: const []),
           metadataAccess: FakeFileMetadataAccess(),
         );
+        final roots = ScanRoots([ScanRoot(ruleId: 'fs.test', rootPath: root)]);
         final report = await quarantine.clean([
           JunkItem(
-            ruleId: 'fs.readonly',
-            rootPath: root,
+            rootIndex: 0,
             path: filePath,
             size: stat.size,
-            modified: stat.modified,
+            modifiedMicros: stat.modified.microsecondsSinceEpoch,
           ),
-        ]);
+        ], roots: roots);
 
         expect(report.movedCount, 0);
         expect(report.failureCount, 1);
@@ -333,15 +335,17 @@ void main() {
           metadataAccess: FakeFileMetadataAccess(),
         );
         final stat = await sourceFile.stat();
+        final roots = ScanRoots([
+          ScanRoot(ruleId: 'fs.test', rootPath: sourceDir.path),
+        ]);
         final report = await quarantine.clean([
           JunkItem(
-            ruleId: 'fs.readonly',
-            rootPath: sourceDir.path,
+            rootIndex: 0,
             path: sourceFile.path,
             size: stat.size,
-            modified: stat.modified,
+            modifiedMicros: stat.modified.microsecondsSinceEpoch,
           ),
-        ]);
+        ], roots: roots);
         expect(report.movedCount, 1);
         final sessionId = report.sessionId!;
 

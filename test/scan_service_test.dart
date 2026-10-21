@@ -91,7 +91,7 @@ void main() {
     expect(result.items, hasLength(1));
     expect(result.items.single.path, file.path);
     expect(result.items.single.size, file.lengthSync());
-    expect(result.items.single.ruleId, 'test.rule');
+    expect(result.roots.at(result.items.single.rootIndex).ruleId, 'test.rule');
     expect(progress, isNotEmpty);
     expect(progress.last.jobCount, 1);
     expect(progress.last.foundFiles, 1);
@@ -149,10 +149,12 @@ void main() {
         .timeout(const Duration(seconds: 20));
 
     expect(result.items, hasLength(2));
-    expect(result.items.map((item) => item.ruleId).toSet(), {
-      'test.first',
-      'test.second',
-    });
+    expect(
+      result.items
+          .map((item) => result.roots.at(item.rootIndex).ruleId)
+          .toSet(),
+      {'test.first', 'test.second'},
+    );
   });
 
   test('deduplicates overlapping jobs across parallel workers', () async {

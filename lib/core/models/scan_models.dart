@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import '../platform/path_semantics.dart';
+
 class ScanJob {
   const ScanJob({
     required this.ruleId,
@@ -18,32 +20,68 @@ class ScanJob {
   final List<String> excludedRoots;
 }
 
-class JunkItem {
-  const JunkItem({
-    required this.ruleId,
-    required this.rootPath,
-    required this.path,
-    required this.size,
-    required this.modified,
-    this.possiblyLocked = false,
-  });
+class ScanRoot {
+  const ScanRoot({required this.ruleId, required this.rootPath});
 
   final String ruleId;
   final String rootPath;
+}
+
+/// Resolves the compact [JunkItem.rootIndex] back to the rule and root that
+/// produced the item.
+///
+/// Root indexes follow the flattened order of `jobs × roots` and are shared by
+/// the scanner, result persistence and the UI.
+class ScanRoots {
+  const ScanRoots(this.entries);
+
+  static const empty = ScanRoots([]);
+
+  final List<ScanRoot> entries;
+
+  factory ScanRoots.fromJobs(
+    List<ScanJob> jobs, {
+    PathSemantics semantics = const WindowsPathSemantics(),
+  }) => ScanRoots([
+    for (final job in jobs)
+      for (final root in job.roots)
+        ScanRoot(ruleId: job.ruleId, rootPath: semantics.canonical(root)),
+  ]);
+
+  int get length => entries.length;
+  bool get isEmpty => entries.isEmpty;
+  ScanRoot at(int index) => entries[index];
+}
+
+class JunkItem {
+  const JunkItem({
+    required this.rootIndex,
+    required this.path,
+    required this.size,
+    required this.modifiedMicros,
+    this.possiblyLocked = false,
+  });
+
+  /// Index into the scan's [ScanRoots] table.
+  final int rootIndex;
   final String path;
   final int size;
-  final DateTime modified;
+
+  /// Modification time in microseconds since the Unix epoch. Storing an int
+  /// avoids a per-item [DateTime] object on million-item scans.
+  final int modifiedMicros;
 
   /// Preview-only hint that another process may block moving this file.
   /// Cleanup re-checks and reports the actual outcome.
   final bool possiblyLocked;
 
+  DateTime get modified => DateTime.fromMicrosecondsSinceEpoch(modifiedMicros);
+
   JunkItem copyWith({bool? possiblyLocked}) => JunkItem(
-    ruleId: ruleId,
-    rootPath: rootPath,
+    rootIndex: rootIndex,
     path: path,
     size: size,
-    modified: modified,
+    modifiedMicros: modifiedMicros,
     possiblyLocked: possiblyLocked ?? this.possiblyLocked,
   );
 }
@@ -181,6 +219,7 @@ class ScanResult {
     required this.cancelled,
     this.issues = const [],
     this.elapsed = Duration.zero,
+    this.roots = ScanRoots.empty,
   });
 
   final List<JunkItem> items;
@@ -193,6 +232,10 @@ class ScanResult {
   final bool cancelled;
   final List<ScanIssue> issues;
   final Duration elapsed;
+
+  /// Root table for [JunkItem.rootIndex]. Empty when the caller does not need
+  /// to resolve item context.
+  final ScanRoots roots;
 
   int get totalBytes => items.fold(0, (total, item) => total + item.size);
 }

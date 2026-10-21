@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:broom/core/clean/quarantine_service.dart';
+import 'package:broom/core/models/clean_models.dart';
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/platform/file_system.dart';
 import 'package:broom/core/platform/memory_file_system.dart';
@@ -36,11 +37,25 @@ void main() {
   });
 
   JunkItem item(String name, {int size = 5}) => JunkItem(
-    ruleId: 'test.rule',
-    rootPath: sourceRoot,
+    rootIndex: 0,
     path: p.windows.join(sourceRoot, name),
     size: size,
-    modified: DateTime.utc(2026, 10, 20),
+    modifiedMicros: DateTime.utc(2026, 10, 20).microsecondsSinceEpoch,
+  );
+
+  const testRoots = ScanRoots([
+    ScanRoot(ruleId: 'test.rule', rootPath: sourceRoot),
+  ]);
+
+  Future<CleanReport> clean(
+    List<JunkItem> items, {
+    void Function(CleanProgress progress)? onProgress,
+    bool Function()? isCancelled,
+  }) => service.clean(
+    items,
+    roots: testRoots,
+    onProgress: onProgress,
+    isCancelled: isCancelled,
   );
 
   String sessionFile(String sessionId, String child) =>
@@ -74,7 +89,7 @@ void main() {
         }
       };
 
-      final report = await service.clean(items);
+      final report = await clean(items);
 
       expect(report.movedCount, 5);
       expect(report.failureCount, 0);
@@ -105,7 +120,7 @@ void main() {
         }
       };
 
-      final report = await service.clean(items);
+      final report = await clean(items);
 
       expect(report.movedCount, 2);
       expect(report.failureCount, 1);
@@ -133,9 +148,7 @@ void main() {
         }
       };
 
-      final report = await service.clean([
-        for (final name in names) item(name),
-      ]);
+      final report = await clean([for (final name in names) item(name)]);
 
       expect(report.movedCount, 2);
       expect(report.failureCount, 1);
@@ -161,7 +174,7 @@ void main() {
         if (operation == 'rename' && path.startsWith(sourceRoot)) renames++;
       };
 
-      final first = await service.clean([
+      final first = await clean([
         for (var index = 0; index < 4; index++) item('cache_$index.tmp'),
       ], isCancelled: () => renames >= 2);
       expect(first.cancelled, isTrue);
@@ -192,7 +205,7 @@ void main() {
         if (operation == 'rename' && path.startsWith(sourceRoot)) renames++;
       };
 
-      final report = await service.clean([
+      final report = await clean([
         for (var index = 0; index < count; index++) item('cache_$index.tmp'),
       ], isCancelled: () => renames >= 10);
       expect(report.cancelled, isTrue);
@@ -223,9 +236,7 @@ void main() {
       final path = p.windows.join(sourceRoot, 'blob.bin');
       fs.seedFile(path, bytes: bytes);
 
-      final report = await service.clean([
-        item('blob.bin', size: bytes.length),
-      ]);
+      final report = await clean([item('blob.bin', size: bytes.length)]);
 
       final journal = await readJournal(report.sessionId!);
       expect(journal.single['sha256'], sha256.convert(bytes).toString());
@@ -241,7 +252,7 @@ void main() {
         // between the stat and the hash has.
         fs.seedFile(path, bytes: bytes, size: 5);
 
-        final report = await service.clean([item('grew.bin', size: 5)]);
+        final report = await clean([item('grew.bin', size: 5)]);
 
         final journal = await readJournal(report.sessionId!);
         expect(journal.single['sha256'], sha256.convert(bytes).toString());
@@ -252,7 +263,7 @@ void main() {
       final path = p.windows.join(sourceRoot, 'big.bin');
       fs.seedFile(path, size: 300 * 1024);
 
-      final report = await service.clean([item('big.bin', size: 300 * 1024)]);
+      final report = await clean([item('big.bin', size: 300 * 1024)]);
 
       final journal = await readJournal(report.sessionId!);
       expect(journal.single.containsKey('sha256'), isFalse);

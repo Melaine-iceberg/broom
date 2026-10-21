@@ -13,6 +13,7 @@ import 'system_services.dart';
 abstract interface class SystemCacheCleaner {
   Future<SystemCleanReport> clean({
     required List<JunkItem> items,
+    required ScanRoots roots,
     required Map<String, List<String>> rootsByRule,
     required Iterable<String> serviceNames,
     void Function(SystemCleanProgress progress)? onProgress,
@@ -36,6 +37,7 @@ class FileSystemCacheCleaner implements SystemCacheCleaner {
   @override
   Future<SystemCleanReport> clean({
     required List<JunkItem> items,
+    required ScanRoots roots,
     required Map<String, List<String>> rootsByRule,
     required Iterable<String> serviceNames,
     void Function(SystemCleanProgress progress)? onProgress,
@@ -134,7 +136,11 @@ class FileSystemCacheCleaner implements SystemCacheCleaner {
         }
         processed++;
 
-        final pathFailure = _pathFailure(item, trustedRoots);
+        final pathFailure = _pathFailure(
+          item,
+          roots.at(item.rootIndex),
+          trustedRoots,
+        );
         if (pathFailure != null) {
           recordFailure(item.path, pathFailure);
           report(currentPath: item.path);
@@ -201,18 +207,19 @@ class FileSystemCacheCleaner implements SystemCacheCleaner {
 
   static String? _pathFailure(
     JunkItem item,
+    ScanRoot root,
     Map<String, List<String>> trustedRoots,
   ) {
     if (!p.windows.isAbsolute(item.path) ||
-        !p.windows.isAbsolute(item.rootPath)) {
+        !p.windows.isAbsolute(root.rootPath)) {
       return '文件路径不是绝对路径';
     }
-    final roots = trustedRoots[item.ruleId];
+    final roots = trustedRoots[root.ruleId];
     if (roots == null || roots.isEmpty) {
       return '规则没有可信的缓存根目录';
     }
 
-    final itemRootKey = _key(item.rootPath);
+    final itemRootKey = _key(root.rootPath);
     String? matchedRoot;
     for (final root in roots) {
       if (_key(root) == itemRootKey) {

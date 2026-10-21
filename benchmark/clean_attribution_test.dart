@@ -95,6 +95,9 @@ Future<_Round> _runCleanRound(Directory base, String label) async {
 
   final random = Random(7);
   final payload = List<int>.generate(_fileSize, (_) => random.nextInt(256));
+  final roots = ScanRoots([
+    ScanRoot(ruleId: 'attr-rule', rootPath: PathGuard.normalize(dataDir)),
+  ]);
   final items = <JunkItem>[];
   for (var index = 0; index < _fileCount; index++) {
     final path = p.windows.join(dataDir, 'cache_entry_$index.tmp');
@@ -103,11 +106,10 @@ Future<_Round> _runCleanRound(Directory base, String label) async {
     final stat = await file.stat();
     items.add(
       JunkItem(
-        ruleId: 'attr-rule',
-        rootPath: PathGuard.normalize(dataDir),
+        rootIndex: 0,
         path: path,
         size: _fileSize,
-        modified: stat.modified,
+        modifiedMicros: stat.modified.microsecondsSinceEpoch,
       ),
     );
   }
@@ -126,7 +128,11 @@ Future<_Round> _runCleanRound(Directory base, String label) async {
 
   var progressCalls = 0;
   timing.begin();
-  final report = await service.clean(items, onProgress: (_) => progressCalls++);
+  final report = await service.clean(
+    items,
+    roots: roots,
+    onProgress: (_) => progressCalls++,
+  );
   timing.end();
 
   expect(report.movedCount, _fileCount);

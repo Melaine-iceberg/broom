@@ -557,7 +557,7 @@ class _RuleDetailPageState extends State<RuleDetailPage> {
                                           ),
                                           shellAvailable: widget.shell != null,
                                           onChanged: () =>
-                                              controller.toggleItem(item.path),
+                                              controller.toggleItem(item),
                                           onReveal: () =>
                                               _revealPath(item.path),
                                         );

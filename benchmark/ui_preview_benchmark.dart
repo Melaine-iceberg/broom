@@ -49,7 +49,6 @@ void main(List<String> args) {
 
 void _benchmarkAggregates(List<JunkItem> items) {
   final selectedPaths = <String>{for (final item in items) item.path};
-  final ruleId = items.first.ruleId;
 
   int legacySelectedBytes() => _legacySelectedItems(
     items,
@@ -66,7 +65,6 @@ void _benchmarkAggregates(List<JunkItem> items) {
   int legacyBytesForRule() {
     var total = 0;
     for (final item in items) {
-      if (item.ruleId != ruleId) continue;
       if (selectedPaths.contains(item.path)) total += item.size;
     }
     return total;
@@ -166,11 +164,10 @@ void _benchmarkVisibleList(List<JunkItem> items) {
   final ties = [
     for (final item in items)
       JunkItem(
-        ruleId: item.ruleId,
-        rootPath: item.rootPath,
+        rootIndex: item.rootIndex,
         path: item.path,
         size: 4096,
-        modified: item.modified,
+        modifiedMicros: item.modifiedMicros,
       ),
   ];
   _row(
@@ -226,18 +223,17 @@ List<JunkItem> _buildItems(int count) {
   return [
     for (var index = 0; index < count; index++)
       JunkItem(
-        ruleId: 'bench.rule',
-        rootPath: r'C:\Users\Bench\AppData\Local\Temp',
+        rootIndex: 0,
         path:
             'C:\\Users\\Bench\\AppData\\Local\\Temp\\'
             '${folders[index % folders.length]}\\sub${index % 97}\\'
             'file-$index.${extensions[index % extensions.length]}',
         size: random.nextInt(8 * 1024 * 1024),
-        modified: DateTime(
+        modifiedMicros: DateTime(
           2026,
           1,
           1,
-        ).add(Duration(hours: random.nextInt(8000))),
+        ).add(Duration(hours: random.nextInt(8000))).microsecondsSinceEpoch,
         possiblyLocked: index % 20 == 0,
       ),
   ];
@@ -259,7 +255,7 @@ List<JunkItem> _legacySelectedItems(
 List<JunkItem> _legacyFilter(List<JunkItem> items, ResultItemFilter filter) {
   final query = filter.query.trim().toLowerCase();
   final wantedExtension = filter.extension?.toLowerCase();
-  final clock = DateTime.now();
+  final clock = DateTime.now().microsecondsSinceEpoch;
   return [
     for (final item in items)
       if ((query.isEmpty || item.path.toLowerCase().contains(query)) &&
@@ -267,7 +263,8 @@ List<JunkItem> _legacyFilter(List<JunkItem> items, ResultItemFilter filter) {
               extensionOfPath(item.path) == wantedExtension) &&
           item.size >= filter.minimumSize &&
           (filter.olderThan == null ||
-              clock.difference(item.modified) >= filter.olderThan!) &&
+              clock - item.modifiedMicros >=
+                  filter.olderThan!.inMicroseconds) &&
           (!filter.lockedOnly || item.possiblyLocked))
         item,
   ];
@@ -282,9 +279,9 @@ List<JunkItem> _legacySort(List<JunkItem> items, ResultItemSort sort) {
       case ResultItemSort.sizeAsc:
         return a.size.compareTo(b.size);
       case ResultItemSort.modifiedDesc:
-        return b.modified.compareTo(a.modified);
+        return b.modifiedMicros.compareTo(a.modifiedMicros);
       case ResultItemSort.modifiedAsc:
-        return a.modified.compareTo(b.modified);
+        return a.modifiedMicros.compareTo(b.modifiedMicros);
       case ResultItemSort.pathAsc:
         return a.path.toLowerCase().compareTo(b.path.toLowerCase());
       case ResultItemSort.extensionAsc:

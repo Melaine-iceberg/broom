@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../models/scan_models.dart';
 import '../platform/directory_enum.dart';
+import '../platform/path_fingerprint.dart';
 import '../platform/path_semantics.dart';
 import '../platform/scan_priority.dart';
 import 'junk_scanner.dart';
@@ -39,9 +40,13 @@ class ScanService {
   bool _retainItems = true;
   ScanOptions _options = const ScanOptions();
   List<ScanJob> _jobs = const [];
+  ScanRoots _roots = ScanRoots.empty;
   final Stopwatch _stopwatch = Stopwatch();
 
-  final Set<String> _seenPaths = <String>{};
+  /// 62-bit fingerprints of normalized result paths.
+  ///
+  /// See [pathFingerprint] for the memory trade-off.
+  final Set<int> _seenPaths = <int>{};
   final List<JunkItem> _resultItems = <JunkItem>[];
   final List<ScanIssue> _issues = <ScanIssue>[];
   int _uniqueFound = 0;
@@ -79,6 +84,7 @@ class ScanService {
     _retainItems = retainItems;
     _options = options;
     _jobs = jobs;
+    _roots = ScanRoots.fromJobs(jobs, semantics: semantics);
     _onProgress = onProgress;
     _onItems = onItems;
     _onIssue = onIssue;
@@ -114,6 +120,7 @@ class ScanService {
           truncated: false,
           cancelled: false,
           elapsed: _stopwatch.elapsed,
+          roots: ScanRoots.empty,
         ),
       );
       return completer.future;
@@ -240,6 +247,7 @@ class ScanService {
       if (start >= jobs.length) break;
       final end = (start + sliceSize).clamp(0, jobs.length);
       final workerJobs = jobs.sublist(start, end);
+      final rootIndexBase = _rootCountBefore(jobs, start);
       final handle = _WorkerHandle();
       _workers.add(handle);
 
@@ -260,6 +268,7 @@ class ScanService {
           _WorkerRequest(
             jobs: workerJobs,
             jobIndexBase: start,
+            rootIndexBase: rootIndexBase,
             jobCount: jobs.length,
             excludedPaths: excludedPaths,
             batchSize: options.batchSize,
@@ -327,6 +336,14 @@ class ScanService {
     return processors.clamp(1, 4).clamp(1, jobCount);
   }
 
+  static int _rootCountBefore(List<ScanJob> jobs, int jobCount) {
+    var count = 0;
+    for (var index = 0; index < jobCount; index++) {
+      count += jobs[index].roots.length;
+    }
+    return count;
+  }
+
   void _handleWorkerProgress(_WorkerHandle worker, ScanProgress progress) {
     if (_finished) return;
     worker.progress = progress;
@@ -370,7 +387,7 @@ class ScanService {
     if (_finished || _limitReached) return;
     final accepted = <JunkItem>[];
     for (final item in items) {
-      if (!_seenPaths.add(semantics.key(item.path))) continue;
+      if (!_seenPaths.add(pathFingerprint(semantics.key(item.path)))) continue;
       if (_options.maxItems != null && _uniqueFound >= _options.maxItems!) {
         _limitReached = true;
         break;
@@ -431,6 +448,7 @@ class ScanService {
       cancelled: cancelled,
       issues: List<ScanIssue>.unmodifiable(_issues),
       elapsed: elapsed ?? _stopwatch.elapsed,
+      roots: _roots,
     );
   }
 
@@ -506,6 +524,7 @@ void _scanWorkerEntry(_WorkerRequest request) async {
       batchSize: request.batchSize,
       semantics: request.semantics,
       jobIndexBase: request.jobIndexBase,
+      rootIndexBase: request.rootIndexBase,
       jobCountOverride: request.jobCount,
       useDetailedListing: request.useDetailedListing,
     );
@@ -531,6 +550,7 @@ class _WorkerRequest {
   const _WorkerRequest({
     required this.jobs,
     required this.jobIndexBase,
+    required this.rootIndexBase,
     required this.jobCount,
     required this.excludedPaths,
     required this.batchSize,
@@ -543,6 +563,7 @@ class _WorkerRequest {
 
   final List<ScanJob> jobs;
   final int jobIndexBase;
+  final int rootIndexBase;
   final int jobCount;
   final List<String> excludedPaths;
   final int batchSize;

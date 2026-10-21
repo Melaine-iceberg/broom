@@ -37,25 +37,22 @@ void main() {
 
   List<JunkItem> sampleItems() => [
     JunkItem(
-      ruleId: 'windows.update_cache',
-      rootPath: updateRoot,
+      rootIndex: 0,
       path: p.windows.join(updateRoot, 'a.cab'),
       size: 100,
-      modified: DateTime(2026, 1, 1),
+      modifiedMicros: DateTime(2026, 1, 1).microsecondsSinceEpoch,
     ),
     JunkItem(
-      ruleId: 'windows.update_cache',
-      rootPath: updateRoot,
+      rootIndex: 0,
       path: p.windows.join(updateRoot, 'nested', 'b.cab'),
       size: 50,
-      modified: DateTime(2026, 1, 2),
+      modifiedMicros: DateTime(2026, 1, 2).microsecondsSinceEpoch,
     ),
     JunkItem(
-      ruleId: 'windows.delivery_optimization',
-      rootPath: deliveryRoot,
+      rootIndex: 1,
       path: p.windows.join(deliveryRoot, 'c.bin'),
       size: 25,
-      modified: DateTime(2026, 1, 3),
+      modifiedMicros: DateTime(2026, 1, 3).microsecondsSinceEpoch,
     ),
   ];
 

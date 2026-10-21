@@ -111,8 +111,18 @@ void main() {
         result.items.map((item) => item.path),
         unorderedEquals([oldFile.path, nestedOld.path]),
       );
-      expect(result.items.every((item) => item.rootPath == root.path), isTrue);
-      expect(result.items.every((item) => item.ruleId == 'test.temp'), isTrue);
+      expect(
+        result.items.every(
+          (item) => result.roots.at(item.rootIndex).rootPath == root.path,
+        ),
+        isTrue,
+      );
+      expect(
+        result.items.every(
+          (item) => result.roots.at(item.rootIndex).ruleId == 'test.temp',
+        ),
+        isTrue,
+      );
       expect(progress, isNotEmpty);
       expect(progress.last.foundFiles, 2);
     },
@@ -168,7 +178,10 @@ void main() {
     final result = await scanner.scan();
 
     expect(result.items, hasLength(2));
-    final byPath = {for (final item in result.items) item.path: item.ruleId};
+    final byPath = {
+      for (final item in result.items)
+        item.path: result.roots.at(item.rootIndex).ruleId,
+    };
     expect(byPath[broad.path], 'test.broad');
     expect(byPath[claimed.path], 'test.claimed');
   });
@@ -188,6 +201,39 @@ void main() {
 
     expect(result.items, hasLength(2));
     expect(result.items.map((item) => item.path).toSet(), hasLength(2));
+  });
+
+  test('maps every item to its own root in a multi-root job', () async {
+    final firstRoot = Directory(p.windows.join(root.path, 'one'));
+    final secondRoot = Directory(p.windows.join(root.path, 'two'));
+    await createFile(firstRoot, 'a.tmp', 'a');
+    await createFile(secondRoot, 'b.tmp', 'b');
+
+    final scanner = JunkScanner(
+      jobs: [
+        ScanJob(ruleId: 'test.multi', roots: [firstRoot.path, secondRoot.path]),
+      ],
+      clock: () => now,
+    );
+    final result = await scanner.scan();
+
+    expect(result.items, hasLength(2));
+    final rootsByPath = {
+      for (final item in result.items)
+        item.path: result.roots.at(item.rootIndex),
+    };
+    expect(
+      rootsByPath[p.windows.join(firstRoot.path, 'a.tmp')]!.rootPath,
+      firstRoot.path,
+    );
+    expect(
+      rootsByPath[p.windows.join(secondRoot.path, 'b.tmp')]!.rootPath,
+      secondRoot.path,
+    );
+    expect(
+      rootsByPath.values.every((root) => root.ruleId == 'test.multi'),
+      isTrue,
+    );
   });
 
   test('stops at the configured item limit', () async {

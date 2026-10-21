@@ -113,16 +113,23 @@ class QuarantineService {
 
   Future<CleanReport> clean(
     List<JunkItem> items, {
+    required ScanRoots roots,
     void Function(CleanProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) {
     return _mutations.run(
-      () => _clean(items, onProgress: onProgress, isCancelled: isCancelled),
+      () => _clean(
+        items,
+        roots: roots,
+        onProgress: onProgress,
+        isCancelled: isCancelled,
+      ),
     );
   }
 
   Future<CleanReport> _clean(
     List<JunkItem> items, {
+    required ScanRoots roots,
     void Function(CleanProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) async {
@@ -152,7 +159,7 @@ class QuarantineService {
 
     try {
       await _files.createDirectory(filesDir.path);
-      await _writePlan(sessionDir, items);
+      await _writePlan(sessionDir, items, roots);
       await _writeSessionJson(sessionDir, {
         'schemaVersion': _schemaVersion,
         'id': sessionId,
@@ -179,6 +186,7 @@ class QuarantineService {
       createdAt: createdAt,
       items: items,
       planItems: items,
+      roots: roots,
       plannedCount: items.length,
       previousFailureCount: 0,
       previousSkippedCount: 0,
@@ -220,9 +228,11 @@ class QuarantineService {
     final plannedCount = _readCount(
       meta,
       'plannedCount',
-      fallback: plan.length,
+      fallback: plan.items.length,
     );
-    if (plan.isEmpty || plannedCount <= 0 || plan.length != plannedCount) {
+    if (plan.items.isEmpty ||
+        plannedCount <= 0 ||
+        plan.items.length != plannedCount) {
       throw StateError('找不到可继续的清理计划');
     }
 
@@ -233,7 +243,7 @@ class QuarantineService {
     final entries = journal.entries;
     final donePaths = {for (final entry in entries) entry.originalPath};
     final remaining = [
-      for (final item in plan)
+      for (final item in plan.items)
         if (!donePaths.contains(item.path)) item,
     ];
     final createdAt = meta['createdAt'] is String
@@ -258,7 +268,8 @@ class QuarantineService {
       await _recordHistory(
         sessionId: sessionId,
         createdAt: createdAt,
-        planItems: plan,
+        planItems: plan.items,
+        roots: plan.roots,
         movedCount: entries.length,
         movedBytes: entries.fold<int>(0, (total, entry) => total + entry.size),
         skippedCount: previousSkippedCount,
@@ -305,7 +316,8 @@ class QuarantineService {
       sessionId: sessionId,
       createdAt: createdAt,
       items: remaining,
-      planItems: plan,
+      planItems: plan.items,
+      roots: plan.roots,
       plannedCount: plannedCount,
       previousFailureCount: previousFailureCount,
       previousSkippedCount: previousSkippedCount,
@@ -377,6 +389,7 @@ class QuarantineService {
     required String createdAt,
     required List<JunkItem> items,
     required List<JunkItem> planItems,
+    required ScanRoots roots,
     required int plannedCount,
     required int previousFailureCount,
     required int previousSkippedCount,
@@ -465,6 +478,7 @@ class QuarantineService {
         sessionId: sessionId,
         createdAt: createdAt,
         planItems: planItems,
+        roots: roots,
         movedCount: priorEntries.length + movedCount,
         movedBytes: priorEntryBytes + movedBytes,
         skippedCount: previousSkippedCount + skippedCount,
@@ -491,6 +505,7 @@ class QuarantineService {
           break;
         }
         processed++;
+        final root = roots.at(item.rootIndex);
 
         if (_exclusions.excludes(item.path)) {
           recordSkip(item.path, '位于排除列表中，已跳过');
@@ -498,7 +513,7 @@ class QuarantineService {
           continue;
         }
 
-        if (!guard.allows(path: item.path, root: item.rootPath)) {
+        if (!guard.allows(path: item.path, root: root.rootPath)) {
           recordFailure(item.path, '未通过路径安全检查');
           report(currentPath: item.path);
           continue;
@@ -534,14 +549,14 @@ class QuarantineService {
         final digest = await _tryHashFile(item.path, size);
         final entry = <String, Object?>{
           'originalPath': item.path,
-          'rootPath': item.rootPath,
+          'rootPath': root.rootPath,
           'storedName': storedName,
           'size': size,
           'sha256': ?digest,
           'modified': (metadata?.modified ?? item.modified)
               .toUtc()
               .toIso8601String(),
-          'ruleId': item.ruleId,
+          'ruleId': root.ruleId,
         };
         if (metadata?.created case final created?) {
           entry['created'] = created.toUtc().toIso8601String();
@@ -1491,8 +1506,9 @@ class QuarantineService {
       final journal = await _readEntryJournal(sessionDir);
       final entries = journal.entries;
       final plan = await _readPlan(sessionDir);
-      final planned = plannedCount > 0 ? plannedCount : plan.length;
-      final planComplete = plan.isNotEmpty && plan.length == planned;
+      final planned = plannedCount > 0 ? plannedCount : plan.items.length;
+      final planComplete =
+          plan.items.isNotEmpty && plan.items.length == planned;
       final restoredNames = await _readRestoredNames(sessionDir);
       final pending = await _pendingEntries(sessionDir, entries, restoredNames);
       entryCount = entries.length;
@@ -1502,7 +1518,7 @@ class QuarantineService {
       plannedCount = planned;
       if (planComplete) {
         final donePaths = {for (final entry in entries) entry.originalPath};
-        remainingCount = plan
+        remainingCount = plan.items
             .where((item) => !donePaths.contains(item.path))
             .length;
       }
@@ -1515,9 +1531,10 @@ class QuarantineService {
     } else if (status == QuarantineStatus.partial) {
       final plan = await _readPlan(sessionDir);
       final planComplete =
-          plan.isNotEmpty && (plannedCount <= 0 || plan.length == plannedCount);
+          plan.items.isNotEmpty &&
+          (plannedCount <= 0 || plan.items.length == plannedCount);
       if (planComplete) {
-        plannedCount = plan.length;
+        plannedCount = plan.items.length;
         final storedRemaining = meta.containsKey('remainingCount')
             ? _readCount(meta, 'remainingCount')
             : null;
@@ -1528,7 +1545,7 @@ class QuarantineService {
         } else {
           final entries = await _readEntries(sessionDir);
           final donePaths = {for (final entry in entries) entry.originalPath};
-          remainingCount = plan
+          remainingCount = plan.items
               .where((item) => !donePaths.contains(item.path))
               .length;
         }
@@ -1924,6 +1941,7 @@ class QuarantineService {
     required String sessionId,
     required String createdAt,
     required List<JunkItem> planItems,
+    required ScanRoots roots,
     required int movedCount,
     required int movedBytes,
     required int skippedCount,
@@ -1936,8 +1954,9 @@ class QuarantineService {
     try {
       final grouped = <String, ({int count, int bytes})>{};
       for (final item in planItems) {
-        final current = grouped[item.ruleId];
-        grouped[item.ruleId] = current == null
+        final ruleId = roots.at(item.rootIndex).ruleId;
+        final current = grouped[ruleId];
+        grouped[ruleId] = current == null
             ? (count: 1, bytes: item.size)
             : (count: current.count + 1, bytes: current.bytes + item.size);
       }
@@ -2167,7 +2186,11 @@ class QuarantineService {
   /// of write syscalls: one per line would cost one per file.
   static const _planWriteBatch = 64;
 
-  Future<void> _writePlan(Directory sessionDir, List<JunkItem> items) async {
+  Future<void> _writePlan(
+    Directory sessionDir,
+    List<JunkItem> items,
+    ScanRoots roots,
+  ) async {
     final planPath = p.windows.join(sessionDir.path, 'plan.jsonl');
     final tempPath = '$planPath.tmp';
     final writer = await _files.openWrite(tempPath);
@@ -2176,11 +2199,12 @@ class QuarantineService {
       final buffer = StringBuffer();
       var batched = 0;
       for (final item in items) {
+        final root = roots.at(item.rootIndex);
         buffer.writeln(
           jsonEncode({
             'originalPath': item.path,
-            'rootPath': item.rootPath,
-            'ruleId': item.ruleId,
+            'rootPath': root.rootPath,
+            'ruleId': root.ruleId,
             'size': item.size,
             'modified': item.modified.toUtc().toIso8601String(),
           }),
@@ -2222,10 +2246,14 @@ class QuarantineService {
     }
   }
 
-  Future<List<JunkItem>> _readPlan(Directory sessionDir) async {
+  Future<_PlanData> _readPlan(Directory sessionDir) async {
     final path = p.windows.join(sessionDir.path, 'plan.jsonl');
-    if (await _files.type(path) == FsEntityType.notFound) return const [];
+    if (await _files.type(path) == FsEntityType.notFound) {
+      return const _PlanData(items: [], roots: ScanRoots.empty);
+    }
     final items = <JunkItem>[];
+    final roots = <ScanRoot>[];
+    final rootIndexes = <String, int>{};
     try {
       final lines = await _files.readLines(path);
       for (final line in lines) {
@@ -2247,13 +2275,20 @@ class QuarantineService {
               ? DateTime.tryParse(rawModified)
               : null;
           final rawRuleId = map['ruleId'];
+          final ruleId = rawRuleId is String ? rawRuleId : '';
+          final rootIndex = rootIndexes.putIfAbsent(
+            '$ruleId\u0000$rootPath',
+            () {
+              roots.add(ScanRoot(ruleId: ruleId, rootPath: rootPath));
+              return roots.length - 1;
+            },
+          );
           items.add(
             JunkItem(
-              ruleId: rawRuleId is String ? rawRuleId : '',
-              rootPath: rootPath,
+              rootIndex: rootIndex,
               path: originalPath,
               size: size.toInt(),
-              modified: modified ?? _clock(),
+              modifiedMicros: (modified ?? _clock()).microsecondsSinceEpoch,
             ),
           );
         } on FormatException {
@@ -2261,9 +2296,9 @@ class QuarantineService {
         }
       }
     } on FileSystemException {
-      return items;
+      return const _PlanData(items: [], roots: ScanRoots.empty);
     }
-    return items;
+    return _PlanData(items: items, roots: ScanRoots(roots));
   }
 
   static bool _isValidStoredEntry({
@@ -2358,6 +2393,13 @@ class QuarantineService {
         return null;
     }
   }
+}
+
+class _PlanData {
+  const _PlanData({required this.items, required this.roots});
+
+  final List<JunkItem> items;
+  final ScanRoots roots;
 }
 
 class _RemovedDirectory {

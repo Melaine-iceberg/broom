@@ -20,11 +20,10 @@ List<JunkItem> buildIntegrationItems(int count) {
   return [
     for (var index = 0; index < count; index++)
       JunkItem(
-        ruleId: integrationRule.id,
-        rootPath: integrationRoot,
+        rootIndex: 0,
         path: p.windows.join(integrationRoot, 'item-$index.tmp'),
         size: 1024 + index,
-        modified: DateTime(2026, 10, 19),
+        modifiedMicros: DateTime(2026, 10, 19).microsecondsSinceEpoch,
       ),
   ];
 }

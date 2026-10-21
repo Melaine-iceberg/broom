@@ -32,11 +32,10 @@ Future<void> _pumpPage(
 
 JunkItem _item() {
   return JunkItem(
-    ruleId: 'windows.update_cache',
-    rootPath: _updateRoot,
+    rootIndex: 0,
     path: p.windows.join(_updateRoot, 'update.cab'),
     size: 2048,
-    modified: DateTime(2026, 1, 1),
+    modifiedMicros: DateTime(2026, 1, 1).microsecondsSinceEpoch,
   );
 }
 
@@ -165,11 +164,10 @@ void main() {
       result: ScanResult(
         items: [
           JunkItem(
-            ruleId: rule.id,
-            rootPath: windowsOldRoot,
+            rootIndex: 0,
             path: p.windows.join(windowsOldRoot, r'Windows\System32\old.dll'),
             size: 4096,
-            modified: DateTime(2026, 1, 1),
+            modifiedMicros: DateTime(2026, 1, 1).microsecondsSinceEpoch,
           ),
         ],
         scannedFiles: 1,

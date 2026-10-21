@@ -308,19 +308,52 @@ flutter test benchmark/clean_attribution_test.dart
 - 一处报告口径变化：当后端是 `IoFileSystem` 且原生通道不可用时，其内部回退会跳过 stat 失败的子项（与扫描器一致），这些失败不再计入 walker 的 `errorCount`。该路径只出现在无原生通道的构建或测试环境；安装包内走原生枚举，不存在逐文件 stat。
 - 回归：新增 `test/file_tree_walker_test.dart`（6 项）与 `test/large_file_scanner_test.dart` 的枚举尺寸用例；全量 410 项测试与 `flutter analyze --fatal-infos` 通过。
 
-### P1-6 结果对象内存放大（待实施）
+### P1-6 结果对象内存放大（已实施）
 
-1M 条 328 MiB，其中 `ruleId`、`rootPath` 完全冗余；`DateTime` 对象也远大于 `int` 微秒。改法：
+**现象**：1M 条结果常驻约 226–228 MiB（改造前形状的同轮基准）。每条 `JunkItem` 持有 `ruleId`、`rootPath` 两个字符串引用和一个 `DateTime` 对象：前两者在同一次扫描里完全重复，后者是每条的独立分配。
 
-- `JunkItem` 不再逐条存 `rootPath`，改由 `RuleResult.rootPath`（或 `ruleId → rootPath` 映射）提供；`ruleId` 改为整型规则下标。
-- 时间戳存 `int`（微秒），需要显示时再构造 `DateTime`。
-- 删掉 `_itemsByPath`（`clean_controller.dart:129`），它只用于由 path 反查 `ruleId`，而这个信息在 UI 侧本来就手上有。
+**改法**：
 
-预期 1M 条从 400 MiB+ 降到 200 MiB 量级。对常驻后台的清理工具，这是体验层面的硬指标。
+1. **压缩条目**：`JunkItem` 改为 `rootIndex`（int）、`path`、`size`、`modifiedMicros`（int 微秒）与 `possiblyLocked`。`modified` 变为按需构造的 getter。
+2. **新增 `ScanRoots` 根表**：按 `jobs × roots` 展平生成 `(ruleId, rootPath)` 列表，`rootPath` 规范化一次，由扫描器、持久化、UI 与清理服务共享。扫描器带 `rootIndexBase` 写入条目；被跳过的根也占用下标，保证 worker 与协调者的展平顺序一致。
+3. **删除 UI 侧反查表**：`clean_controller.dart` 的 `_itemsByPath` 与 `_itemLocations` 都不再需要。选择操作由 UI 直接传 `JunkItem`，规则归属用 `_scanRoots.at(item.rootIndex).ruleId`；锁探测结果从路径字符串改为全局条目下标，控制器按结果分组的前缀和定位条目并 `copyWith`。
+4. **清理边界只传根表**：`QuarantineService.clean` / `SystemCacheCleaner.clean` 接收 `ScanRoots`，主循环按 `roots.at(item.rootIndex)` 取 `ruleId` / `rootPath` 做路径守卫、日志与计划；断点恢复从 `plan.jsonl` 重建同一张表。
+5. **持久化格式不变**：`items.jsonl` 仍逐行写 `ruleId` / `rootPath`（由根表展开），加载时按出现顺序去重重建 `ScanRoots`，`schemaVersion` 无需升级，旧结果文件可继续读取。
 
-### P1-7 全局去重集合存整串路径（待实施）
+**收益（`dart run benchmark/item_memory_benchmark.dart`，每个模式独立进程，1M 条、路径长约 75–80 字符，`ProcessInfo.currentRss` 前后差值，各跑 3 次）**：
 
-`lib/core/scan/scan_service.dart:379` 用 `_seenPaths` 存每条结果的小写路径副本做跨规则去重，1M 条约 +100 MiB 常驻。可改为 64 位指纹（如 FNV-1a 或 xxHash）集合，碰撞概率在 1M 量级可忽略；或者按"根目录分区"在 worker 侧完成去重，只保留跨规则重叠的少量复核。
+| 形状 | RSS 增量 |
+| --- | ---: |
+| 改造前（`ruleId` + `rootPath` + `DateTime`） | 226 / 227 / 226 MiB |
+| 改造后 `JunkItem` | 91 / 89 / 89 MiB |
+
+即 1M 条节省约 135–138 MiB。显示修改时间时才构造 `DateTime`；列表排序与"早于 N 天"过滤直接比较整数微秒。
+
+**风险**：中。`rootIndex` 只有配上同一份 `ScanRoots` 才有意义，因此所有跨层边界一起改：worker 偏移、持久化重建、UI 恢复顺序、清理计划恢复都要求下标与根表严格对齐。回归覆盖：
+
+- `test/junk_scanner_test.dart` 新增多根规则用例，断言每条结果经 `roots.at(rootIndex)` 映射回自己的根；
+- `test/scan_result_store_test.dart` 断言往返后根表与 `rootIndex` 不变；
+- `test/clean_controller_test.dart` 覆盖多规则下标、恢复上次扫描（先重建根表再分组）与锁探测；
+- 清理 / 系统缓存 / 隔离区相关测试全部改为显式传入根表，计划恢复用例额外写入了第二条根。
+
+全量 413 项测试与 `flutter analyze --fatal-infos` 通过。
+
+### P1-7 全局去重集合存整串路径（已实施）
+
+**现象**：除 `ScanService._seenPaths` 外，`JunkScanner.seen` 在单次扫描期间也保留了一份小写路径集合；两处都是每条目一个字符串副本，1M 条约 80–95 MiB/处。
+
+**改法**：新增 `pathFingerprint`（62 位 FNV-1a，按 UTF-16 code unit 两字节喂入），集合改为 `Set<int>`。掩码到 `0x3fffffffffff` 使值在 VM 上保持 Smi，避免堆上的大整数对象。`ScanService` 与 `JunkScanner` 两处去重同时换成指纹；跨 worker 的路径仍由协调者统一复核，语义不变。
+
+**收益（同一基准，先预构建 1M 条路径再测集合增量，各 3 次）**：
+
+| 集合 | RSS 增量 |
+| --- | ---: |
+| `Set<String>`（小写副本） | 94 / 95 / 80 MiB |
+| `Set<int>`（指纹） | 19 / 28 / 31 MiB |
+
+即单处节省约 60–75 MiB；扫描期间两处集合共存时，节省同步翻倍。
+
+**风险**：低。指纹只用于"是否见过"的判断，碰撞会把两条不同路径中的一条当成重复而漏扫；62 位在 1M 量级的生日碰撞概率约 `1e-7`。`test/path_fingerprint_test.dart` 断言了稳定性、Smi 范围与 20 万条不同路径无碰撞。若未来单次扫描条数进入 10M 量级，应按 `n²/2^63` 重新评估。
 
 ### P2-8 持久化 JSON 编码留在 UI isolate（待实施）
 
@@ -346,8 +379,8 @@ flutter test benchmark/clean_attribution_test.dart
 2. **P0-5a–d**（已实施）：按"能整块删掉的调用"排序推进——`type` 复检、`position`、计划批写、哈希读取，四项合计约 380 µs/文件（14–16%）。互不冲突，各自带独立回归用例。
 3. **P0-3 + P0-4**（已实施）：都是 UI 侧"重复计算"。P0-3 把每次重建的三个聚合从 22 ms 降到 0；P0-4 把每次重建的过滤+排序从 50 ms 降到 0（缓存命中），并把 `pathAsc` 从 405 ms 降到 167 ms。
 4. **P1-5**（已实施）：walker 复用 `listDetailed`，逐文件 `stat` 归零；分析 isolate 通过根 isolate 探测 + token 接入原生枚举。
-5. **P1-6 + P1-7**：内存优化，涉及模型调整，放在功能稳定后做。
-6. **P0-2 / P2-8 / P2-9**：需要基准验证或涉及原生侧，按实测收益排期。
+5. **P1-6 + P1-7**（已实施）：压缩条目形状并引入根表，两处去重集合改为指纹；1M 条结果常驻从约 227 MiB 降到约 89 MiB。
+6. **P0-2 / P2-8 / P2-9 / P2-10**：需要基准验证或涉及原生侧，按实测收益排期。
 
 ## 变更记录
 
@@ -357,6 +390,7 @@ flutter test benchmark/clean_attribution_test.dart
 - **P0-3 已落地**：选择聚合改为增量维护。所有写路径收敛到 `_selectPath` / `_deselectPath` 两个原语（而不是在九条写路径上各改一遍），getter 由全量遍历变为字段读取；`_startLockProbe` 顺带重算已选占用计数。10 万条三个 getter 合计 22.0→0.000 ms。
 - **P0-4 已落地**：新增 `VisibleItemsCache`（按 `source` 身份 + filter 值 + sort + `itemsRevision` 记忆化）、`CleanController.itemsRevision`、`ResultItemFilter` 值相等。排序按"键是否已在条目上"分流：数值键直接比较并在并列时惰性缓存小写路径，路径/扩展名键先派生一次再排序。默认视图每次重建 50.4→0 ms；`pathAsc` 405.1→166.7 ms，`extensionAsc` 2,443.6→273.8 ms。新增 `benchmark/ui_preview_benchmark.dart`，把旧实现作为参照副本保留在基准内以便复现同轮 A/B。
 - **P1-5 已落地**：分析 walker 改用 `BroomFileSystem` 并优先 `DetailedDirectoryListing`，访问者签名改为 `(String, FsStat)`；`AnalysisService` 在根 isolate 探测原生枚举并通过 `RootIsolateToken` 在分析 isolate 初始化 messenger，失败时回退 `list + stat`。详细枚举路径下每文件 `stat` 从 1 次降为 0（3 个文件对应 2 次 `listDetailed` + 0 次 `stat`），回退路径保持 N 次 `stat` 与错误计数。新增 7 项回归用例，全量 410 项测试与 `flutter analyze --fatal-infos` 通过。
+- **P1-6 + P1-7 已落地**：`JunkItem` 改为 `rootIndex` + `modifiedMicros`，新增 `ScanRoots` 根表并贯穿扫描（含 worker 的 `rootIndexBase`）、持久化、UI 与清理服务；删除 `_itemsByPath` / `_itemLocations`，锁探测改报全局条目下标；`items.jsonl` 格式与 `schemaVersion` 不变，加载时重建根表。去重集合改用 62 位 FNV-1a 指纹，同时覆盖 `ScanService._seenPaths` 与 `JunkScanner.seen`。1M 条基准：条目 226–228 → 89–91 MiB，单处去重集合 80–95 → 19–31 MiB。新增 `benchmark/item_memory_benchmark.dart`、`test/path_fingerprint_test.dart` 与多根扫描用例，全量 413 项测试与 `flutter analyze --fatal-infos` 通过。
 - 记录一处方向性修正：装饰-排序并非对所有排序都更快。数值键本来就在条目上，装饰只是多出 O(N) 次分配，`sizeDesc` 实测因此从 46.4 涨到 63.5 ms。收益成立的区间是"派生键比分配贵得多"（`pathAsc`、`extensionAsc`）与"键大量并列"（惰性缓存生效）。全量 403 项测试与 `flutter analyze --fatal-infos` 通过。
 - 评审过程中修正了一个判断：最初按单价推算认为"清理时间几乎全花在重复元数据查询上"，端到端 A/B 证明元数据只占约 12%，rename 与文件读取才是主体。文档中的收益数字以实测为准，未采用推算值。
 - 另一处修正：P0-1 时的单步归因把约 1,000 µs 记为"其余未归因"，其中相当一部分并非散落在循环里，而是两项此前没被列入分解的操作——`finalize` 阶段的逐条 `type()` 与清理计划文件的逐条写入。这说明"按已知项求和再取差额"容易把整类操作漏在统计口径之外，凡涉及归因应以"每一次调用都有账"的方式重做。

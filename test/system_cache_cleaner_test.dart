@@ -34,6 +34,7 @@ void main() {
   late Directory outside;
   late _FakeServiceControl services;
   late FileSystemCacheCleaner cleaner;
+  late ScanRoots roots;
 
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('broom_system_cleaner_');
@@ -43,6 +44,9 @@ void main() {
     await root.create(recursive: true);
     outside = Directory(p.join(temp.path, 'outside'));
     await outside.create(recursive: true);
+    roots = ScanRoots([
+      ScanRoot(ruleId: 'windows.update_cache', rootPath: root.path),
+    ]);
     services = _FakeServiceControl();
     cleaner = FileSystemCacheCleaner(services: services);
   });
@@ -60,19 +64,13 @@ void main() {
     return file;
   }
 
-  Future<JunkItem> itemFor(
-    File file, {
-    String ruleId = 'windows.update_cache',
-    String? rootPath,
-    String? path,
-  }) async {
+  Future<JunkItem> itemFor(File file, {String? path, int rootIndex = 0}) async {
     final stat = await file.stat();
     return JunkItem(
-      ruleId: ruleId,
-      rootPath: rootPath ?? root.path,
+      rootIndex: rootIndex,
       path: path ?? file.path,
       size: stat.size,
-      modified: stat.modified,
+      modifiedMicros: stat.modified.microsecondsSinceEpoch,
     );
   }
 
@@ -86,6 +84,7 @@ void main() {
 
     final report = await cleaner.clean(
       items: [await itemFor(first), await itemFor(second)],
+      roots: roots,
       rootsByRule: {
         'windows.update_cache': [root.path],
       },
@@ -119,16 +118,19 @@ void main() {
     final inside = await createFile(root, 'keep.txt');
     final outsideFile = await createFile(outside, 'outside.txt');
     final rootItem = JunkItem(
-      ruleId: 'windows.update_cache',
-      rootPath: root.path,
+      rootIndex: 0,
       path: root.path,
       size: 0,
-      modified: DateTime.now(),
+      modifiedMicros: DateTime.now().microsecondsSinceEpoch,
     );
-    final wrongRootItem = await itemFor(inside, rootPath: outside.path);
+    final wrongRootItem = await itemFor(inside, rootIndex: 1);
 
     final report = await cleaner.clean(
       items: [await itemFor(outsideFile), rootItem, wrongRootItem],
+      roots: ScanRoots([
+        ScanRoot(ruleId: 'windows.update_cache', rootPath: root.path),
+        ScanRoot(ruleId: 'windows.update_cache', rootPath: outside.path),
+      ]),
       rootsByRule: {
         'windows.update_cache': [root.path],
       },
@@ -151,6 +153,7 @@ void main() {
 
     final noRoot = await cleaner.clean(
       items: [item],
+      roots: roots,
       rootsByRule: const {},
       serviceNames: const [],
     );
@@ -159,13 +162,13 @@ void main() {
     final driveRoot = await cleaner.clean(
       items: [
         JunkItem(
-          ruleId: 'windows.update_cache',
-          rootPath: r'C:\',
+          rootIndex: 0,
           path: r'C:\Windows\not-a-real-cache-file.tmp',
           size: 0,
-          modified: DateTime.now(),
+          modifiedMicros: DateTime.now().microsecondsSinceEpoch,
         ),
       ],
+      roots: roots,
       rootsByRule: const {
         'windows.update_cache': [r'C:\'],
       },
@@ -180,13 +183,13 @@ void main() {
     final report = await cleaner.clean(
       items: [
         JunkItem(
-          ruleId: 'windows.update_cache',
-          rootPath: root.path,
+          rootIndex: 0,
           path: missing.path,
           size: 12,
-          modified: DateTime.now(),
+          modifiedMicros: DateTime.now().microsecondsSinceEpoch,
         ),
       ],
+      roots: roots,
       rootsByRule: {
         'windows.update_cache': [root.path],
       },
@@ -237,6 +240,7 @@ try {
 
       final report = await cleaner.clean(
         items: [await itemFor(file)],
+        roots: roots,
         rootsByRule: {
           'windows.update_cache': [root.path],
         },
@@ -274,6 +278,7 @@ try {
 
     final report = await cleaner.clean(
       items: items,
+      roots: roots,
       rootsByRule: {
         'windows.update_cache': [root.path],
       },
@@ -295,6 +300,7 @@ try {
   test('does not touch services when there is nothing to delete', () async {
     final report = await cleaner.clean(
       items: const [],
+      roots: roots,
       rootsByRule: const {},
       serviceNames: ['wuauserv', 'bits'],
     );
@@ -319,6 +325,7 @@ try {
 
     final report = await cleaner.clean(
       items: items,
+      roots: roots,
       rootsByRule: {
         'windows.update_cache': [root.path],
       },
@@ -336,6 +343,7 @@ try {
 
     final report = await cleaner.clean(
       items: [await itemFor(file)],
+      roots: roots,
       rootsByRule: {
         'windows.update_cache': [root.path],
       },
@@ -359,13 +367,13 @@ try {
     final report = await cleaner.clean(
       items: [
         JunkItem(
-          ruleId: 'windows.update_cache',
-          rootPath: root.path,
+          rootIndex: 0,
           path: link.path,
           size: 0,
-          modified: DateTime.now(),
+          modifiedMicros: DateTime.now().microsecondsSinceEpoch,
         ),
       ],
+      roots: roots,
       rootsByRule: {
         'windows.update_cache': [root.path],
       },

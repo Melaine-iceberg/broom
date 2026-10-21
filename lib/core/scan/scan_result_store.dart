@@ -115,10 +115,18 @@ class StoredScanSummary {
 }
 
 class StoredScanData {
-  const StoredScanData({required this.summary, required this.items});
+  const StoredScanData({
+    required this.summary,
+    required this.items,
+    this.roots = ScanRoots.empty,
+  });
 
   final StoredScanSummary summary;
   final List<JunkItem> items;
+
+  /// Root table for [items]. Rebuilt from the `ruleId` / `rootPath` columns in
+  /// `items.jsonl`, so the file format is unchanged.
+  final ScanRoots roots;
 }
 
 /// Streams scan batches into a per-scan directory and publishes a small
@@ -151,6 +159,7 @@ class ScanResultStore {
   Future<ScanResultWriter> begin({
     required List<String> ruleIds,
     required String rulesVersion,
+    required ScanRoots roots,
   }) async {
     final root = Directory(semantics.forIo(rootDirectory));
     await root.create(recursive: true);
@@ -165,6 +174,7 @@ class ScanResultStore {
       this,
       List.unmodifiable(ruleIds),
       rulesVersion,
+      roots,
     );
     await writer._open();
     return writer;
@@ -213,6 +223,8 @@ class ScanResultStore {
     );
     if (!await itemsFile.exists()) return null;
     final items = <JunkItem>[];
+    final roots = <ScanRoot>[];
+    final rootIndexes = <String, int>{};
     try {
       await for (final line
           in itemsFile
@@ -220,16 +232,24 @@ class ScanResultStore {
               .transform(utf8.decoder)
               .transform(const LineSplitter())) {
         if (line.trim().isEmpty) continue;
-        final item = _decodeItem(line);
+        final item = _decodeItem(line, roots, rootIndexes);
         if (item != null) items.add(item);
       }
     } on FileSystemException catch (error) {
       throw ScanResultStoreException('无法读取上次扫描结果：${error.message}');
     }
-    return StoredScanData(summary: summary, items: items);
+    return StoredScanData(
+      summary: summary,
+      items: items,
+      roots: ScanRoots(roots),
+    );
   }
 
-  JunkItem? _decodeItem(String line) {
+  JunkItem? _decodeItem(
+    String line,
+    List<ScanRoot> roots,
+    Map<String, int> rootIndexes,
+  ) {
     try {
       final value = jsonDecode(line);
       if (value is! Map<String, dynamic>) return null;
@@ -247,12 +267,15 @@ class ScanResultStore {
       }
       final time = DateTime.tryParse(modified);
       if (time == null) return null;
+      final rootIndex = rootIndexes.putIfAbsent('$ruleId\u0000$rootPath', () {
+        roots.add(ScanRoot(ruleId: ruleId, rootPath: rootPath));
+        return roots.length - 1;
+      });
       return JunkItem(
-        ruleId: ruleId,
-        rootPath: rootPath,
+        rootIndex: rootIndex,
         path: path,
         size: size,
-        modified: time,
+        modifiedMicros: time.microsecondsSinceEpoch,
       );
     } on FormatException {
       return null;
@@ -318,11 +341,13 @@ class ScanResultWriter {
     this._store,
     this.ruleIds,
     this.rulesVersion,
+    this.roots,
   );
 
   final String id;
   final List<String> ruleIds;
   final String rulesVersion;
+  final ScanRoots roots;
   final Directory _directory;
   final ScanResultStore _store;
   IOSink? _sink;
@@ -354,12 +379,15 @@ class ScanResultWriter {
     // a second time, on the UI isolate, for every batch of every scan.
     final buffer = BytesBuilder(copy: false);
     for (final item in items) {
+      final root = roots.at(item.rootIndex);
       final line = jsonEncode({
-        'ruleId': item.ruleId,
-        'rootPath': item.rootPath,
+        'ruleId': root.ruleId,
+        'rootPath': root.rootPath,
         'path': item.path,
         'size': item.size,
-        'modified': item.modified.toUtc().toIso8601String(),
+        'modified': DateTime.fromMicrosecondsSinceEpoch(item.modifiedMicros)
+            .toUtc()
+            .toIso8601String(),
       });
       final lineBytes = utf8.encode(line);
       final cost = lineBytes.length + 1;

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../models/scan_models.dart';
 import '../platform/file_system.dart';
+import '../platform/path_fingerprint.dart';
 import '../platform/path_semantics.dart';
 import 'ntfs_index.dart';
 
@@ -28,6 +29,7 @@ class JunkScanner {
     this.ntfsIndex,
     this.useNtfsIndex = false,
     this.jobIndexBase = 0,
+    this.rootIndexBase = 0,
     this.jobCountOverride,
     this.fileSystem = const IoFileSystem(),
     this.useDetailedListing = true,
@@ -50,6 +52,11 @@ class JunkScanner {
   final NtfsIndex? ntfsIndex;
   final bool useNtfsIndex;
   final int jobIndexBase;
+
+  /// Offset of this scanner's first root in the caller's [ScanRoots] table.
+  /// Worker isolates receive a job slice, so their local root order starts at
+  /// this global index.
+  final int rootIndexBase;
   final int? jobCountOverride;
   final BroomFileSystem fileSystem;
 
@@ -79,7 +86,7 @@ class JunkScanner {
     final items = <JunkItem>[];
     final issueList = <ScanIssue>[];
     final batch = <JunkItem>[];
-    final seen = <String>{};
+    final seen = <int>{};
     var scannedFiles = 0;
     var foundFiles = 0;
     var foundBytes = 0;
@@ -87,6 +94,7 @@ class JunkScanner {
     var cancelled = false;
     var lastProgressAt = DateTime.fromMillisecondsSinceEpoch(0);
     var currentRuleId = jobs.isEmpty ? null : jobs.first.ruleId;
+    var nextRootIndex = rootIndexBase;
 
     void flushBatch() {
       if (batch.isEmpty) return;
@@ -125,7 +133,7 @@ class JunkScanner {
     /// [key] lets callers reuse the comparison key they already computed for
     /// the same path; recomputing it dominates the per-file CPU cost.
     bool acceptItem(JunkItem item, {String? key}) {
-      if (!seen.add(key ?? _key(item.path))) return false;
+      if (!seen.add(pathFingerprint(key ?? _key(item.path)))) return false;
       foundFiles++;
       foundBytes += item.size;
       if (retainItems) items.add(item);
@@ -149,6 +157,7 @@ class JunkScanner {
       required String rootKey,
       required String path,
       required String pathKey,
+      required int rootIndex,
     }) async {
       if (_isWithin(rootKey, pathKey) == false) return;
       if (!_acceptsExtension(job, path)) return;
@@ -167,11 +176,10 @@ class JunkScanner {
       }
       final stopped = acceptItem(
         JunkItem(
-          ruleId: job.ruleId,
-          rootPath: root,
+          rootIndex: rootIndex,
           path: path,
           size: stat.size,
-          modified: stat.modified,
+          modifiedMicros: stat.modified.microsecondsSinceEpoch,
         ),
         key: pathKey,
       );
@@ -194,6 +202,7 @@ class JunkScanner {
       required String rootKey,
       required List<({String path, String key, FsStat? stat})> files,
       required int jobIndex,
+      required int rootIndex,
     }) async {
       if (files.isEmpty) return false;
       final stats = <FsStat?>[for (final file in files) file.stat];
@@ -239,11 +248,10 @@ class JunkScanner {
         }
         final stopped = acceptItem(
           JunkItem(
-            ruleId: job.ruleId,
-            rootPath: root,
+            rootIndex: rootIndex,
             path: files[index].path,
             size: stat.size,
-            modified: stat.modified,
+            modifiedMicros: stat.modified.microsecondsSinceEpoch,
           ),
           key: files[index].key,
         );
@@ -271,6 +279,7 @@ class JunkScanner {
       report(force: true, jobIndex: localJobIndex);
 
       for (final rawRoot in job.roots) {
+        final rootIndex = nextRootIndex++;
         if (isCancelled?.call() ?? false) {
           cancelled = true;
           break scanLoop;
@@ -303,6 +312,7 @@ class JunkScanner {
                     rootKey: rootKey,
                     path: entryPath,
                     pathKey: entryKey,
+                    rootIndex: rootIndex,
                   );
                 } on _LimitReached {
                   break scanLoop;
@@ -398,6 +408,7 @@ class JunkScanner {
                 rootKey: rootKey,
                 files: chunk,
                 jobIndex: localJobIndex,
+                rootIndex: rootIndex,
               );
               chunk.clear();
               report(jobIndex: localJobIndex);
@@ -410,6 +421,7 @@ class JunkScanner {
                 rootKey: rootKey,
                 files: chunk,
                 jobIndex: localJobIndex,
+                rootIndex: rootIndex,
               );
               chunk.clear();
               report(jobIndex: localJobIndex);
@@ -437,6 +449,7 @@ class JunkScanner {
       cancelled: cancelled,
       issues: issueList,
       elapsed: stopwatch.elapsed,
+      roots: ScanRoots.fromJobs(jobs, semantics: semantics),
     );
   }
 

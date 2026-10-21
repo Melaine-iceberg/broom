@@ -70,7 +70,7 @@ void main() {
     );
   });
 
-  test('runner batches and reports only locked paths', () async {
+  test('runner batches and reports only locked indexes', () async {
     final probe = _ScriptedProbe({'b', 'c'});
     final batches = <String>[];
 
@@ -85,7 +85,7 @@ void main() {
 
     expect(checked, 5);
     expect(probe.calls.map((call) => call.length), [2, 2, 1]);
-    expect(batches, ['2:b', '4:c', '5:']);
+    expect(batches, ['2:1', '4:2', '5:']);
   });
 
   test('runner stops silently when the probe fails', () async {

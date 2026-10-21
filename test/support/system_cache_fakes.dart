@@ -83,6 +83,7 @@ class FakeSystemCacheCleaner implements SystemCacheCleaner {
   @override
   Future<SystemCleanReport> clean({
     required List<JunkItem> items,
+    required ScanRoots roots,
     required Map<String, List<String>> rootsByRule,
     required Iterable<String> serviceNames,
     void Function(SystemCleanProgress progress)? onProgress,

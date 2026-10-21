@@ -13,11 +13,10 @@ JunkItem _item(
   String root = r'C:\cache',
 }) {
   return JunkItem(
-    ruleId: 'test.cache',
-    rootPath: root,
+    rootIndex: 0,
     path: p.windows.join(root, name),
     size: size,
-    modified: modified ?? DateTime(2026, 1, 1),
+    modifiedMicros: (modified ?? DateTime(2026, 1, 1)).microsecondsSinceEpoch,
     possiblyLocked: locked,
   );
 }

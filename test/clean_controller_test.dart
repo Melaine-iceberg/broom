@@ -125,6 +125,7 @@ class _ControlledQuarantineService extends FakeQuarantineService {
   @override
   Future<CleanReport> clean(
     List<JunkItem> items, {
+    required ScanRoots roots,
     void Function(CleanProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) async {
@@ -236,11 +237,10 @@ void main() {
         ),
       );
     final item = JunkItem(
-      ruleId: 'test.rule',
-      rootPath: rootA.path,
+      rootIndex: 0,
       path: p.windows.join(rootA.path, 'a.tmp'),
       size: 2048,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     final scanner = _RecordingScanService(items: [item]);
     final rule = createRule();
@@ -434,18 +434,16 @@ void main() {
   test('supports file-level selection and rule tri-state', () async {
     final exclusions = createStore();
     final first = JunkItem(
-      ruleId: 'test.rule',
-      rootPath: rootA.path,
+      rootIndex: 0,
       path: p.windows.join(rootA.path, 'first.tmp'),
       size: 10,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     final second = JunkItem(
-      ruleId: 'test.rule',
-      rootPath: rootA.path,
+      rootIndex: 0,
       path: p.windows.join(rootA.path, 'second.tmp'),
       size: 25,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     final scanner = _RecordingScanService(items: [first, second]);
     final rule = createRule();
@@ -468,7 +466,7 @@ void main() {
     expect(controller.isItemSelected(first.path), isTrue);
     expect(controller.allItemsSelected, isTrue);
 
-    controller.toggleItem(first.path);
+    controller.toggleItem(first);
 
     expect(controller.selectedCount, 1);
     expect(controller.selectedBytes, 25);
@@ -512,11 +510,10 @@ void main() {
       int size, {
       bool locked = false,
     }) => JunkItem(
-      ruleId: rule.id,
-      rootPath: rootA.path,
+      rootIndex: rule.id == safeRule.id ? 0 : 1,
       path: p.windows.join(rootA.path, name),
       size: size,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
       possiblyLocked: locked,
     );
     final safeItems = [
@@ -556,7 +553,10 @@ void main() {
         reason: '$step: locked count',
       );
       for (final rule in [safeRule, reviewRule]) {
-        final ruleSelected = selected.where((item) => item.ruleId == rule.id);
+        final ruleSelected = selected.where(
+          (item) =>
+              (item.rootIndex == 0 ? safeRule.id : reviewRule.id) == rule.id,
+        );
         expect(
           controller.selectedCountForRule(rule.id),
           ruleSelected.length,
@@ -577,12 +577,12 @@ void main() {
     expect(controller.selectedPossiblyLockedCount, 1);
     expectAggregates('default selection');
 
-    controller.toggleItem(safeItems.first.path);
+    controller.toggleItem(safeItems.first);
     expect(controller.selectedBytes, 65);
     expect(controller.selectedPossiblyLockedCount, 0);
     expectAggregates('toggle off');
 
-    controller.toggleItem(safeItems.first.path);
+    controller.toggleItem(safeItems.first);
     expect(controller.selectedBytes, 75);
     expect(controller.selectedPossiblyLockedCount, 1);
     expectAggregates('toggle on');
@@ -619,18 +619,16 @@ void main() {
   test('bumps the items revision for new results and lock updates', () async {
     final rule = createRule();
     final first = JunkItem(
-      ruleId: rule.id,
-      rootPath: rootA.path,
+      rootIndex: 0,
       path: p.windows.join(rootA.path, 'first.tmp'),
       size: 10,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     final second = JunkItem(
-      ruleId: rule.id,
-      rootPath: rootA.path,
+      rootIndex: 0,
       path: p.windows.join(rootA.path, 'second.tmp'),
       size: 25,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     final controller = createController(
       exclusions: createStore(),
@@ -659,18 +657,16 @@ void main() {
     final safeRule = createRule();
     final reviewRule = createRule(id: 'test.review', risk: CleanRisk.review);
     final safeItem = JunkItem(
-      ruleId: safeRule.id,
-      rootPath: rootA.path,
+      rootIndex: 0,
       path: p.windows.join(rootA.path, 'safe.tmp'),
       size: 10,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     final reviewItem = JunkItem(
-      ruleId: reviewRule.id,
-      rootPath: rootB.path,
+      rootIndex: 1,
       path: p.windows.join(rootB.path, 'review.tmp'),
       size: 25,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     final scanner = _RecordingScanService(items: [safeItem, reviewItem]);
     final controller = createController(
@@ -736,18 +732,16 @@ void main() {
     'marks possibly locked preview items without changing selection',
     () async {
       final first = JunkItem(
-        ruleId: 'test.rule',
-        rootPath: rootA.path,
+        rootIndex: 0,
         path: p.windows.join(rootA.path, 'first.tmp'),
         size: 10,
-        modified: DateTime(2026, 10, 18),
+        modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
       );
       final second = JunkItem(
-        ruleId: 'test.rule',
-        rootPath: rootA.path,
+        rootIndex: 0,
         path: p.windows.join(rootA.path, 'second.tmp'),
         size: 25,
-        modified: DateTime(2026, 10, 18),
+        modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
       );
       final scanner = _RecordingScanService(items: [first, second]);
       final probe = _FakeLockProbe({first.path});
@@ -790,11 +784,10 @@ void main() {
 
   test('keeps preview usable when lock probing is unavailable', () async {
     final item = JunkItem(
-      ruleId: 'test.rule',
-      rootPath: rootA.path,
+      rootIndex: 0,
       path: p.windows.join(rootA.path, 'file.tmp'),
       size: 10,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     final scanner = _RecordingScanService(items: [item]);
     final probe = _FakeLockProbe(
@@ -851,11 +844,10 @@ void main() {
 
   test('persists results and restores them after restart', () async {
     final item = JunkItem(
-      ruleId: 'test.rule',
-      rootPath: rootA.path,
+      rootIndex: 0,
       path: p.windows.join(rootA.path, 'saved.tmp'),
       size: 42,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     final scanner = _RecordingScanService(items: [item]);
     final rule = createRule();
@@ -897,6 +889,7 @@ void main() {
 
     await second.restoreLastScan();
 
+    expect(second.error, isNull);
     expect(second.phase, CleanPhase.preview);
     expect(second.results.single.items, hasLength(1));
     expect(second.results.single.items.single.path, item.path);
@@ -934,11 +927,10 @@ void main() {
     final exclusions = createStore();
     await exclusions.ensureLoaded();
     final item = JunkItem(
-      ruleId: 'test.rule',
-      rootPath: rootA.path,
+      rootIndex: 0,
       path: p.windows.join(rootA.path, 'cache.tmp'),
       size: 42,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     final scanner = _RecordingScanService(items: [item]);
     final rule = createRule();
@@ -965,11 +957,10 @@ void main() {
   test('blocks scan, restore and undo while cleaning is in progress', () async {
     final exclusions = createStore();
     final item = JunkItem(
-      ruleId: 'test.rule',
-      rootPath: rootA.path,
+      rootIndex: 0,
       path: p.windows.join(rootA.path, 'busy.tmp'),
       size: 10,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     final scanner = _RecordingScanService(items: [item]);
     final quarantine = _ControlledQuarantineService();
@@ -1015,11 +1006,10 @@ void main() {
   test('ignores clean and undo while a scan is in progress', () async {
     final exclusions = createStore();
     final item = JunkItem(
-      ruleId: 'test.rule',
-      rootPath: rootA.path,
+      rootIndex: 0,
       path: p.windows.join(rootA.path, 'scanning.tmp'),
       size: 10,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     final scanner = _ControlledScanService([item]);
     final quarantine = FakeQuarantineService();

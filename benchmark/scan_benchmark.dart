@@ -111,11 +111,10 @@ Future<void> _benchmarkIsolateTransfer() async {
   final items = List.generate(
     fileCount,
     (index) => JunkItem(
-      ruleId: 'bench.cache',
-      rootPath: r'C:\Bench\Cache',
+      rootIndex: 0,
       path: r'C:\Bench\Cache\d0000\f0000.tmp$index',
       size: 4096,
-      modified: DateTime.utc(2026, 10, 1),
+      modifiedMicros: DateTime.utc(2026, 10, 1).microsecondsSinceEpoch,
     ),
   );
 

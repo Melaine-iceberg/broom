@@ -52,6 +52,7 @@ class SystemCacheController extends ChangeNotifier {
   String? _accessError;
   ScanProgress? _scanProgress;
   List<SystemRuleResult> _results = const [];
+  ScanRoots _scanRoots = ScanRoots.empty;
   Set<String> _selectedRuleIds = <String>{};
   SystemCleanReport? _lastReport;
   SystemCleanProgress? _cleanProgress;
@@ -68,7 +69,6 @@ class SystemCacheController extends ChangeNotifier {
   int _lockProbeChecked = 0;
   int _lockProbeTotal = 0;
   final Map<String, int> _lockedCountByRule = <String, int>{};
-  final Map<String, ({int resultIndex, int itemIndex})> _itemLocations = {};
 
   SystemCachePhase get phase => _phase;
   bool get isElevated => _isElevated;
@@ -222,6 +222,7 @@ class SystemCacheController extends ChangeNotifier {
         _notify();
         return;
       }
+      _scanRoots = ScanRoots.fromJobs(jobs);
 
       final result = await service.scan(
         jobs: jobs,
@@ -311,6 +312,7 @@ class SystemCacheController extends ChangeNotifier {
     try {
       final report = await cleaner.clean(
         items: items,
+        roots: _scanRoots,
         rootsByRule: roots,
         serviceNames: services,
         onStage: (stage) {
@@ -374,7 +376,9 @@ class SystemCacheController extends ChangeNotifier {
   ) {
     final grouped = <String, List<JunkItem>>{};
     for (final item in items) {
-      grouped.putIfAbsent(item.ruleId, () => []).add(item);
+      grouped
+          .putIfAbsent(_scanRoots.at(item.rootIndex).ruleId, () => [])
+          .add(item);
     }
 
     final results = <SystemRuleResult>[];
@@ -404,7 +408,6 @@ class SystemCacheController extends ChangeNotifier {
     _lockProbeChecked = 0;
     _lockProbeTotal = 0;
     _lockedCountByRule.clear();
-    _itemLocations.clear();
   }
 
   void _cancelLockProbe() {
@@ -413,21 +416,16 @@ class SystemCacheController extends ChangeNotifier {
   }
 
   void _startLockProbe() {
-    _itemLocations.clear();
     _lockedCountByRule.clear();
     final paths = <String>[];
-    for (var resultIndex = 0; resultIndex < _results.length; resultIndex++) {
-      final items = _results[resultIndex].items;
-      for (var itemIndex = 0; itemIndex < items.length; itemIndex++) {
-        final item = items[itemIndex];
-        _itemLocations[item.path] = (
-          resultIndex: resultIndex,
-          itemIndex: itemIndex,
-        );
+    final starts = <int>[];
+    for (final result in _results) {
+      starts.add(paths.length);
+      for (final item in result.items) {
         paths.add(item.path);
         if (!item.possiblyLocked) continue;
-        _lockedCountByRule[item.ruleId] =
-            (_lockedCountByRule[item.ruleId] ?? 0) + 1;
+        _lockedCountByRule[result.rule.id] =
+            (_lockedCountByRule[result.rule.id] ?? 0) + 1;
       }
     }
     if (paths.isEmpty) return;
@@ -436,19 +434,23 @@ class SystemCacheController extends ChangeNotifier {
     _lockProbeChecked = 0;
     _lockProbeTotal = paths.length;
     _notify();
-    unawaited(_runLockProbe(generation, paths));
+    unawaited(_runLockProbe(generation, paths, starts));
   }
 
-  Future<void> _runLockProbe(int generation, List<String> paths) async {
+  Future<void> _runLockProbe(
+    int generation,
+    List<String> paths,
+    List<int> starts,
+  ) async {
     var lastNotifyAt = DateTime.fromMillisecondsSinceEpoch(0);
     await runLockProbe(
       probe: _lockProbe,
       paths: paths,
       isActive: () => !_disposed && generation == _lockProbeGeneration,
-      onBatch: (lockedPaths, checked) async {
+      onBatch: (lockedIndexes, checked) async {
         _lockProbeChecked = checked;
-        for (final path in lockedPaths) {
-          _markPossiblyLocked(path);
+        for (final index in lockedIndexes) {
+          _markPossiblyLocked(index, starts);
         }
         final now = DateTime.now();
         if (now.difference(lastNotifyAt) >= const Duration(milliseconds: 120)) {
@@ -462,15 +464,20 @@ class SystemCacheController extends ChangeNotifier {
     _notify();
   }
 
-  void _markPossiblyLocked(String path) {
-    final location = _itemLocations[path];
-    if (location == null) return;
-    final result = _results[location.resultIndex];
-    final current = result.items[location.itemIndex];
+  void _markPossiblyLocked(int index, List<int> starts) {
+    if (starts.isEmpty || index < 0) return;
+    var resultIndex = starts.length - 1;
+    while (resultIndex > 0 && index < starts[resultIndex]) {
+      resultIndex--;
+    }
+    final result = _results[resultIndex];
+    final itemIndex = index - starts[resultIndex];
+    if (itemIndex < 0 || itemIndex >= result.items.length) return;
+    final current = result.items[itemIndex];
     if (current.possiblyLocked) return;
-    result.items[location.itemIndex] = current.copyWith(possiblyLocked: true);
-    _lockedCountByRule[current.ruleId] =
-        (_lockedCountByRule[current.ruleId] ?? 0) + 1;
+    result.items[itemIndex] = current.copyWith(possiblyLocked: true);
+    _lockedCountByRule[result.rule.id] =
+        (_lockedCountByRule[result.rule.id] ?? 0) + 1;
   }
 
   @override

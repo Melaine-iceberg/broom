@@ -22,11 +22,15 @@ void main() {
   late Directory source;
   late FakeFileMetadataAccess metadata;
   late QuarantineService quarantine;
+  late ScanRoots testRoots;
 
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('broom_quarantine_');
     source = Directory(p.windows.join(temp.path, 'source'));
     await source.create(recursive: true);
+    testRoots = ScanRoots([
+      ScanRoot(ruleId: 'test.rule', rootPath: source.path),
+    ]);
     metadata = FakeFileMetadataAccess();
     quarantine = QuarantineService(
       quarantineRoot: p.windows.join(temp.path, 'quarantine'),
@@ -51,20 +55,30 @@ void main() {
   Future<JunkItem> itemFor(File file) async {
     final stat = await file.stat();
     return JunkItem(
-      ruleId: 'test.rule',
-      rootPath: source.path,
+      rootIndex: 0,
       path: file.path,
       size: stat.size,
-      modified: stat.modified,
+      modifiedMicros: stat.modified.microsecondsSinceEpoch,
     );
   }
+
+  Future<CleanReport> clean(
+    List<JunkItem> items, {
+    void Function(CleanProgress progress)? onProgress,
+    bool Function()? isCancelled,
+  }) => quarantine.clean(
+    items,
+    roots: testRoots,
+    onProgress: onProgress,
+    isCancelled: isCancelled,
+  );
 
   test('cleans into quarantine and fully restores the session', () async {
     final first = await createFile('first.txt', 'alpha');
     final second = await createFile(p.join('nested', 'second.txt'), 'bravo!');
     final items = [await itemFor(first), await itemFor(second)];
 
-    final report = await quarantine.clean(items);
+    final report = await clean(items);
 
     expect(report.sessionId, isNotNull);
     expect(report.movedCount, 2);
@@ -96,7 +110,7 @@ void main() {
       p.join('cache', 'nested', 'file.tmp'),
       'alpha',
     );
-    final report = await quarantine.clean([await itemFor(file)]);
+    final report = await clean([await itemFor(file)]);
 
     expect(report.removedDirectoryCount, 2);
     expect(await file.exists(), isFalse);
@@ -130,7 +144,7 @@ void main() {
     );
     await existingEmpty.create();
 
-    final report = await quarantine.clean([await itemFor(selected)]);
+    final report = await clean([await itemFor(selected)]);
 
     expect(report.removedDirectoryCount, 0);
     expect(
@@ -148,7 +162,7 @@ void main() {
       final second = await createFile(p.join('b', 'second.tmp'), 'bravo');
       var cancel = false;
 
-      final interrupted = await quarantine.clean(
+      final interrupted = await clean(
         [await itemFor(first), await itemFor(second)],
         onProgress: (progress) {
           if (progress.moved >= 1) cancel = true;
@@ -197,7 +211,7 @@ void main() {
       p.join('cache', 'nested', 'lost.tmp'),
       'alpha',
     );
-    final report = await quarantine.clean([await itemFor(file)]);
+    final report = await clean([await itemFor(file)]);
     final entry = (await quarantine.listEntries(report.sessionId!)).single;
     await File(
       p.windows.join(
@@ -226,7 +240,7 @@ void main() {
       p.join('cache', 'nested', 'file.tmp'),
       'alpha',
     );
-    final report = await quarantine.clean([await itemFor(file)]);
+    final report = await clean([await itemFor(file)]);
     final recordsFile = File(
       p.windows.join(
         temp.path,
@@ -259,7 +273,7 @@ void main() {
     final third = await createFile('third.txt', 'charlie');
     var cancel = false;
 
-    final interrupted = await quarantine.clean(
+    final interrupted = await clean(
       [await itemFor(first), await itemFor(second), await itemFor(third)],
       onProgress: (progress) {
         if (progress.moved >= 1) cancel = true;
@@ -345,15 +359,14 @@ void main() {
   test('keeps a resumable session when no file was moved', () async {
     final movable = await createFile('movable.txt', 'alpha');
     final missing = JunkItem(
-      ruleId: 'test.rule',
-      rootPath: source.path,
+      rootIndex: 0,
       path: p.windows.join(source.path, 'missing.txt'),
       size: 1,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     var cancel = false;
 
-    final interrupted = await quarantine.clean(
+    final interrupted = await clean(
       [missing, await itemFor(movable)],
       onProgress: (_) => cancel = true,
       isCancelled: () => cancel,
@@ -402,7 +415,7 @@ void main() {
         acl: acl,
       );
 
-      final report = await quarantine.clean([await itemFor(file)]);
+      final report = await clean([await itemFor(file)]);
       final entriesFile = File(
         p.windows.join(
           temp.path,
@@ -465,7 +478,7 @@ void main() {
       modified: DateTime.utc(2021, 1, 1),
       readOnly: false,
     );
-    final report = await quarantine.clean([await itemFor(file)]);
+    final report = await clean([await itemFor(file)]);
     metadata.applyError = const FileMetadataException('无法设置 ACL');
 
     final undo = await quarantine.undo(report.sessionId!);
@@ -484,7 +497,7 @@ void main() {
       modified: DateTime.utc(2021, 1, 1),
       aclUnavailable: true,
     );
-    final report = await quarantine.clean([await itemFor(file)]);
+    final report = await clean([await itemFor(file)]);
 
     final undo = await quarantine.undo(report.sessionId!);
 
@@ -498,7 +511,7 @@ void main() {
     final item = await itemFor(file);
     metadata.readError = const FileMetadataException('元数据不可用');
 
-    final report = await quarantine.clean([item]);
+    final report = await clean([item]);
 
     expect(report.movedCount, 1);
     expect(report.failureCount, 0);
@@ -535,7 +548,7 @@ void main() {
 
   test('records a SHA-256 digest for small quarantine entries', () async {
     final file = await createFile('hashed.txt', 'alpha');
-    final report = await quarantine.clean([await itemFor(file)]);
+    final report = await clean([await itemFor(file)]);
 
     final entriesFile = File(
       p.windows.join(
@@ -555,7 +568,7 @@ void main() {
 
   test('refuses to restore a quarantine file whose size changed', () async {
     final file = await createFile('tampered.txt', 'alpha');
-    final report = await quarantine.clean([await itemFor(file)]);
+    final report = await clean([await itemFor(file)]);
 
     final entry = (await quarantine.listEntries(report.sessionId!)).single;
     final stored = File(
@@ -585,7 +598,7 @@ void main() {
 
   test('detects same-size tampering with the stored hash', () async {
     final file = await createFile('tampered.txt', 'alpha');
-    final report = await quarantine.clean([await itemFor(file)]);
+    final report = await clean([await itemFor(file)]);
 
     final entry = (await quarantine.listEntries(report.sessionId!)).single;
     final stored = File(
@@ -612,7 +625,7 @@ void main() {
 
   test('restores sessions whose entries predate integrity hashes', () async {
     final file = await createFile('legacy.txt', 'alpha');
-    final report = await quarantine.clean([await itemFor(file)]);
+    final report = await clean([await itemFor(file)]);
 
     final entriesFile = File(
       p.windows.join(
@@ -638,10 +651,7 @@ void main() {
   test('skips existing targets and can retry the remaining entry', () async {
     final first = await createFile('first.txt', 'alpha');
     final second = await createFile('second.txt', 'bravo');
-    final report = await quarantine.clean([
-      await itemFor(first),
-      await itemFor(second),
-    ]);
+    final report = await clean([await itemFor(first), await itemFor(second)]);
 
     await first.writeAsString('user-content');
     final firstUndo = await quarantine.undo(report.sessionId!);
@@ -667,10 +677,7 @@ void main() {
   test('lists entries and restores only selected files', () async {
     final first = await createFile('first.txt', 'alpha');
     final second = await createFile('second.txt', 'bravo');
-    final report = await quarantine.clean([
-      await itemFor(first),
-      await itemFor(second),
-    ]);
+    final report = await clean([await itemFor(first), await itemFor(second)]);
 
     final entries = await quarantine.listEntries(report.sessionId!);
     expect(entries, hasLength(2));
@@ -713,7 +720,7 @@ void main() {
 
   test('reports existing original paths before restoring', () async {
     final file = await createFile('conflict.txt', 'alpha');
-    final report = await quarantine.clean([await itemFor(file)]);
+    final report = await clean([await itemFor(file)]);
     await file.writeAsString('user-content');
 
     final entries = await quarantine.listEntries(report.sessionId!);
@@ -734,7 +741,7 @@ void main() {
     final file = await createFile('conflict.txt', 'alpha');
     final occupied = File(p.windows.join(source.path, 'conflict (已恢复).txt'));
     await occupied.writeAsString('occupied');
-    final report = await quarantine.clean([await itemFor(file)]);
+    final report = await clean([await itemFor(file)]);
     await file.writeAsString('user-content');
 
     final undo = await quarantine.undo(
@@ -756,7 +763,7 @@ void main() {
 
   test('overwrites the occupied target after backing it up', () async {
     final file = await createFile('conflict.txt', 'alpha');
-    final report = await quarantine.clean([await itemFor(file)]);
+    final report = await clean([await itemFor(file)]);
     await file.writeAsString('user-content');
 
     final undo = await quarantine.undo(
@@ -780,7 +787,7 @@ void main() {
 
   test('refuses to overwrite a directory at the original path', () async {
     final file = await createFile('conflict.txt', 'alpha');
-    final report = await quarantine.clean([await itemFor(file)]);
+    final report = await clean([await itemFor(file)]);
     await Directory(file.path).create();
 
     final undo = await quarantine.undo(
@@ -800,10 +807,7 @@ void main() {
   test('permanently purges a quarantine session', () async {
     final first = await createFile('first.txt', 'alpha');
     final second = await createFile('second.txt', 'bravo');
-    final report = await quarantine.clean([
-      await itemFor(first),
-      await itemFor(second),
-    ]);
+    final report = await clean([await itemFor(first), await itemFor(second)]);
     final entries = await quarantine.listEntries(report.sessionId!);
     final totalBytes = entries.fold<int>(
       0,
@@ -829,9 +833,9 @@ void main() {
 
   test('permanently purges every pending session', () async {
     final first = await createFile('first.txt', 'alpha');
-    await quarantine.clean([await itemFor(first)]);
+    await clean([await itemFor(first)]);
     final second = await createFile('second.txt', 'bravo');
-    await quarantine.clean([await itemFor(second)]);
+    await clean([await itemFor(second)]);
 
     expect(await quarantine.listSessions(), hasLength(2));
 
@@ -857,13 +861,12 @@ void main() {
     await outside.writeAsString('keep-me');
     final stat = await outside.stat();
 
-    final report = await quarantine.clean([
+    final report = await clean([
       JunkItem(
-        ruleId: 'test.rule',
-        rootPath: source.path,
+        rootIndex: 0,
         path: outside.path,
         size: stat.size,
-        modified: stat.modified,
+        modifiedMicros: stat.modified.microsecondsSinceEpoch,
       ),
     ]);
 
@@ -896,7 +899,7 @@ void main() {
       exclusions: PathExclusions([excludedDir.path]),
     );
 
-    final report = await service.clean([await itemFor(file)]);
+    final report = await service.clean([await itemFor(file)], roots: testRoots);
 
     expect(report.sessionId, isNull);
     expect(report.movedCount, 0);
@@ -909,7 +912,7 @@ void main() {
 
   test('refuses to restore into excluded paths', () async {
     final file = await createFile('keep.txt', 'alpha');
-    final report = await quarantine.clean([await itemFor(file)]);
+    final report = await clean([await itemFor(file)]);
 
     final restricted = QuarantineService(
       quarantineRoot: p.windows.join(temp.path, 'quarantine'),
@@ -968,7 +971,7 @@ try {
         await Future<void>.delayed(const Duration(milliseconds: 100));
       }
 
-      final report = await quarantine.clean([await itemFor(file)]);
+      final report = await clean([await itemFor(file)]);
 
       expect(report.movedCount, 0);
       expect(report.skippedCount, 1);
@@ -993,11 +996,10 @@ try {
     'assesses cross-volume space and aborts before creating a session',
     () async {
       final item = JunkItem(
-        ruleId: 'test.rule',
-        rootPath: r'D:\cache',
+        rootIndex: 0,
         path: r'D:\cache\large.bin',
         size: 10 * 1024 * 1024,
-        modified: DateTime(2026, 10, 18),
+        modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
       );
       final probed = <String>[];
       final service = QuarantineService(
@@ -1011,7 +1013,7 @@ try {
       );
 
       await expectLater(
-        service.clean([item]),
+        service.clean([item], roots: testRoots),
         throwsA(
           isA<QuarantineSpaceException>()
               .having(
@@ -1056,7 +1058,7 @@ try {
     expect(assessment.crossVolumeCount, 0);
     expect(assessment.sufficient, isTrue);
 
-    final report = await service.clean([item]);
+    final report = await service.clean([item], roots: testRoots);
     expect(probeCalls, 0);
     expect(report.movedCount, 1);
     expect(report.sessionId, isNotNull);
@@ -1066,7 +1068,7 @@ try {
     final first = await createFile('first.txt', 'alpha');
     final second = await createFile('second.txt', 'bravo');
     var cancel = false;
-    final interrupted = await quarantine.clean(
+    final interrupted = await clean(
       [await itemFor(first), await itemFor(second)],
       onProgress: (progress) {
         if (progress.moved >= 1) cancel = true;
@@ -1082,15 +1084,14 @@ try {
     final planFile = File(p.windows.join(sessionDir.path, 'plan.jsonl'));
     final existingPlan = await planFile.readAsString();
     final extra = JunkItem(
-      ruleId: 'test.rule',
-      rootPath: r'D:\cache',
+      rootIndex: 0,
       path: r'D:\cache\extra.bin',
       size: 4096,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     await planFile.writeAsString(
       '$existingPlan'
-      '${jsonEncode({'originalPath': extra.path, 'rootPath': extra.rootPath, 'ruleId': extra.ruleId, 'size': extra.size, 'modified': extra.modified.toUtc().toIso8601String()})}\n',
+      '${jsonEncode({'originalPath': extra.path, 'rootPath': r'D:\cache', 'ruleId': 'test.rule', 'size': extra.size, 'modified': extra.modified.toUtc().toIso8601String()})}\n',
     );
     final metaFile = File(p.windows.join(sessionDir.path, 'session.json'));
     final meta =
@@ -1123,10 +1124,7 @@ try {
     () async {
       final first = await createFile('first.txt', 'alpha');
       final second = await createFile('second.txt', 'bravo');
-      final report = await quarantine.clean([
-        await itemFor(first),
-        await itemFor(second),
-      ]);
+      final report = await clean([await itemFor(first), await itemFor(second)]);
       final metaFile = File(
         p.windows.join(
           temp.path,
@@ -1185,7 +1183,7 @@ try {
     final first = await createFile('first.txt', 'alpha');
     final second = await createFile('second.txt', 'bravo');
     final third = await createFile('third.txt', 'charlie');
-    final report = await quarantine.clean([
+    final report = await clean([
       await itemFor(first),
       await itemFor(second),
       await itemFor(third),
@@ -1253,7 +1251,9 @@ try {
       );
       final file = await createFile('history.tmp', 'alpha');
 
-      final report = await service.clean([await itemFor(file)]);
+      final report = await service.clean([
+        await itemFor(file),
+      ], roots: testRoots);
 
       var records = await history.load();
       expect(records, hasLength(1));
@@ -1288,6 +1288,7 @@ try {
 
     final interrupted = await service.clean(
       [await itemFor(first), await itemFor(second)],
+      roots: testRoots,
       onProgress: (progress) {
         if (progress.moved >= 1) cancel = true;
       },
@@ -1321,7 +1322,7 @@ try {
     );
     final file = await createFile('history.tmp', 'alpha');
 
-    final report = await service.clean([await itemFor(file)]);
+    final report = await service.clean([await itemFor(file)], roots: testRoots);
 
     expect(report.movedCount, 1);
     expect(report.failureCount, 0);

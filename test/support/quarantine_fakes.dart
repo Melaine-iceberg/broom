@@ -216,6 +216,7 @@ class FakeQuarantineService implements QuarantineService {
   @override
   Future<CleanReport> clean(
     List<JunkItem> items, {
+    required ScanRoots roots,
     void Function(CleanProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) async {

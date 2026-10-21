@@ -145,18 +145,16 @@ void main() {
     final root = Directory(p.windows.join(temp.path, 'cache'))
       ..createSync(recursive: true);
     final first = JunkItem(
-      ruleId: 'test.cache',
-      rootPath: root.path,
+      rootIndex: 0,
       path: p.windows.join(root.path, 'first.tmp'),
       size: 10,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     final second = JunkItem(
-      ruleId: 'test.cache',
-      rootPath: root.path,
+      rootIndex: 0,
       path: p.windows.join(root.path, 'second.tmp'),
       size: 25,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     const rule = CleanerRule(
       id: 'test.cache',
@@ -245,18 +243,16 @@ void main() {
     final root = Directory(p.windows.join(temp.path, 'cache'))
       ..createSync(recursive: true);
     final small = JunkItem(
-      ruleId: 'test.cache',
-      rootPath: root.path,
+      rootIndex: 0,
       path: p.windows.join(root.path, 'small.tmp'),
       size: 10,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     final large = JunkItem(
-      ruleId: 'test.cache',
-      rootPath: root.path,
+      rootIndex: 0,
       path: p.windows.join(root.path, 'large.tmp'),
       size: 25,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     const rule = CleanerRule(
       id: 'test.cache',
@@ -327,11 +323,10 @@ void main() {
     final root = Directory(p.windows.join(temp.path, 'cache'))
       ..createSync(recursive: true);
     final locked = JunkItem(
-      ruleId: 'test.cache',
-      rootPath: root.path,
+      rootIndex: 0,
       path: p.windows.join(root.path, 'locked.tmp'),
       size: 10,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
       possiblyLocked: true,
     );
     const rule = CleanerRule(
@@ -386,11 +381,10 @@ void main() {
     final root = Directory(p.windows.join(temp.path, 'cache'))
       ..createSync(recursive: true);
     final item = JunkItem(
-      ruleId: 'test.cache',
-      rootPath: root.path,
+      rootIndex: 0,
       path: p.windows.join(root.path, 'cache.tmp'),
       size: 10,
-      modified: DateTime(2026, 10, 18),
+      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     const audit = RuleAudit(
       reviewNotes: '仅扫描测试缓存。',
@@ -471,25 +465,22 @@ void main() {
     final root = Directory(p.windows.join(temp.path, 'cache'))
       ..createSync(recursive: true);
     final first = JunkItem(
-      ruleId: 'test.cache',
-      rootPath: root.path,
+      rootIndex: 0,
       path: p.windows.join(root.path, 'first.tmp'),
       size: 10,
-      modified: DateTime(2026, 1, 1),
+      modifiedMicros: DateTime(2026, 1, 1).microsecondsSinceEpoch,
     );
     final second = JunkItem(
-      ruleId: 'test.cache',
-      rootPath: root.path,
+      rootIndex: 0,
       path: p.windows.join(root.path, 'second.bin'),
       size: 25,
-      modified: DateTime(2026, 6, 1),
+      modifiedMicros: DateTime(2026, 6, 1).microsecondsSinceEpoch,
     );
     final third = JunkItem(
-      ruleId: 'test.cache',
-      rootPath: root.path,
+      rootIndex: 0,
       path: p.windows.join(root.path, 'third.tmp'),
       size: 40,
-      modified: DateTime(2026, 3, 1),
+      modifiedMicros: DateTime(2026, 3, 1).microsecondsSinceEpoch,
     );
     const rule = CleanerRule(
       id: 'test.cache',
@@ -616,11 +607,10 @@ void main() {
     final root = Directory(p.windows.join(temp.path, 'cache'))
       ..createSync(recursive: true);
     final item = JunkItem(
-      ruleId: 'test.cache',
-      rootPath: root.path,
+      rootIndex: 0,
       path: p.windows.join(root.path, 'gone.tmp'),
       size: 10,
-      modified: DateTime(2026, 1, 1),
+      modifiedMicros: DateTime(2026, 1, 1).microsecondsSinceEpoch,
     );
     const rule = CleanerRule(
       id: 'test.cache',

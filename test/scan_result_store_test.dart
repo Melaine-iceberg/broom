@@ -19,17 +19,21 @@ void main() {
   });
 
   JunkItem item(String name, int size) => JunkItem(
-    ruleId: 'test.rule',
-    rootPath: p.windows.join(temp.path, 'cache'),
+    rootIndex: 0,
     path: p.windows.join(temp.path, 'cache', name),
     size: size,
-    modified: DateTime.utc(2026, 10, 18, 12),
+    modifiedMicros: DateTime.utc(2026, 10, 18, 12).microsecondsSinceEpoch,
   );
+
+  ScanRoots roots() => ScanRoots([
+    ScanRoot(ruleId: 'test.rule', rootPath: p.windows.join(temp.path, 'cache')),
+  ]);
 
   test('streams items and round-trips the latest result', () async {
     final writer = await store.begin(
       ruleIds: const ['test.rule'],
       rulesVersion: 'builtin',
+      roots: roots(),
     );
     await writer.addItems([item('a.tmp', 10)]);
     await writer.addItems([item('b.tmp', 20)]);
@@ -55,12 +59,16 @@ void main() {
     expect(data, isNotNull);
     expect(data!.items, hasLength(2));
     expect(data.items.first.path, p.windows.join(temp.path, 'cache', 'a.tmp'));
+    final root = data.roots.at(data.items.first.rootIndex);
+    expect(root.ruleId, 'test.rule');
+    expect(root.rootPath, p.windows.join(temp.path, 'cache'));
   });
 
   test('replaces the previous result and removes the old directory', () async {
     final first = await store.begin(
       ruleIds: const ['test.rule'],
       rulesVersion: 'builtin',
+      roots: roots(),
     );
     await first.addItems([item('old.tmp', 1)]);
     final firstSummary = await first.complete(
@@ -75,6 +83,7 @@ void main() {
     final second = await store.begin(
       ruleIds: const ['test.rule'],
       rulesVersion: 'builtin',
+      roots: roots(),
     );
     await second.addItems([item('new.tmp', 2)]);
     final secondSummary = await second.complete(
@@ -100,6 +109,7 @@ void main() {
     final writer = await store.begin(
       ruleIds: const ['test.rule'],
       rulesVersion: 'builtin',
+      roots: roots(),
     );
     await writer.complete(
       scannedFiles: 0,
@@ -122,6 +132,7 @@ void main() {
     final writer = await limited.begin(
       ruleIds: const ['test.rule'],
       rulesVersion: 'builtin',
+      roots: roots(),
     );
     await writer.addItems([
       for (var index = 0; index < 10; index++) item('file-$index.tmp', 1),
@@ -153,6 +164,7 @@ void main() {
     final writer = await store.begin(
       ruleIds: const ['test.rule'],
       rulesVersion: 'builtin',
+      roots: roots(),
     );
     await writer.addItems([item('partial.tmp', 1)]);
     await writer.abort();

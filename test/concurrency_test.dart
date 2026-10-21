@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:broom/core/clean/quarantine_service.dart';
+import 'package:broom/core/models/clean_models.dart';
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/platform/file_system.dart';
 import 'package:broom/core/platform/memory_file_system.dart';
@@ -33,11 +34,25 @@ void main() {
   });
 
   JunkItem item(String path, {int size = 4}) => JunkItem(
-    ruleId: 'test.rule',
-    rootPath: sourceRoot,
+    rootIndex: 0,
     path: path,
     size: size,
-    modified: DateTime.utc(2026, 10, 19),
+    modifiedMicros: DateTime.utc(2026, 10, 19).microsecondsSinceEpoch,
+  );
+
+  const testRoots = ScanRoots([
+    ScanRoot(ruleId: 'test.rule', rootPath: sourceRoot),
+  ]);
+
+  Future<CleanReport> clean(
+    List<JunkItem> items, {
+    void Function(CleanProgress progress)? onProgress,
+    bool Function()? isCancelled,
+  }) => service.clean(
+    items,
+    roots: testRoots,
+    onProgress: onProgress,
+    isCancelled: isCancelled,
   );
 
   void seedSession() {
@@ -87,7 +102,7 @@ void main() {
       };
       fs.seedFile('$sourceRoot\\move.txt', contents: 'data');
 
-      final cleanFuture = service.clean([item('$sourceRoot\\move.txt')]);
+      final cleanFuture = clean([item('$sourceRoot\\move.txt')]);
       await renameStarted.future;
       expect(service.operationInProgress, isTrue);
 
@@ -178,9 +193,9 @@ void main() {
         }
       };
 
-      final first = service.clean([item('$sourceRoot\\first.txt', size: 3)]);
+      final first = clean([item('$sourceRoot\\first.txt', size: 3)]);
       await firstStarted.future;
-      final second = service.clean([item('$sourceRoot\\second.txt', size: 3)]);
+      final second = clean([item('$sourceRoot\\second.txt', size: 3)]);
       await Future<void>.delayed(Duration.zero);
       expect(await fs.type('$sourceRoot\\second.txt'), FsEntityType.file);
 
