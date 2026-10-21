@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:isolate';
 
+import 'package:flutter/services.dart';
+
 import '../models/analysis_models.dart';
+import '../platform/directory_enum.dart';
 import 'duplicate_finder.dart';
 import 'file_tree_walker.dart';
 import 'large_file_scanner.dart';
@@ -115,7 +118,9 @@ class AnalysisService implements AnalysisRunner {
     final completer = Completer<Object>();
     _completer = completer;
 
+    var detailedListing = false;
     try {
+      detailedListing = await probeDetailedListingFromRoot();
       _isolate = await Isolate.spawn(
         _analysisEntry,
         _AnalysisRequest(
@@ -126,6 +131,8 @@ class AnalysisService implements AnalysisRunner {
           excludedPaths: excludedPaths,
           events: events.sendPort,
           control: control.sendPort,
+          rootIsolateToken: detailedListing ? RootIsolateToken.instance : null,
+          useDetailedListing: detailedListing,
         ),
         onError: errors.sendPort,
         onExit: exits.sendPort,
@@ -227,6 +234,15 @@ class AnalysisService implements AnalysisRunner {
 
 void _analysisEntry(_AnalysisRequest request) async {
   var cancelled = false;
+  var useDetailedListing = request.useDetailedListing;
+  final token = request.rootIsolateToken;
+  if (token != null) {
+    try {
+      BackgroundIsolateBinaryMessenger.ensureInitialized(token);
+    } catch (_) {
+      useDetailedListing = false;
+    }
+  }
   final control = ReceivePort();
   final subscription = control.listen((message) {
     if (message == _AnalysisControl.cancel) cancelled = true;
@@ -240,6 +256,7 @@ void _analysisEntry(_AnalysisRequest request) async {
             minFileSize: request.minFileSize,
             maxFiles: defaultAnalysisMaxFiles,
             excludedPaths: request.excludedPaths,
+            useDetailedListing: useDetailedListing,
           ).scan(
             onProgress: (progress) => request.events.send(progress),
             isCancelled: () => cancelled,
@@ -254,6 +271,7 @@ void _analysisEntry(_AnalysisRequest request) async {
           maxResults: request.maxResults,
           maxFiles: defaultAnalysisMaxFiles,
           excludedPaths: request.excludedPaths,
+          useDetailedListing: useDetailedListing,
         ).scan(
           onProgress: (progress) => request.events.send(progress),
           isCancelled: () => cancelled,
@@ -280,6 +298,8 @@ class _AnalysisRequest {
     required this.excludedPaths,
     required this.events,
     required this.control,
+    this.rootIsolateToken,
+    this.useDetailedListing = false,
   });
 
   final _AnalysisMode mode;
@@ -289,6 +309,8 @@ class _AnalysisRequest {
   final List<String> excludedPaths;
   final SendPort events;
   final SendPort control;
+  final RootIsolateToken? rootIsolateToken;
+  final bool useDetailedListing;
 }
 
 class _AnalysisDone {

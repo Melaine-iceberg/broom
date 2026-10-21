@@ -162,15 +162,9 @@ class ScanService {
   /// Decides once, from the root isolate, whether worker isolates may use the
   /// native directory enumerator.
   ///
-  /// A worker isolate can only reach the platform when the engine shares the
-  /// root isolate's messenger, and a message sent without one aborts the isolate
-  /// instead of raising a catchable error. Probing here also covers builds whose
-  /// runner predates the channel: they keep the `list` + `stat` path.
-  Future<bool> _probeDetailedListing() async {
-    if (!Platform.isWindows) return false;
-    if (RootIsolateToken.instance == null) return false;
-    return MethodChannelDirectoryEnumerator().probe();
-  }
+  /// Probing here also covers builds whose runner predates the channel: they
+  /// keep the `list` + `stat` path.
+  Future<bool> _probeDetailedListing() => probeDetailedListingFromRoot();
 
   Future<bool> _allRootsIndexable(List<ScanJob> jobs, NtfsIndex index) async {
     try {

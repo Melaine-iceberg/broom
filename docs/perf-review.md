@@ -289,11 +289,24 @@ flutter test benchmark/clean_attribution_test.dart
 - 缓存不参与 `olderThan` 的时间基准：页面停留期间"30 天前修改"的边界不会随真实时间推移而重算。改动前后都只在重建时判断，差异在秒级以内。
 - 回归用例：`test/result_filters_test.dart` 用改造前的比较器实现作 oracle，对 300 条含大量并列键的数据逐种排序断言顺序不变；缓存命中/失效计数逐次断言。`test/rule_detail_page_test.dart` 新增"锁探测在页面已打开后标记条目，行内锁图标随之出现且顺序不变"——把版本号写死为 0 时该用例失败，已确认。
 
-### P1-5 分析工具没有复用扫描引擎的枚举能力（待实施）
+### P1-5 分析工具没有复用扫描引擎的枚举能力（已实施）
 
-`lib/core/analysis/file_tree_walker.dart:119-146` 用 `Directory.list` + 逐条 `await entity.stat()`，每文件一次 112 µs。`%TEMP%` 的 14,440 个文件仅 stat 就是 ~1.6 s；20 万文件的目录约 22 s。
+**现象**：`lib/core/analysis/file_tree_walker.dart` 原来用 `Directory.list` + 逐条 `await entity.stat()`，每文件一次 112 µs。`%TEMP%` 的 14,440 个文件仅 stat 就是 ~1.6 s；20 万文件的目录约 22 s。
 
-而 `MethodChannelDirectoryEnumerator`（`FindFirstFileW`，一次返回名称/大小/时间/属性）已经存在并被扫描器使用，`IoFileSystem` 也已经实现了 `DetailedDirectoryListing`。把 walker 切到 `listDetailed` 可以整块消掉这项成本。注意 walker 同时被 `LargeFileScanner` 与 `DuplicateFinder` 使用，切换后需确认大文件阈值仍按 `stat.size` 过滤。
+**改法**：walker 改为依赖 `BroomFileSystem`（默认 `IoFileSystem`），在后端实现 `DetailedDirectoryListing` 时优先 `listDetailed`，把名称、大小、修改时间与类型从同一次 `FindFirstFileW` 枚举里取回；`list + stat` 回退原样保留。访问者签名由 `(File, FileStat)` 改为 `(String, FsStat)`，两个使用方（`LargeFileScanner` / `DuplicateFinder`）只改取路径的方式。
+
+分析工具运行在独立 isolate，平台通道需要根 isolate 的 messenger，因此还有一层协调：`AnalysisService` 在根 isolate 调用 `probeDetailedListingFromRoot()`（与扫描器共用同一探测），成功后把 `RootIsolateToken` 发进分析 isolate 并 `BackgroundIsolateBinaryMessenger.ensureInitialized`；token 缺失或初始化失败时把 `useDetailedListing` 降为 false，walker 走 `list + stat`。这样"后台 isolate 直接发平台消息会 abort"的风险在分析侧也被结构性规避。
+
+**收益**：详细枚举路径下，N 个文件的逐文件 `stat` 从 N 次降到 0，只剩每个目录一次枚举。按本文 112 µs/次的口径，14,440 个文件省约 1.6 s，20 万文件省约 22 s，且同时作用于重复文件与大文件两个工具。`test/file_tree_walker_test.dart` 用 `MemoryFileSystem` 的操作钩子固定了调用次数：详细路径为 2 次 `listDetailed` + 0 次 `stat`（3 个文件），回退路径为 2 次 `list` + 3 次 `stat`。
+
+局限：`flutter test` 没有原生 runner，通道探测必然失败，因此这项收益没有做安装包内的端到端 A/B；上面的节省是按已有单价与调用次数推算的量级，判断方式与 P0-5 的"调用次数可复现、端到端受 Defender 支配"一致。
+
+**风险**：低。
+
+- 枚举返回的 size / modified 与 `stat` 同源（`WIN32_FIND_DATAW`），大文件阈值继续按 `FsStat.size` 过滤。`test/large_file_scanner_test.dart` 新增用例断言枚举出的 500 B / 50 B 文件在 100 B 阈值下的结果，并断言全程没有 `stat`。
+- 链接、排除目录、截断、取消与根目录缺失的语义不变；显式 `useDetailedListing: false` 的回退路径仍逐文件 `stat` 并把失败计入 `errorCount`。
+- 一处报告口径变化：当后端是 `IoFileSystem` 且原生通道不可用时，其内部回退会跳过 stat 失败的子项（与扫描器一致），这些失败不再计入 walker 的 `errorCount`。该路径只出现在无原生通道的构建或测试环境；安装包内走原生枚举，不存在逐文件 stat。
+- 回归：新增 `test/file_tree_walker_test.dart`（6 项）与 `test/large_file_scanner_test.dart` 的枚举尺寸用例；全量 410 项测试与 `flutter analyze --fatal-infos` 通过。
 
 ### P1-6 结果对象内存放大（待实施）
 
@@ -332,7 +345,7 @@ flutter test benchmark/clean_attribution_test.dart
 1. **P0-1**（已实施）：纯浪费，改动局部，风险最低；实测 -12% 端到端清理耗时。
 2. **P0-5a–d**（已实施）：按"能整块删掉的调用"排序推进——`type` 复检、`position`、计划批写、哈希读取，四项合计约 380 µs/文件（14–16%）。互不冲突，各自带独立回归用例。
 3. **P0-3 + P0-4**（已实施）：都是 UI 侧"重复计算"。P0-3 把每次重建的三个聚合从 22 ms 降到 0；P0-4 把每次重建的过滤+排序从 50 ms 降到 0（缓存命中），并把 `pathAsc` 从 405 ms 降到 167 ms。
-4. **P1-5**：一次改动同时提速重复文件与大文件分析，收益明确。
+4. **P1-5**（已实施）：walker 复用 `listDetailed`，逐文件 `stat` 归零；分析 isolate 通过根 isolate 探测 + token 接入原生枚举。
 5. **P1-6 + P1-7**：内存优化，涉及模型调整，放在功能稳定后做。
 6. **P0-2 / P2-8 / P2-9**：需要基准验证或涉及原生侧，按实测收益排期。
 
@@ -343,6 +356,7 @@ flutter test benchmark/clean_attribution_test.dart
 - **P0-5a–d 已落地**：短路全成功批次的条目复检、日志偏移改为累计字节数、清理计划 64 行批写、新增 `BroomFileSystem.readBytesUpTo` 供哈希与撤销校验使用。调用次数上 `type` 1.01→0.01、`position` 1.00→0.00、日志与计划写入 2.00→1.02；哈希读取交错 A/B 为 515.5→434.0 µs（−81.4）。回归测试 `test/quarantine_clean_efficiency_test.dart`（10 项），全量 397 项通过。
 - **P0-3 已落地**：选择聚合改为增量维护。所有写路径收敛到 `_selectPath` / `_deselectPath` 两个原语（而不是在九条写路径上各改一遍），getter 由全量遍历变为字段读取；`_startLockProbe` 顺带重算已选占用计数。10 万条三个 getter 合计 22.0→0.000 ms。
 - **P0-4 已落地**：新增 `VisibleItemsCache`（按 `source` 身份 + filter 值 + sort + `itemsRevision` 记忆化）、`CleanController.itemsRevision`、`ResultItemFilter` 值相等。排序按"键是否已在条目上"分流：数值键直接比较并在并列时惰性缓存小写路径，路径/扩展名键先派生一次再排序。默认视图每次重建 50.4→0 ms；`pathAsc` 405.1→166.7 ms，`extensionAsc` 2,443.6→273.8 ms。新增 `benchmark/ui_preview_benchmark.dart`，把旧实现作为参照副本保留在基准内以便复现同轮 A/B。
+- **P1-5 已落地**：分析 walker 改用 `BroomFileSystem` 并优先 `DetailedDirectoryListing`，访问者签名改为 `(String, FsStat)`；`AnalysisService` 在根 isolate 探测原生枚举并通过 `RootIsolateToken` 在分析 isolate 初始化 messenger，失败时回退 `list + stat`。详细枚举路径下每文件 `stat` 从 1 次降为 0（3 个文件对应 2 次 `listDetailed` + 0 次 `stat`），回退路径保持 N 次 `stat` 与错误计数。新增 7 项回归用例，全量 410 项测试与 `flutter analyze --fatal-infos` 通过。
 - 记录一处方向性修正：装饰-排序并非对所有排序都更快。数值键本来就在条目上，装饰只是多出 O(N) 次分配，`sizeDesc` 实测因此从 46.4 涨到 63.5 ms。收益成立的区间是"派生键比分配贵得多"（`pathAsc`、`extensionAsc`）与"键大量并列"（惰性缓存生效）。全量 403 项测试与 `flutter analyze --fatal-infos` 通过。
 - 评审过程中修正了一个判断：最初按单价推算认为"清理时间几乎全花在重复元数据查询上"，端到端 A/B 证明元数据只占约 12%，rename 与文件读取才是主体。文档中的收益数字以实测为准，未采用推算值。
 - 另一处修正：P0-1 时的单步归因把约 1,000 µs 记为"其余未归因"，其中相当一部分并非散落在循环里，而是两项此前没被列入分解的操作——`finalize` 阶段的逐条 `type()` 与清理计划文件的逐条写入。这说明"按已知项求和再取差额"容易把整类操作漏在统计口径之外，凡涉及归因应以"每一次调用都有账"的方式重做。

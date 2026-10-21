@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 
 import '../models/analysis_models.dart';
+import '../platform/file_system.dart';
 import '../platform/windows_path.dart';
 import 'file_tree_walker.dart';
 
@@ -21,6 +22,8 @@ class DuplicateFinder {
     this.maxFiles = defaultAnalysisMaxFiles,
     this.excludedPaths = const [],
     this.partialChunkSize = _defaultPartialChunkSize,
+    this.fileSystem = const IoFileSystem(),
+    this.useDetailedListing = true,
   }) : assert(partialChunkSize > 0);
 
   final String root;
@@ -28,6 +31,8 @@ class DuplicateFinder {
   final int maxFiles;
   final List<String> excludedPaths;
   final int partialChunkSize;
+  final BroomFileSystem fileSystem;
+  final bool useDetailedListing;
 
   Future<DuplicateScanReport> scan({
     void Function(DuplicateProgress progress)? onProgress,
@@ -70,14 +75,16 @@ class DuplicateFinder {
           root: root,
           excludedPaths: excludedPaths,
           maxFiles: maxFiles,
+          fileSystem: fileSystem,
+          useDetailedListing: useDetailedListing,
         ).walk(
-          onFile: (file, stat) {
+          onFile: (path, stat) {
             if (stat.size == 0 || stat.size < minFileSize) return;
             filesBySize
                 .putIfAbsent(stat.size, () => [])
                 .add(
                   DuplicateFile(
-                    path: file.path,
+                    path: path,
                     size: stat.size,
                     modified: stat.modified,
                   ),

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../platform/file_system.dart';
 import '../platform/windows_path.dart';
 import '../safety/path_guard.dart';
 
@@ -26,7 +27,7 @@ class FileWalkResult {
   final bool rootMissing;
 }
 
-typedef FileWalkVisitor = void Function(File file, FileStat stat);
+typedef FileWalkVisitor = void Function(String path, FsStat stat);
 typedef FileWalkProgress = void Function(
   int scannedFiles,
   int scannedBytes,
@@ -37,11 +38,18 @@ typedef FileWalkProgress = void Function(
 ///
 /// Follows no links, skips excluded subtrees and reports inaccessible entries
 /// instead of aborting the whole scan.
+///
+/// When [fileSystem] can also provide a [DetailedDirectoryListing], the walker
+/// reads names, sizes and timestamps from the same enumeration instead of
+/// issuing one `stat` per file. [useDetailedListing] lets a spawned isolate
+/// disable that path when it cannot reach the native enumerator.
 class FileTreeWalker {
   FileTreeWalker({
     required String root,
     this.excludedPaths = const [],
     this.maxFiles = defaultAnalysisMaxFiles,
+    this.fileSystem = const IoFileSystem(),
+    this.useDetailedListing = true,
   }) : root = _normalize(root) {
     for (final path in excludedPaths) {
       _excludedKeys.add(_key(path));
@@ -51,6 +59,8 @@ class FileTreeWalker {
   final String root;
   final List<String> excludedPaths;
   final int maxFiles;
+  final BroomFileSystem fileSystem;
+  final bool useDetailedListing;
   final Set<String> _excludedKeys = {};
 
   static String _normalize(String path) => PathGuard.normalize(path);
@@ -89,20 +99,76 @@ class FileTreeWalker {
       rootMissing: rootMissing,
     );
 
-    FileSystemEntityType rootType;
+    FsEntityType rootType;
     try {
-      rootType = await FileSystemEntity.type(
-        WindowsPath.forIo(root),
-        followLinks: false,
-      );
+      rootType = await fileSystem.type(root);
     } on FileSystemException {
       return build(rootMissing: true);
     }
-    if (rootType != FileSystemEntityType.directory) {
+    if (rootType != FsEntityType.directory) {
       return build(rootMissing: true);
     }
     if (_isExcludedKey(_key(root))) {
       return build();
+    }
+
+    final detailed =
+        useDetailedListing && fileSystem is DetailedDirectoryListing
+        ? fileSystem as DetailedDirectoryListing
+        : null;
+
+    Stream<({String path, FsEntityType type, int size, DateTime modified})>
+    listingOf(String directory) async* {
+      if (detailed != null) {
+        await for (final entry in detailed.listDetailed(directory)) {
+          if (entry.type == FsEntityType.link ||
+              entry.type == FsEntityType.notFound) {
+            continue;
+          }
+          final path = WindowsPath.canonical(_join(directory, entry.name));
+          if (_isExcludedKey(_key(path))) continue;
+          yield (
+            path: path,
+            type: entry.type,
+            size: entry.size,
+            modified: entry.modified,
+          );
+        }
+        return;
+      }
+
+      await for (final entry in fileSystem.list(directory)) {
+        if (entry.type == FsEntityType.link ||
+            entry.type == FsEntityType.notFound) {
+          continue;
+        }
+        final path = WindowsPath.canonical(entry.path);
+        if (_isExcludedKey(_key(path))) continue;
+        if (entry.type == FsEntityType.directory) {
+          yield (
+            path: path,
+            type: FsEntityType.directory,
+            size: 0,
+            modified: _epoch,
+          );
+          continue;
+        }
+        if (entry.type != FsEntityType.file) continue;
+        FsStat stat;
+        try {
+          stat = await fileSystem.stat(path);
+        } on FileSystemException {
+          errorCount++;
+          continue;
+        }
+        if (stat.type != FsEntityType.file) continue;
+        yield (
+          path: path,
+          type: FsEntityType.file,
+          size: stat.size,
+          modified: stat.modified,
+        );
+      }
     }
 
     final seenDirectories = <String>{_key(root)};
@@ -116,44 +182,36 @@ class FileTreeWalker {
       }
       final current = pending.removeLast();
       try {
-        await for (final entity in Directory(
-          WindowsPath.forIo(current),
-        ).list(followLinks: false)) {
+        await for (final listed in listingOf(current)) {
           if (isCancelled?.call() ?? false) {
             cancelled = true;
             break scanLoop;
           }
-          if (entity is Link) continue;
-          final entityPath = WindowsPath.canonical(entity.path);
-          final entityKey = _key(entityPath);
-          if (_isExcludedKey(entityKey)) continue;
 
-          if (entity is Directory) {
-            if (seenDirectories.add(entityKey)) {
-              pending.add(entityPath);
+          if (listed.type == FsEntityType.directory) {
+            if (seenDirectories.add(_key(listed.path))) {
+              pending.add(listed.path);
             }
             continue;
           }
-          if (entity is! File) continue;
+          if (listed.type != FsEntityType.file) continue;
 
           if (scannedFiles >= maxFiles) {
             truncated = true;
             break scanLoop;
           }
 
-          FileStat stat;
-          try {
-            stat = await entity.stat();
-          } on FileSystemException {
-            errorCount++;
-            continue;
-          }
-          if (stat.type != FileSystemEntityType.file) continue;
-
           scannedFiles++;
-          scannedBytes += stat.size;
-          onFile(File(entityPath), stat);
-          report(entityPath);
+          scannedBytes += listed.size;
+          onFile(
+            listed.path,
+            FsStat(
+              type: FsEntityType.file,
+              size: listed.size,
+              modified: listed.modified,
+            ),
+          );
+          report(listed.path);
         }
       } on FileSystemException {
         errorCount++;
@@ -162,6 +220,15 @@ class FileTreeWalker {
 
     report('', force: true);
     return build();
+  }
+
+  static final DateTime _epoch = DateTime.fromMillisecondsSinceEpoch(0);
+
+  static String _join(String directory, String name) {
+    final separator = p.windows.separator;
+    return directory.endsWith(separator) || directory.endsWith('/')
+        ? '$directory$name'
+        : '$directory$separator$name';
   }
 
   bool _isExcludedKey(String key) =>

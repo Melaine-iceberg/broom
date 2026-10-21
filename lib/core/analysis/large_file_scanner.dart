@@ -1,4 +1,5 @@
 import '../models/analysis_models.dart';
+import '../platform/file_system.dart';
 import 'file_tree_walker.dart';
 
 const defaultLargeFileMinSize = 100 * 1024 * 1024;
@@ -12,6 +13,8 @@ class LargeFileScanner {
     this.maxResults = defaultLargeFileMaxResults,
     this.maxFiles = defaultAnalysisMaxFiles,
     this.excludedPaths = const [],
+    this.fileSystem = const IoFileSystem(),
+    this.useDetailedListing = true,
   });
 
   final String root;
@@ -19,6 +22,8 @@ class LargeFileScanner {
   final int maxResults;
   final int maxFiles;
   final List<String> excludedPaths;
+  final BroomFileSystem fileSystem;
+  final bool useDetailedListing;
 
   Future<LargeFileScanReport> scan({
     void Function(LargeFileProgress progress)? onProgress,
@@ -31,12 +36,14 @@ class LargeFileScanner {
           root: root,
           excludedPaths: excludedPaths,
           maxFiles: maxFiles,
+          fileSystem: fileSystem,
+          useDetailedListing: useDetailedListing,
         ).walk(
-          onFile: (file, stat) {
+          onFile: (path, stat) {
             if (stat.size < minFileSize) return;
             matches.add(
               LargeFileEntry(
-                path: file.path,
+                path: path,
                 size: stat.size,
                 modified: stat.modified,
               ),

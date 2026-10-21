@@ -142,3 +142,16 @@ class MethodChannelDirectoryEnumerator {
     return FsEntityType.file;
   }
 }
+
+/// Decides once, from the root isolate, whether spawned isolates may use the
+/// native directory enumerator.
+///
+/// A background isolate can only reach the platform when the engine shares the
+/// root isolate's messenger, and a message sent without one aborts the isolate
+/// instead of raising a catchable error. Callers must probe here before
+/// spawning and forward [RootIsolateToken.instance] to the worker.
+Future<bool> probeDetailedListingFromRoot() async {
+  if (!Platform.isWindows) return false;
+  if (RootIsolateToken.instance == null) return false;
+  return MethodChannelDirectoryEnumerator().probe();
+}

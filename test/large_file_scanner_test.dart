@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:broom/core/analysis/large_file_scanner.dart';
 import 'package:broom/core/models/analysis_models.dart';
+import 'package:broom/core/platform/memory_file_system.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -125,5 +126,25 @@ void main() {
     expect(last.scannedFiles, 2);
     expect(last.scannedBytes, 350);
     expect(last.matchedFiles, 1);
+  });
+
+  test('filters on enumerated sizes without a per-file stat', () async {
+    final fs = MemoryFileSystem();
+    fs.seedFile(r'C:\large\huge.bin', size: 500);
+    fs.seedFile(r'C:\large\small.bin', size: 50);
+    final operations = <String>[];
+    fs.onOperation = (operation, path) async => operations.add(operation);
+
+    final report = await LargeFileScanner(
+      root: r'C:\large',
+      minFileSize: 100,
+      fileSystem: fs,
+    ).scan();
+
+    expect(report.files.single.path, r'C:\large\huge.bin');
+    expect(report.files.single.size, 500);
+    expect(report.scannedFiles, 2);
+    expect(report.scannedBytes, 550);
+    expect(operations, isNot(contains('stat')));
   });
 }

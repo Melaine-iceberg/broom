@@ -90,7 +90,7 @@ Future<({String filePath, List<int> content})> _roundTrip({
 
   final walked = <String>[];
   final walk = await FileTreeWalker(root: testRoot)
-      .walk(onFile: (file, stat) => walked.add(file.path));
+      .walk(onFile: (path, stat) => walked.add(path));
   expect(walk.rootMissing, isFalse);
   expect(
     walked.map((path) => path.toLowerCase()),
