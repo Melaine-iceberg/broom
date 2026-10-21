@@ -100,10 +100,17 @@ NTFS 索引 stat 流水线（P0-2，2026-10-21，2 万个真实文件，交错 3
 
 | 条数 | 文件 | 当前 `store.load` | isolate 流式解析 | 主 isolate 纯接收上界 |
 | ---: | ---: | ---: | ---: | ---: |
-| 100,000 | 23.0 MiB | 588 ms | 542 ms | 7 ms |
-| 1,000,000 | 230.6 MiB | 5,384 ms | 5,222 ms | 103 ms |
+| 100,000 | 23.0 MiB | 582 ms | 556 ms | 7 ms |
+| 1,000,000 | 230.6 MiB | 5,496 ms | 5,452 ms | 125 ms |
 
-当前路径的解析全部落在调用方（UI）isolate；后台 isolate 方案总耗时不变或略优，主 isolate 只剩批量接收。基准不含 `_groupResults`、默认选择与首帧构建。结论见 `docs/perf-review.md` 的 P2-8。
+同一基准还驱动真实 `CleanController.restoreLastScan` 测量了解析之后的收尾工作：
+
+| 条数 | 当前完整 restore | `_groupResults` | 解析后主线程 |
+| ---: | ---: | ---: | ---: |
+| 100,000 | 653 ms | 29 ms | 70 ms |
+| 1,000,000 | 6,328 ms | 388 ms | 832 ms |
+
+当前路径的解析全部落在调用方（UI）isolate；后台 isolate 方案总耗时不变或略优，主 isolate 只剩批量接收加约 0.07 / 0.83 s 的收尾工作。基准不含真实锁探测与首帧构建。结论见 `docs/perf-review.md` 的 P2-8。
 
 ## 说明
 

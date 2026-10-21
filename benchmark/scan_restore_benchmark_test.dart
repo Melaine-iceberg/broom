@@ -3,11 +3,14 @@
 //
 // Current restore parses `items.jsonl` on the calling isolate; on desktop that
 // is the UI isolate. This benchmark writes a real result file through
-// `ScanResultWriter`, warms the OS cache, and compares:
+// `ScanResultWriter`, warms the OS cache, and measures:
 //
 //   main    - `ScanResultStore.load()` as shipped
 //   isolate - the same schema decoded in a background isolate, streamed back
 //             in batches so the main isolate only pays message handling
+//   group   - `CleanController._groupResults` reproduced on the flat items
+//   restore - the real `CleanController.restoreLastScan()` end to end, which
+//             adds filtering, grouping, default selection and summary folds
 //
 // Run manually; `flutter test` only scans `test/`, so this never runs in CI:
 //
@@ -21,9 +24,18 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:broom/core/clean/file_metadata.dart';
+import 'package:broom/core/clean/quarantine_service.dart';
+import 'package:broom/core/models/cleaner_rule.dart';
 import 'package:broom/core/models/scan_models.dart';
+import 'package:broom/core/platform/cleaner_platform.dart';
+import 'package:broom/core/platform/file_lock_probe.dart';
 import 'package:broom/core/platform/path_semantics.dart';
+import 'package:broom/core/safety/path_guard.dart';
 import 'package:broom/core/scan/scan_result_store.dart';
+import 'package:broom/core/scan/scan_service.dart';
+import 'package:broom/core/settings/exclusion_store.dart';
+import 'package:broom/ui/clean_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -71,6 +83,7 @@ void main() {
         final isolate = <Duration>[];
         final isolateMain = <Duration>[];
         final isolateWorker = <Duration>[];
+        StoredScanData? lastData;
         for (var round = 0; round < _rounds; round++) {
           final mainsFirst = round.isEven;
           for (final kind
@@ -80,6 +93,7 @@ void main() {
               final data = await store.load(summary);
               stopwatch.stop();
               _expectCount(data?.items.length, count, 'main');
+              lastData = data;
               main.add(stopwatch.elapsed);
             } else {
               final result = await _parseInIsolate(file.path);
@@ -119,6 +133,71 @@ void main() {
         stdout.writeln(
           '    receive-only upper bound: ${_ms(transferOnly)} '
           '(send + deserialize + append, no parsing)',
+        );
+
+        final data = lastData!;
+        final rules = [
+          for (var index = 0; index < _ruleIds.length; index++)
+            CleanerRule(
+              id: _ruleIds[index],
+              title: _ruleIds[index],
+              category: 'bench',
+              description: 'bench',
+              pathPatterns: const [],
+              risk: index.isEven ? CleanRisk.safe : CleanRisk.review,
+            ),
+        ];
+        final group = <Duration>[];
+        for (var round = 0; round < _rounds; round++) {
+          final stopwatch = Stopwatch()..start();
+          final grouped = _groupResults(data.items, rules, data.roots);
+          stopwatch.stop();
+          _expectCount(
+            grouped.fold<int>(
+              0,
+              (total, result) => total + result.items.length,
+            ),
+            count,
+            'group',
+          );
+          group.add(stopwatch.elapsed);
+        }
+        final groupMedian = _median(group);
+
+        final controller = await _createController(
+          store: store,
+          rules: rules,
+          basePath: p.windows.join(base.path, 'c$count'),
+        );
+        final restores = <Duration>[];
+        try {
+          for (var round = 0; round < _rounds; round++) {
+            final stopwatch = Stopwatch()..start();
+            await controller.restoreLastScan();
+            stopwatch.stop();
+            _expectCount(
+              controller.results.fold<int>(
+                0,
+                (total, result) => total + result.items.length,
+              ),
+              count,
+              'restore',
+            );
+            restores.add(stopwatch.elapsed);
+          }
+        } finally {
+          controller.dispose();
+        }
+        final restoreMedian = _median(restores);
+        final postParse = restoreMedian - mainMedian;
+        stdout.writeln('  group+sort only   : ${_ms(groupMedian)}');
+        stdout.writeln(
+          '  full restore      : ${_ms(restoreMedian)} '
+          '(parse + filter + group + selection + folds)',
+        );
+        stdout.writeln(
+          '    post-parse      : ${_ms(postParse)} '
+          '(derived: full restore - main load)',
         );
       }
     } finally {
@@ -387,6 +466,87 @@ Duration _median(List<Duration> values) {
 }
 
 String _ms(Duration value) => '${value.inMilliseconds} ms';
+
+Future<CleanController> _createController({
+  required ScanResultStore store,
+  required List<CleanerRule> rules,
+  required String basePath,
+}) async {
+  final guard = PathGuard(protectedRoots: const []);
+  final controller = CleanController(
+    platform: _BenchPlatform(rules),
+    guard: guard,
+    quarantine: QuarantineService(
+      quarantineRoot: p.windows.join(basePath, 'quarantine'),
+      guard: guard,
+      metadataAccess: const LocalFileMetadataAccess(),
+    ),
+    exclusions: ExclusionStore(
+      filePath: p.windows.join(basePath, 'exclusions.json'),
+    ),
+    scanServiceFactory: ScanService.new,
+    // Keeps the asynchronous probe from competing with the next measured
+    // restore; building the path list is still part of restoreLastScan.
+    lockProbe: const _HangingLockProbe(),
+    scanResultStore: store,
+  );
+  await controller.initialize();
+  return controller;
+}
+
+/// Mirrors `CleanController._groupResults`; keep the two in sync.
+List<RuleResult> _groupResults(
+  List<JunkItem> items,
+  List<CleanerRule> rules,
+  ScanRoots roots,
+) {
+  final grouped = <String, List<JunkItem>>{};
+  for (final item in items) {
+    grouped.putIfAbsent(roots.at(item.rootIndex).ruleId, () => []).add(item);
+  }
+
+  final results = <RuleResult>[];
+  for (final rule in rules) {
+    final ruleItems = grouped.remove(rule.id);
+    if (ruleItems == null || ruleItems.isEmpty) continue;
+    ruleItems.sort((a, b) => b.size.compareTo(a.size));
+    results.add(RuleResult(rule: rule, items: ruleItems));
+  }
+  return results;
+}
+
+class _BenchPlatform implements CleanerPlatform {
+  _BenchPlatform(this.rules);
+
+  @override
+  final List<CleanerRule> rules;
+
+  @override
+  String get displayName => 'bench';
+
+  @override
+  Map<String, String> get environment => const {};
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  String? get quarantineRoot => null;
+
+  @override
+  String get rulesVersion => 'bench';
+
+  @override
+  Future<List<String>> resolveRoots(CleanerRule rule) async => const [];
+}
+
+class _HangingLockProbe implements FileLockProbe {
+  const _HangingLockProbe();
+
+  @override
+  Future<List<bool>> probePossiblyLocked(List<String> paths) =>
+      Completer<List<bool>>().future;
+}
 
 class _Request {
   _Request(this.path, this.reply);
