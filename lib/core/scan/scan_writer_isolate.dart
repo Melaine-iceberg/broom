@@ -15,6 +15,14 @@ class ScanWriterException implements Exception {
   String toString() => message;
 }
 
+/// Encoded lines are coalesced into writes of at least this size.
+///
+/// Flushing once per 256-item append added one sink round-trip per batch
+/// (~3,900 for a million items). The file is not published until `_Complete`
+/// runs, so holding the tail in memory changes no observable semantics; small
+/// scans simply flush their remaining bytes in `_Complete`.
+const int _writeBufferBytes = 4 * 1024 * 1024;
+
 /// Encodes and writes `items.jsonl` in a dedicated isolate.
 ///
 /// The writer owns the [IOSink]; the calling isolate only ships
@@ -244,6 +252,17 @@ Future<void> _writerWorker((SendPort, SendPort) ports) async {
   var itemsWritten = 0;
   var limited = false;
   String? error;
+  var pending = BytesBuilder(copy: false);
+
+  Future<void> flushPending(IOSink target) async {
+    try {
+      target.add(pending.takeBytes());
+      await target.flush();
+    } on FileSystemException catch (failure) {
+      error = failure.message;
+      limited = true;
+    }
+  }
 
   void reply(int id, {String? fatalError}) {
     replies.send(
@@ -280,6 +299,7 @@ Future<void> _writerWorker((SendPort, SendPort) ports) async {
         limited = false;
         bytesWritten = 0;
         itemsWritten = 0;
+        pending = BytesBuilder(copy: false);
         reply(id);
       case _Append(:final id, :final items):
         final activeSink = sink;
@@ -291,7 +311,6 @@ Future<void> _writerWorker((SendPort, SendPort) ports) async {
           reply(id);
           continue;
         }
-        final buffer = BytesBuilder(copy: false);
         for (final item in items) {
           final root = roots!.at(item.rootIndex);
           final line = jsonEncode({
@@ -309,30 +328,29 @@ Future<void> _writerWorker((SendPort, SendPort) ports) async {
             limited = true;
             break;
           }
-          buffer
+          pending
             ..add(lineBytes)
             ..addByte(0x0A);
           bytesWritten += cost;
           itemsWritten++;
         }
-        try {
-          if (buffer.isNotEmpty) {
-            activeSink.add(buffer.takeBytes());
-            await activeSink.flush();
-          }
-        } on FileSystemException catch (failure) {
-          error = failure.message;
-          limited = true;
+        if (pending.length >= _writeBufferBytes) {
+          await flushPending(activeSink);
         }
         reply(id);
       case _Complete(:final id):
         String? fatalError;
+        final activeSink = sink;
         try {
-          await sink?.flush();
-          await sink?.close();
+          if (activeSink != null && pending.isNotEmpty) {
+            activeSink.add(pending.takeBytes());
+          }
+          await activeSink?.flush();
+          await activeSink?.close();
         } on FileSystemException catch (failure) {
           fatalError = failure.message;
         }
+        pending = BytesBuilder(copy: false);
         sink = null;
         reply(id, fatalError: fatalError);
       case _Abort(:final id):
@@ -341,6 +359,7 @@ Future<void> _writerWorker((SendPort, SendPort) ports) async {
         } on FileSystemException {
           // Best effort; the caller deletes the directory.
         }
+        pending = BytesBuilder(copy: false);
         sink = null;
         limited = true;
         reply(id);

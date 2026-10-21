@@ -206,10 +206,7 @@ void _benchmarkExtensions(List<JunkItem> items) {
   );
 
   final sorted = List<String>.unmodifiable(extensions.toList()..sort());
-  _row(
-    '打开页面（新：读取 RuleResult.extensions）',
-    _time(() => _sink = sorted.length),
-  );
+  _row('打开页面（新：读取 RuleResult.extensions）', _time(() => _sink = sorted.length));
 }
 
 class _IncrementalAggregates {

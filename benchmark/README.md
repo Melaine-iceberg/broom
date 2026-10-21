@@ -2,7 +2,7 @@
 
 基准直接驱动扫描引擎与 Flutter 桌面运行时，不使用真实缓存目录：文件树由 `benchmark/support/synthetic_tree_file_system.dart` 按需生成，因此结果可以重复，也不会把机器上的真实文件带入测试。
 
-例外是需要在真实文件上测量的三项：`benchmark/clean_attribution_test.dart` 的开销几乎全部来自真实的系统调用（rename、open、Defender 过滤驱动）；`benchmark/ntfs_index_benchmark_test.dart` 的每个索引候选都要 `stat`；`benchmark/scan_restore_benchmark_test.dart` 需要真实的 `items.jsonl`（1M 条约 231 MiB）。三者都在系统临时目录下自建文件并在结束后删除。
+例外是需要在真实文件上测量的四项：`benchmark/clean_attribution_test.dart` 的开销几乎全部来自真实的系统调用（rename、open、Defender 过滤驱动）；`benchmark/ntfs_index_benchmark_test.dart` 的每个索引候选都要 `stat`；`benchmark/scan_restore_benchmark_test.dart` 需要真实的 `items.jsonl`（1M 条约 231 MiB）；`benchmark/scan_writer_benchmark.dart` 驱动真实的写侧 isolate，并额外用 IOSink 写入约 250 MiB 的预编码行，文件在每次测量后删除。四者都在系统临时目录下自建文件并在结束后删除。
 
 `benchmark/ui_preview_benchmark.dart` 也是合成的：10 万条 `JunkItem` 在内存里生成，只测选择聚合与过滤/排序的 CPU 成本，不碰磁盘。
 
@@ -23,6 +23,10 @@ flutter test benchmark/ntfs_index_benchmark_test.dart
 
 # 恢复侧解析 A/B：主 isolate vs 后台 isolate 流式解析（10 万 / 100 万条）
 flutter test benchmark/scan_restore_benchmark_test.dart
+
+# 写侧编码/写入/ flush 拆分（默认 10 万条，可指定条数）
+dart run benchmark/scan_writer_benchmark.dart
+dart run benchmark/scan_writer_benchmark.dart --items=1000000
 
 # UI 侧选择聚合与过滤/排序（纯 CPU，可指定条目数）
 dart run benchmark/ui_preview_benchmark.dart
@@ -104,6 +108,24 @@ NTFS 索引 stat 流水线（P0-2，2026-10-21，2 万个真实文件，交错 3
 | 1,000,000 | 230.6 MiB | 5,656–5,749 ms | 6,148–6,445 ms | 0.40–0.65 s |
 
 `load` 包含 worker 内的解析、按允许规则过滤、分组与按体积排序；完整 restore 由真实 `CleanController.restoreLastScan` 驱动，额外包含默认选择、摘要 fold 与锁探测路径表构建。基准不含真正的异步锁探测与首帧构建。改造前的主 isolate 对照数据见 `docs/perf-review.md` 的 P2-8。
+
+写侧（P2-12，2026-10-21，100 万条，3 轮中位数）。第一张表是真实 `ScanResultStore` / `ScanResultWriter` 的端到端耗时（含主 isolate 生成条目与 isolate 传输）；第二张表绕过 JSON 编码与 isolate，把预编码行直接写入 IOSink，用来拆分 flush 与写入成本。改造前的数字来自同一台机器上的首次运行：
+
+| append 批次 | 改造前 | 改造后（多次运行） |
+| ---: | ---: | ---: |
+| 256 条（生产边界） | 8,835 ms | 7,971–9,059 ms |
+| 8,192 条 | 9,132 ms | 7,869–8,805 ms |
+
+| 裸写策略（1M 行 × 247 B） | 墙钟 | flush 等待 | `add`/flush 次数 |
+| --- | ---: | ---: | ---: |
+| 256 条 `add` + flush（旧） | 269–319 ms | 257–303 ms | 3,908 |
+| 256 条聚合到 4 MiB（新） | 231–238 ms | 121–126 ms | 59 |
+| 256 条 `add`，末尾单次 flush | 236–266 ms | 236–266 ms | 1 |
+| 8,192 条 `add` + flush | 118–123 ms | 116–121 ms | 124 |
+| 8,192 条 `add`，末尾单次 flush | 118 ms | 118 ms | 1 |
+| 仅 `jsonEncode` + `utf8.encode` | 4,085–4,652 ms | — | — |
+
+结论：按 4 MiB 聚合后 flush 等待下降约 130–180 ms、墙钟下降约 30–80 ms；真实 writer 的 256 与 8,192 条批在改造后同一轮内收敛（差 1–3%），说明 append 批次不再决定 flush 频率。端到端写侧仍由逐条 JSON 编码支配（4 s 量级），运行间波动可达 10%，因此第一张表不用于精确 A/B。详见 `docs/perf-review.md` 的 P2-12。
 
 ## 说明
 

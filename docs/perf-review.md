@@ -390,7 +390,7 @@ flutter test benchmark/ntfs_index_benchmark_test.dart
 
 **改法**：
 
-1. **写侧**：新增 `ScanWriterIsolate`（`lib/core/scan/scan_writer_isolate.dart`）。每个 `ScanResultWriter` 的 isolate 自己持有 `IOSink`，主 isolate 只发送 256 条一批的 `JunkItem` 并等待确认。`maxItemsFileBytes` 上限、写入错误、`abort` 清理与 `itemsWritten` 语义原样保留；`meta.json` / `latest.json` 仍由主 isolate 发布（只有一次小写入）。
+1. **写侧**：新增 `ScanWriterIsolate`（`lib/core/scan/scan_writer_isolate.dart`）。每个 `ScanResultWriter` 的 isolate 自己持有 `IOSink`，主 isolate 只发送 256 条一批的 `JunkItem` 并等待确认（P2-12 起确认只代表已编码并进入 4 MiB 缓冲，不代表已落盘）。`maxItemsFileBytes` 上限、写入错误、`abort` 清理与 `itemsWritten` 语义原样保留；`meta.json` / `latest.json` 仍由主 isolate 发布（只有一次小写入）。
 2. **读侧**：`ScanResultStore.load` 改为在 `Isolate.run` 中读文件、解析、按 `allowedRuleIds` 过滤、按规则分组并按体积降序排序，返回 `Map<ruleId, List<JunkItem>>`、根表与过滤前的 `totalItems`。`CleanController.restoreLastScan` 直接把这些分组包装成 `RuleResult`，删除原来的 `_groupResults`；默认选择、摘要 fold 与锁探测路径表仍在主线程。
 
 **改造后实测（同一基准，改造后 3 次运行的中位区间）**：
@@ -471,11 +471,49 @@ flutter test benchmark/scan_restore_benchmark_test.dart
 
 - 回归：`test/result_filters_test.dart` 覆盖前导点、目录名带点、尾随点、正斜杠与大写扩展名；`test/scan_result_store_test.dart` 覆盖 worker 分组时的去重与规则过滤；`test/clean_controller_test.dart` 覆盖扫描与恢复两条路径；规则详情页既有的扩展名筛选用例继续覆盖 `.bin` 的展示与筛选。
 
+### P2-12 写侧每 256 条 flush 一次（已实施）
+
+**现象**：`ScanWriterIsolate` 每收到一个 256 条的 `_Append` 就 `add` + `flush` 并等待写完成，100 万条产生约 3,907 次 flush。`CleanController._persistQueue` 逐批串行等待确认，预览前的 `await _persistQueue` 因此也被这些往返拖慢。按清理日志里 `flush()` 约 200 µs 的单价推算，1M 条预期可省数百 ms。
+
+**基准确认**（`benchmark/scan_writer_benchmark.dart`，2026-10-21，3 轮中位数）：
+
+- 真实 writer 端到端：改造前 256 条/批 8,835 ms vs 8,192 条/批 9,132 ms，没有出现预期差距，说明 flush 不是端到端写侧的主瓶颈。改造后多次运行中 256 条/批为 7,971–9,059 ms、8,192 条/批为 7,869–8,805 ms；同一轮内两者差 1–3%，但运行间波动约 10%，不能用于精确先后对比。
+- 预编码行裸写（100 万行 × 247 B，绕过 JSON 编码与 isolate 传输）。旧策略（每 64 KiB `add` + flush）墙钟 269–319 ms，其中 flush 等待 257–303 ms；按 4 MiB 聚合后 `add` + flush 墙钟 231–238 ms，flush 等待 121–126 ms；只在末尾 flush 时，64 KiB `add` 为 236–266 ms、2 MiB `add` 为 118–123 ms。
+- 单独 `jsonEncode` + `utf8.encode` 100 万行为 4.1–4.7 s。
+- 结论：flush 等待下降约 130–180 ms，墙钟下降约 30–80 ms；端到端写侧被编码成本稀释，因此"数百 ms"只对 flush 本身成立，对预览等待不成立。
+
+**改法**：worker 内用一个跨 append 的 `BytesBuilder` 聚合编码结果，累计到 4 MiB 才 `add` + `flush` 一次；`_Complete` 先写入并 flush 尾部，再 `close`；`_Abort` 丢弃未写入的缓冲。append 的确认语义从"已落盘"变为"已编码并进入有界缓冲"，但 `items.jsonl` 仍只在 `complete` 成功发布 `meta.json` / `latest.json` 后可见，取消、崩溃与磁盘上限路径不变。
+
+**收益**：
+
+| 指标（100 万条） | 改造前 | 改造后 |
+| --- | ---: | ---: |
+| 写侧 `add` + `flush` 次数 | 3,908 | 59 |
+| 裸写墙钟 | 269–319 ms | 231–238 ms |
+| 裸写 flush 等待 | 257–303 ms | 121–126 ms |
+| 真实 writer，256 条/批 | 8,835 ms | 7,971–9,059 ms |
+| 真实 writer，8,192 条/批 | 9,132 ms | 7,869–8,805 ms |
+
+- append 批次不再决定写入/flush 次数：改造后同一轮内 256 与 8,192 条/批收敛到同一水平（相差 1–3%）。机器运行间波动可达 10%，端到端两行不作为精确 A/B。
+- 预览等待的实际收益是数十 ms，不是数百 ms。若要继续压缩 1M 条的 `_persistQueue`，应处理写侧逐条编码（5 字段 `jsonEncode` + `DateTime.toIso8601String`），而不是继续调 flush 阈值。
+
+**风险**：低。
+
+- 缓冲上限为 4 MiB + 1 批；append 确认后若随后写盘失败，错误仍会在下一次阈值 flush 或 `complete` 时上报，`persistenceLimited` / `persistenceError` 语义不变。
+- 进程崩溃会丢失尾部缓冲，但该轮结果本来就不会发布（没有 `meta.json`），孤立目录由下次扫描清理。
+- 回归：新增跨多批、跨 4 MiB 阈值并触发磁盘上限的用例；`test/scan_result_store_test.dart` 9 项通过，全量 423 项测试（5 项环境跳过）与 `flutter analyze --fatal-infos` 通过。
+
+复现命令：
+
+```bash
+dart run benchmark/scan_writer_benchmark.dart --items=1000000
+```
+
 ## 不建议做的
 
 - **继续提高扫描并行度**。实测目录枚举 1→16 并发无差异（1.95 s vs 1.98 s），瓶颈在 OS 侧且已饱和。加 worker、加 isolate、调 `statConcurrency` 都不会更快。
 - **继续优化 `PathSemantics.key()`**。0.21 µs/次、约占单文件成本 7%，改进它需要动路径语义抽象，收益与风险不成比例。
-- **把 `batchSize` 从 256 调大**。既有基准测得 isolate 传输成本为 0.26–0.31 µs/文件，1M 条合计约 0.3 s，调大批次省下的是消息条数而非总量级。
+- **把 `batchSize` 从 256 调大**。既有基准测得 isolate 传输成本为 0.26–0.31 µs/文件，1M 条合计约 0.3 s，调大批次省下的是消息条数而非总量级；写侧写入/flush 已在 P2-12 与 append 批次解耦。
 
 ## 落地顺序
 
@@ -488,7 +526,8 @@ flutter test benchmark/scan_restore_benchmark_test.dart
 7. **P2-8**（已实施）：写侧编码进 writer isolate，读侧解析、过滤、分组排序进 `Isolate.run`；1M 条总恢复时长持平，UI isolate 的连续解析归零，收尾停顿从 0.83 s 降到 0.40–0.65 s。
 8. **P2-11**（已实施）：扩展名集合改在扫描/恢复的既有循环里维护，页面直接读取；10 万条页面打开从 37 ms 降为 0，100 万条省下每次约 0.4 s 的重复遍历。
 9. **P2-10**（已实施）：保留 no-follow 类型检查，把体积查询与它并发执行；每文件省 26–42 µs，链接语义不变。
-10. **P2-9**：需要原生侧批量枚举接口，当前不排期。
+10. **P2-12**（已实施）：写侧按 4 MiB 聚合 `add` + flush，append 批次不再决定 flush 次数；1M 条 flush 等待从 257 ms 降到 121 ms（裸写探针），端到端写侧仍由逐条 JSON 编码主导。
+11. **P2-9**：需要原生侧批量枚举接口，当前不排期。
 
 ## 变更记录
 
@@ -503,6 +542,7 @@ flutter test benchmark/scan_restore_benchmark_test.dart
 - **P2-8 已落地**：新增 `ScanWriterIsolate`，每个 writer 的 isolate 自己编码并写 `items.jsonl`；`ScanResultStore.load` 改为 `Isolate.run` 内解析、按允许规则过滤、分组与排序，`CleanController` 直接消费分组并删除 `_groupResults`。改造后 10 万 / 100 万条：`load` 583–638 / 5,656–5,749 ms，完整 restore 585–611 / 6,148–6,445 ms，主线程收尾 ≤2 ms / 0.40–0.65 s；总时长与改造前持平。新增分组/过滤用例，全量 419 项测试与 `flutter analyze --fatal-infos` 通过。
 - **P2-11 已落地**：`extensionOfPath` 下沉到 core；扫描时 `CleanController` 在接入批次时按规则维护扩展名集合，恢复时 `ScanResultStore` 在 worker 分组阶段顺带收集，`RuleResult.extensions` 直接供规则详情页筛选菜单使用。10 万条同轮 A/B：旧页面打开 `availableExtensions` 36.2–38.5 ms → 新读取 0 ms，增量维护一次性成本 19.7–22.4 ms。新增/更新扩展名语义、worker 收集与扫描/恢复用例。
 - **P2-10 已落地**：核查确认 `FileStat.stat` 会解析符号链接（文档与本机符号链接实测一致），不能直接替代 no-follow 类型检查；改为并发启动 `type(followLinks: false)` 与 `File.length()`，保留链接跳过与删除时重读体积的语义。500 个真实文件实测每文件 112.1–130.5 → 82.1–104.5 µs（省 26–42 µs）；新增 `benchmark/system_cache_metadata_benchmark.dart` 与"删除时尺寸"用例，既有链接用例继续通过。
+- **P2-12 已落地**：`ScanWriterIsolate` 在 worker 内用 `BytesBuilder` 跨 append 聚合到 4 MiB 再 `add` + flush，`complete` 兜底写入剩余尾部，`abort` 丢弃缓冲。1M 条的 `add` + flush 从 3,908 次降到 59 次；裸写探针墙钟 269–319→231–238 ms、flush 等待 257–303→121–126 ms，真实 writer 的 256/8,192 条批在改造后同一轮内收敛。基准确认 flush 只占写侧小头，逐条 JSON 编码才是主项。新增跨阈值与限量用例，全量 423 项测试（5 项环境跳过）与 `flutter analyze --fatal-infos` 通过。
 - 记录一处方向性修正：装饰-排序并非对所有排序都更快。数值键本来就在条目上，装饰只是多出 O(N) 次分配，`sizeDesc` 实测因此从 46.4 涨到 63.5 ms。收益成立的区间是"派生键比分配贵得多"（`pathAsc`、`extensionAsc`）与"键大量并列"（惰性缓存生效）。全量 403 项测试与 `flutter analyze --fatal-infos` 通过。
 - 评审过程中修正了一个判断：最初按单价推算认为"清理时间几乎全花在重复元数据查询上"，端到端 A/B 证明元数据只占约 12%，rename 与文件读取才是主体。文档中的收益数字以实测为准，未采用推算值。
 - 另一处修正：P0-1 时的单步归因把约 1,000 µs 记为"其余未归因"，其中相当一部分并非散落在循环里，而是两项此前没被列入分解的操作——`finalize` 阶段的逐条 `type()` 与清理计划文件的逐条写入。这说明"按已知项求和再取差额"容易把整类操作漏在统计口径之外，凡涉及归因应以"每一次调用都有账"的方式重做。

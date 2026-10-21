@@ -236,6 +236,59 @@ void main() {
     expect(items.length, summary.persistedItemCount);
   });
 
+  test(
+    'drains buffered writes across batches before hitting the limit',
+    () async {
+      final longName = 'x' * 4096;
+      final limited = ScanResultStore(
+        rootDirectory: p.windows.join(temp.path, 'limited_batches'),
+        maxItemsFileBytes: 6 * 1024 * 1024,
+      );
+      final writer = await limited.begin(
+        ruleIds: const ['test.rule'],
+        rulesVersion: 'builtin',
+        roots: roots(),
+      );
+      const total = 2000;
+      for (var start = 0; start < total; start += 10) {
+        await writer.addItems([
+          for (var index = start; index < start + 10; index++)
+            JunkItem(
+              rootIndex: 0,
+              path: p.windows.join(
+                temp.path,
+                'cache',
+                'd$index',
+                '$longName.tmp',
+              ),
+              size: 1,
+              modifiedMicros: DateTime.utc(
+                2026,
+                10,
+                18,
+                12,
+              ).microsecondsSinceEpoch,
+            ),
+        ]);
+      }
+      final summary = await writer.complete(
+        scannedFiles: total,
+        foundFiles: total,
+        foundBytes: total,
+        issueCount: 0,
+        errorCounts: const {},
+        truncated: false,
+      );
+
+      expect(summary.persistenceLimited, isTrue);
+      expect(summary.persistedItemCount, lessThan(total));
+      final data = await limited.load(summary);
+      final items = data!.groups.values.expand((group) => group);
+      expect(items.length, summary.persistedItemCount);
+      expect(data.totalItems, summary.persistedItemCount);
+    },
+  );
+
   test('rejects unsafe ids in latest.json', () async {
     final file = File(p.windows.join(store.rootDirectory, 'latest.json'));
     await file.parent.create(recursive: true);

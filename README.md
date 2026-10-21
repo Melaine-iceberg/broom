@@ -267,7 +267,7 @@ windows/runner/system_access_channel.* # 原生提权与系统缓存路径通道
 windows/runner/file_metadata_channel.* # 原生元数据 / DACL 恢复通道
 test/                              # 单元与 Widget 测试；support/ 内含内存文件系统等替身
 integration_test/                  # 真实 Windows 窗口冒烟与预览帧率基准
-benchmark/                         # 10 万 / 100 万文件扫描、RSS 与 isolate 传输基准
+benchmark/                         # 扫描、写侧、恢复与 UI 性能基准
 .github/workflows/windows.yml      # Windows CI：格式、严格分析、测试、构建与产物上传
 docs/engineering.md                # 测试、可注入文件系统、并发、日志、基准与 CI 说明
 docs/perf-review.md                # 性能评审：实测基线、优化清单与落地状态
@@ -299,6 +299,7 @@ flutter test integration_test/app_smoke_test.dart -d windows
 flutter test integration_test/ui_frame_benchmark_test.dart -d windows
 dart run benchmark/scan_benchmark.dart
 dart run benchmark/scan_benchmark.dart --million
+dart run benchmark/scan_writer_benchmark.dart --items=1000000
 ```
 
 ## 工程、测试与诊断

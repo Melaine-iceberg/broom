@@ -43,6 +43,7 @@ CleanController.scan()
 - 引擎**没有**固定的 100,000 条上限；`ScanOptions.maxItems` 为空表示不限制。
 - 设置页提供可选上限，默认留空。上限是去重后的全局上限，由协调器执行；达到后取消剩余 worker，`ScanResult.truncated` 为 `true`，但 `cancelled` 仍为 `false`。
 - 持久化写入器对 `items.jsonl` 设置 1 GiB 保护上限。达到后停止写入后续条目（当前预览不受影响），元数据记录 `persistenceLimited: true`，界面提示持久化结果可能不完整。
+- 写侧在专用 isolate 中编码，并用 4 MiB 字节缓冲合并 append：累计达到阈值才 `add` + `flush`，不足一批的尾部在 `complete()` 统一写入。`items.jsonl` 只在 `meta.json` / `latest.json` 发布后才被读取，因此缓冲不改变持久化语义。
 - 扫描失败、取消或用户中止时会调用 `abort()` 删除未完成的目录；崩溃留下的孤立目录不会被读取，并会在下一次成功发布的清理阶段被移除。
 
 ## 4. 并发与低优先级
