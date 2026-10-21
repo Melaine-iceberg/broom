@@ -130,6 +130,8 @@ class CleanController extends ChangeNotifier {
   int _persistableFoundCount = 0;
   int _persistableFoundBytes = 0;
   List<CleanerRule> _runtimeRules = const [];
+  int _leftoverDetectedCount = 0;
+  String? _leftoverDetectionError;
   double _scanCompletion = 0;
   static const _streamNotifyInterval = Duration(milliseconds: 200);
   DateTime _lastStreamNotify = DateTime.fromMillisecondsSinceEpoch(0);
@@ -196,6 +198,21 @@ class CleanController extends ChangeNotifier {
 
   /// Catalog rules plus the leftover rules detected for this session.
   List<CleanerRule> get rules => [...platform.rules, ..._runtimeRules];
+
+  /// Categories shared by the dashboard, the scope section and settings.
+  ///
+  /// Always contains the leftover category, even when detection produced no
+  /// rule, so its toggle never disappears from the UI.
+  List<RuleCategoryGroup> get scanCategories => groupRuleCategories(rules);
+
+  /// Whether the leftover category currently takes part in scanning.
+  bool get leftoverCategoryEnabled => _leftoverCategoryEnabled();
+
+  /// Applications detected as uninstalled but leaving data behind.
+  int get leftoverDetectedCount => _leftoverDetectedCount;
+
+  /// Why leftover detection was skipped, when the inventory was incomplete.
+  String? get leftoverDetectionError => _leftoverDetectionError;
   int get liveFoundCount => _liveFoundCount;
   int get liveFoundBytes => _liveFoundBytes;
 
@@ -331,10 +348,33 @@ class CleanController extends ChangeNotifier {
     _notify();
   }
 
+  bool _leftoverCategoryEnabled() {
+    final settings = scanSettings?.call() ?? const ScanSettings();
+    return settings.isCategoryEnabled(leftoverCategoryKey);
+  }
+
+  /// Re-runs leftover detection and publishes the result.
+  ///
+  /// Category toggles call this so enabling "卸载残留" takes effect without
+  /// waiting for the next scan.
+  Future<void> refreshLeftoverRules() async {
+    await _refreshLeftoverRules();
+    _notify();
+  }
+
   Future<void> _refreshLeftoverRules() async {
     final service = leftoverService;
     if (service == null) {
       _runtimeRules = const [];
+      _leftoverDetectedCount = 0;
+      _leftoverDetectionError = null;
+      return;
+    }
+    if (!_leftoverCategoryEnabled()) {
+      // A disabled category must not read the registry or probe app paths.
+      _runtimeRules = const [];
+      _leftoverDetectedCount = 0;
+      _leftoverDetectionError = null;
       return;
     }
     try {
@@ -343,6 +383,8 @@ class CleanController extends ChangeNotifier {
         for (final candidate in detection.candidates)
           leftoverRuleFor(candidate),
       ]);
+      _leftoverDetectedCount = detection.candidates.length;
+      _leftoverDetectionError = detection.error;
       if (detection.candidates.isNotEmpty) {
         logger?.info('leftover', '检测到 ${detection.candidates.length} 个卸载残留应用');
       }
@@ -351,6 +393,8 @@ class CleanController extends ChangeNotifier {
       }
     } catch (error) {
       _runtimeRules = const [];
+      _leftoverDetectedCount = 0;
+      _leftoverDetectionError = error.toString();
       logger?.warning('leftover', '卸载残留检测失败', error: error);
     }
   }

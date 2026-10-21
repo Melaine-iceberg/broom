@@ -923,6 +923,12 @@ const translationsEn = <String, String>{
   '大文件': 'Large files',
   '扫描规则': 'Rules',
   '启用类别': 'Categories',
+  '卸载残留': 'Uninstall leftovers',
+  '未检测到残留应用': 'No leftover apps',
+  '{count} 个残留应用':
+      '{count, plural, one{# leftover app} other{# leftover apps}}',
+  '无法读取应用清单，已跳过检测':
+      'The installed-app inventory is unreadable; detection was skipped',
   '排除目录': 'Exclusions',
   '{count} 条': '{count}',
   '{count} 个': '{count}',

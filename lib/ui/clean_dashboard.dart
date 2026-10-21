@@ -33,13 +33,11 @@ class CleanDashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rules = controller.platform.rules;
-    final categoryKeys = <String>{};
-    for (final rule in rules) {
-      categoryKeys.add(ruleCategoryKey(rule));
-    }
-    final enabledCategoryCount = categoryKeys
-        .where(settingsController.isCategoryEnabled)
+    // The shared grouping always includes the runtime leftover category, so
+    // the enabled/total statistic matches the toggles in the scope section.
+    final categories = controller.scanCategories;
+    final enabledCategoryCount = categories
+        .where((category) => settingsController.isCategoryEnabled(category.key))
         .length;
 
     return ListView(
@@ -63,7 +61,11 @@ class CleanDashboard extends StatelessWidget {
             final scan = _ScanHero(
               controller: controller,
               enabledCategories: enabledCategoryCount,
-              totalCategories: categoryKeys.length,
+              totalCategories: categories.length,
+              ruleCount: controller.rules.length,
+              leftoverEnabled: settingsController.isCategoryEnabled(
+                leftoverCategoryKey,
+              ),
               exclusionCount: controller.exclusionCount,
             );
             final lastScan = _LastScanCard(controller: controller);
@@ -193,12 +195,16 @@ class _ScanHero extends StatelessWidget {
     required this.controller,
     required this.enabledCategories,
     required this.totalCategories,
+    required this.ruleCount,
+    required this.leftoverEnabled,
     required this.exclusionCount,
   });
 
   final CleanController controller;
   final int enabledCategories;
   final int totalCategories;
+  final int ruleCount;
+  final bool leftoverEnabled;
   final int exclusionCount;
 
   @override
@@ -323,18 +329,21 @@ class _ScanHero extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 20),
-                  Row(
+                  Wrap(
+                    spacing: 22,
+                    runSpacing: 10,
                     children: [
                       _HeroCell(
                         label: context.t('启用类别'),
                         value: '$enabledCategories/$totalCategories',
                       ),
-                      const SizedBox(width: 26),
+                      _HeroCell(label: context.t('扫描规则'), value: '$ruleCount'),
                       _HeroCell(
-                        label: context.t('扫描规则'),
-                        value: '${controller.platform.rules.length}',
+                        label: context.t('卸载残留'),
+                        value: leftoverEnabled
+                            ? '${controller.leftoverDetectedCount}'
+                            : context.t('已关闭'),
                       ),
-                      const SizedBox(width: 26),
                       _HeroCell(
                         label: context.t('排除目录'),
                         value: '$exclusionCount',

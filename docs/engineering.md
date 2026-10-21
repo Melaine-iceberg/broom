@@ -9,6 +9,7 @@
 | 单元测试 | `test/*_test.dart` | 路径守卫、规则解析、扫描器、隔离区状态机、配置迁移、系统缓存、日志与内存文件系统 |
 | Widget 测试 | `test/*_page_test.dart` | 首页、预览选择、Review 二次确认、清理进度、完成与撤销、隔离区冲突策略、设置、分析页 |
 | 集成测试 | `integration_test/app_smoke_test.dart` | 真实 Windows 窗口：设置往返 → 初始化扫描 → 预览 |
+| 卸载残留端到端 | `integration_test/leftover_e2e_test.dart` | 真实 Windows 原生注册表清单 → 残留检测 → 类别勾选 → 扫描 → 隔离 → 撤销还原 |
 | 帧率基准 | `integration_test/ui_frame_benchmark_test.dart` | 真实 Windows 窗口滚动 5,000 条预览，输出 build / raster / total p50 与 p95 |
 | 性能基准 | `benchmark/scan_benchmark.dart` | 10 万 / 100 万文件扫描、RSS、isolate 往返传输 |
 
@@ -16,11 +17,14 @@
 flutter analyze --fatal-infos
 flutter test
 flutter test integration_test/app_smoke_test.dart -d windows
+flutter test integration_test/leftover_e2e_test.dart -d windows
 flutter test integration_test/ui_frame_benchmark_test.dart -d windows
 dart run benchmark/scan_benchmark.dart --million
 ```
 
 控件测试通过注入的假平台、假隔离区服务与可控扫描服务运行，不访问真实缓存；涉及 `ExclusionStore` / `SettingsStore` 的用例使用临时目录。集成测试使用假平台，因此不会扫描或删除开发机上的真实文件。
+
+`leftover_e2e_test.dart` 是例外：它通过原生 `broom/apps` 通道读取真实注册表，并让自己的临时目录充当“已卸载应用”的数据目录。注册表、扫描器、隔离区与撤销都是真实实现，只有清单条目是注入的，因此既覆盖了端到端链路，也不会触碰开发机上已安装应用的真实数据。
 
 ## 可注入文件系统
 

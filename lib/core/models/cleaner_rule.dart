@@ -52,12 +52,20 @@ class RuleAuditSample {
   final String? reason;
 }
 
+/// Stable key for the category whose rules are created at runtime from the
+/// leftover catalog. It never exists in the built-in rule list, so the scope
+/// UI has to render it explicitly.
+const leftoverCategoryKey = 'leftover';
+
+const leftoverCategoryLabel = '卸载残留';
+const leftoverCategoryLabelEn = 'Uninstall leftovers';
+
 /// Stable, language-independent category key used for scan filters and
 /// persisted settings. Localized labels remain on [CleanerRule.category].
 String ruleCategoryKey(CleanerRule rule) {
   if (rule.id == 'windows.thumbnail_icon_cache') return 'thumbnails';
   if (rule.id == 'browser.extension_scripts') return 'browser_extension';
-  if (rule.id.startsWith(leftoverRuleIdPrefix)) return 'leftover';
+  if (rule.id.startsWith(leftoverRuleIdPrefix)) return leftoverCategoryKey;
   return switch (rule.id.split('.').first) {
     'windows' => 'system',
     'browser' => 'browser',
@@ -67,6 +75,62 @@ String ruleCategoryKey(CleanerRule rule) {
     'logs' => 'logs',
     _ => 'other',
   };
+}
+
+/// One scan category as presented to the scope and settings surfaces.
+///
+/// [key] is the persisted category id, [label]/[labelEn] are the localized
+/// names, and [rules] holds the rules the category currently contributes. The
+/// leftover category is intentionally present with an empty list before the
+/// first detection so its toggle stays reachable.
+class RuleCategoryGroup {
+  const RuleCategoryGroup({
+    required this.key,
+    required this.label,
+    required this.labelEn,
+    required this.rules,
+  });
+
+  final String key;
+  final String label;
+  final String labelEn;
+  final List<CleanerRule> rules;
+
+  bool get isLeftover => key == leftoverCategoryKey;
+  int get ruleCount => rules.length;
+  bool get isEmpty => rules.isEmpty;
+}
+
+/// Groups [rules] by [ruleCategoryKey], preserving first-seen order.
+///
+/// The leftover category is always appended, because its rules only exist
+/// after runtime detection and a category that disappears from the UI can no
+/// longer be enabled or disabled.
+List<RuleCategoryGroup> groupRuleCategories(Iterable<CleanerRule> rules) {
+  final grouped = <String, List<CleanerRule>>{};
+  final labels = <String, (String, String)>{};
+  for (final rule in rules) {
+    final key = ruleCategoryKey(rule);
+    grouped.putIfAbsent(key, () => <CleanerRule>[]).add(rule);
+    labels.putIfAbsent(
+      key,
+      () => (rule.category, rule.categoryEn ?? rule.category),
+    );
+  }
+  grouped.putIfAbsent(leftoverCategoryKey, () => <CleanerRule>[]);
+  labels.putIfAbsent(
+    leftoverCategoryKey,
+    () => (leftoverCategoryLabel, leftoverCategoryLabelEn),
+  );
+  return [
+    for (final entry in grouped.entries)
+      RuleCategoryGroup(
+        key: entry.key,
+        label: labels[entry.key]!.$1,
+        labelEn: labels[entry.key]!.$2,
+        rules: List<CleanerRule>.unmodifiable(entry.value),
+      ),
+  ];
 }
 
 class CleanerRule {

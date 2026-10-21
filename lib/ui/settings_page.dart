@@ -56,6 +56,7 @@ class SettingsPage extends StatelessWidget {
       builder: (context, _) {
         final strings = context.strings;
         final rules = cleanController.platform.rules;
+        final scanCategories = cleanController.scanCategories;
         final disabledCount = rules
             .where((rule) => !settings.isRuleEnabled(rule.id))
             .length;
@@ -198,37 +199,37 @@ class SettingsPage extends StatelessWidget {
                               spacing: 12,
                               runSpacing: 0,
                               children: [
-                                for (final entry in ruleGroups.entries)
+                                for (final category in scanCategories)
                                   SizedBox(
                                     width: width,
                                     child: CheckboxListTile(
                                       key: ValueKey(
-                                        'settings-category-'
-                                        '${ruleCategoryKey(entry.value.first)}',
+                                        'settings-category-${category.key}',
                                       ),
                                       value: settings.isCategoryEnabled(
-                                        ruleCategoryKey(entry.value.first),
+                                        category.key,
                                       ),
                                       onChanged: (value) => _setCategory(
                                         context,
-                                        ruleCategoryKey(entry.value.first),
+                                        category.key,
                                         value ?? false,
+                                        refreshLeftover: category.isLeftover,
                                       ),
                                       contentPadding: EdgeInsets.zero,
                                       controlAffinity:
                                           ListTileControlAffinity.leading,
                                       dense: true,
                                       title: Text(
-                                        entry.key,
+                                        strings.ruleCategoryGroupLabel(
+                                          category,
+                                        ),
                                         style: theme.textTheme.labelMedium
                                             ?.copyWith(
                                               color: BroomColors.ink(context),
                                             ),
                                       ),
                                       subtitle: Text(
-                                        strings.tf('{count} 条规则', {
-                                          'count': entry.value.length,
-                                        }),
+                                        _categorySummary(strings, category),
                                       ),
                                     ),
                                   ),
@@ -544,10 +545,28 @@ class SettingsPage extends StatelessWidget {
   Future<void> _setCategory(
     BuildContext context,
     String categoryId,
-    bool enabled,
-  ) async {
+    bool enabled, {
+    bool refreshLeftover = false,
+  }) async {
     final error = await settings.setCategoryEnabled(categoryId, enabled);
-    if (error != null && context.mounted) _showError(context, error);
+    if (context.mounted && error != null) _showError(context, error);
+    if (context.mounted && refreshLeftover) {
+      await cleanController.refreshLeftoverRules();
+    }
+  }
+
+  /// Category subtitle: rule counts for catalog categories, detection state
+  /// for the runtime leftover category.
+  String _categorySummary(BroomStrings strings, RuleCategoryGroup category) {
+    if (!settings.isCategoryEnabled(category.key)) return strings.t('本次跳过');
+    if (category.isLeftover) {
+      if (cleanController.leftoverDetectionError != null) {
+        return strings.t('无法读取应用清单，已跳过检测');
+      }
+      if (category.isEmpty) return strings.t('未检测到残留应用');
+      return strings.tf('{count} 个残留应用', {'count': category.ruleCount});
+    }
+    return strings.tf('{count} 条规则', {'count': category.ruleCount});
   }
 
   Future<void> _setParallelism(BuildContext context, int value) async {
@@ -1801,6 +1820,9 @@ class _SettingsBanner extends StatelessWidget {
 
 IconData _categoryIcon(String category) {
   final lower = category.toLowerCase();
+  if (category.contains('残留') || lower.contains('leftover')) {
+    return LucideIcons.packageX;
+  }
   if (category.contains('浏览器') || lower.contains('browser')) {
     return LucideIcons.globe;
   }

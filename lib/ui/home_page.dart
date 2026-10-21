@@ -627,12 +627,13 @@ class _IdleView extends StatelessWidget {
       scopeSection: ListenableBuilder(
         listenable: settingsController,
         builder: (context, _) => _ScopeSection(
-          rules: controller.platform.rules,
+          categories: controller.scanCategories,
           scopes: controller.ruleExclusionScopes,
           exclusionCount: controller.exclusionCount,
           onOpenExclusions: onOpenExclusions,
           isRuleEnabled: isRuleEnabled,
           settings: settingsController,
+          onCategoryChanged: controller.refreshLeftoverRules,
         ),
       ),
     );
@@ -641,20 +642,25 @@ class _IdleView extends StatelessWidget {
 
 class _ScopeSection extends StatefulWidget {
   const _ScopeSection({
-    required this.rules,
+    required this.categories,
     required this.scopes,
     required this.exclusionCount,
     required this.onOpenExclusions,
     required this.isRuleEnabled,
     required this.settings,
+    required this.onCategoryChanged,
   });
 
-  final List<CleanerRule> rules;
+  final List<RuleCategoryGroup> categories;
   final Map<String, RuleExclusionScope> scopes;
   final int exclusionCount;
   final VoidCallback onOpenExclusions;
   final bool Function(String ruleId) isRuleEnabled;
   final SettingsController settings;
+
+  /// Re-runs runtime detection when a category that owns no catalog rules
+  /// (the leftover category) is toggled.
+  final Future<void> Function() onCategoryChanged;
 
   @override
   State<_ScopeSection> createState() => _ScopeSectionState();
@@ -668,18 +674,14 @@ class _ScopeSectionState extends State<_ScopeSection> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final strings = context.strings;
-    final rules = widget.rules;
+    final categories = widget.categories;
     final exclusionCount = widget.exclusionCount;
-    final groups = <String, List<CleanerRule>>{};
-    for (final rule in rules) {
-      groups.putIfAbsent(strings.ruleCategory(rule), () => []).add(rule);
-    }
-    final enabledCategories = groups.values
-        .where(
-          (categoryRules) => widget.settings.isCategoryEnabled(
-            ruleCategoryKey(categoryRules.first),
-          ),
-        )
+    final ruleCount = categories.fold<int>(
+      0,
+      (total, category) => total + category.ruleCount,
+    );
+    final enabledCategories = categories
+        .where((category) => widget.settings.isCategoryEnabled(category.key))
         .length;
 
     return GlassCard(
@@ -733,21 +735,14 @@ class _ScopeSectionState extends State<_ScopeSection> {
           ),
           if (_expanded) ...[
             const SizedBox(height: 10),
-            for (final (index, entry) in groups.entries.indexed) ...[
+            for (final (index, category) in categories.indexed) ...[
               if (index > 0)
                 Divider(
                   height: 1,
                   indent: 34,
                   color: BroomColors.hairline(context),
                 ),
-              _buildCategoryRow(
-                context,
-                theme,
-                scheme,
-                strings,
-                entry.key,
-                entry.value,
-              ),
+              _buildCategoryRow(context, theme, scheme, strings, category),
             ],
           ] else
             Padding(
@@ -758,15 +753,15 @@ class _ScopeSectionState extends State<_ScopeSection> {
                         '已启用 {enabled}/{total} 个类别 · {rules} 条规则 · {exclusions} 个目录已排除',
                         {
                           'enabled': enabledCategories,
-                          'total': groups.length,
-                          'rules': rules.length,
+                          'total': categories.length,
+                          'rules': ruleCount,
                           'exclusions': exclusionCount,
                         },
                       )
                     : context.tf('已启用 {enabled}/{total} 个类别 · {rules} 条规则', {
                         'enabled': enabledCategories,
-                        'total': groups.length,
-                        'rules': rules.length,
+                        'total': categories.length,
+                        'rules': ruleCount,
                       }),
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: BroomColors.inkMuted(context),
@@ -783,11 +778,11 @@ class _ScopeSectionState extends State<_ScopeSection> {
     ThemeData theme,
     ColorScheme scheme,
     BroomStrings strings,
-    String categoryLabel,
-    List<CleanerRule> categoryRules,
+    RuleCategoryGroup category,
   ) {
-    final categoryKey = ruleCategoryKey(categoryRules.first);
+    final categoryKey = category.key;
     final enabled = widget.settings.isCategoryEnabled(categoryKey);
+    final categoryLabel = strings.ruleCategoryGroupLabel(category);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 9),
@@ -806,10 +801,18 @@ class _ScopeSectionState extends State<_ScopeSection> {
                     value: enabled,
                     visualDensity: VisualDensity.compact,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    onChanged: (value) => widget.settings.setCategoryEnabled(
-                      categoryKey,
-                      value ?? false,
-                    ),
+                    onChanged: (value) async {
+                      final next = value ?? false;
+                      await widget.settings.setCategoryEnabled(
+                        categoryKey,
+                        next,
+                      );
+                      // Runtime categories have no catalog rules to resolve,
+                      // so detection has to re-run on every toggle.
+                      if (category.isLeftover) {
+                        await widget.onCategoryChanged();
+                      }
+                    },
                   ),
                 ),
                 const SizedBox(width: 3),
@@ -838,11 +841,7 @@ class _ScopeSectionState extends State<_ScopeSection> {
                         ),
                       ),
                       Text(
-                        enabled
-                            ? context.tf('{count} 条规则', {
-                                'count': categoryRules.length,
-                              })
-                            : context.t('本次跳过'),
+                        _categorySubtitle(strings, category, enabled),
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: BroomColors.inkFaint(context),
                           fontSize: 10.5,
@@ -861,7 +860,7 @@ class _ScopeSectionState extends State<_ScopeSection> {
                 spacing: 6,
                 runSpacing: 6,
                 children: [
-                  for (final rule in categoryRules)
+                  for (final rule in category.rules)
                     Tooltip(
                       message: _scopeTooltip(
                         strings,
@@ -883,6 +882,20 @@ class _ScopeSectionState extends State<_ScopeSection> {
         ],
       ),
     );
+  }
+
+  String _categorySubtitle(
+    BroomStrings strings,
+    RuleCategoryGroup category,
+    bool enabled,
+  ) {
+    if (!enabled) return strings.t('本次跳过');
+    if (category.isLeftover) {
+      return category.isEmpty
+          ? strings.t('未检测到残留应用')
+          : strings.tf('{count} 个残留应用', {'count': category.ruleCount});
+    }
+    return strings.tf('{count} 条规则', {'count': category.ruleCount});
   }
 
   String _scopeTooltip(
@@ -3403,6 +3416,9 @@ List<({String category, List<RuleResult> results})> _groupResults(
 
 IconData _categoryIcon(String category) {
   final lower = category.toLowerCase();
+  if (category.contains('残留') || lower.contains('leftover')) {
+    return LucideIcons.packageX;
+  }
   if (category.contains('浏览器') || lower.contains('browser')) {
     return LucideIcons.globe;
   }

@@ -42,6 +42,9 @@ class BroomStrings {
   String ruleCategory(CleanerRule rule) =>
       localeName == 'en' ? (rule.categoryEn ?? rule.category) : rule.category;
 
+  String ruleCategoryGroupLabel(RuleCategoryGroup group) =>
+      localeName == 'en' ? group.labelEn : group.label;
+
   String ruleDescription(CleanerRule rule) => localeName == 'en'
       ? (rule.descriptionEn ?? rule.description)
       : rule.description;

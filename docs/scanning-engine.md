@@ -25,6 +25,7 @@ CleanController.scan()
 - `ScanService` 对跨 worker 的重复路径按 `PathSemantics.key` 去重；worker 不保留完整结果，避免内存与 isolate 传输双份占用。
 - 控制器持有本轮唯一的内存结果集，分批聚合；最终预览与持久化都基于同一份去重结果。
 - 取消会广播到所有 worker 与正在进行的索引流。取消的扫描不会发布持久化结果。
+- 扫描类别开关在构建 `ScanJob` 之前生效。`leftover.*` 规则由 `LeftoverService` 在运行期生成，关闭“卸载残留”类别时既不读取注册表也不探测应用目录；这些规则的结果只存在于当前会话，不写入持久化结果。
 
 ## 2. 流式协议
 
