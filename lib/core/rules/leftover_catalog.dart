@@ -59,6 +59,118 @@ abstract final class LeftoverCatalog {
         'Visual Studio Code',
       ],
     ),
+    LeftoverCatalogEntry(
+      id: 'notion',
+      appName: 'Notion',
+      appNameEn: 'Notion',
+      description:
+          'Notion 的本地缓存、登录状态与离线页面副本。'
+          '尚未同步到云端的编辑内容会随之丢失；页面正文保存在 Notion 服务器。'
+          '仅在检测不到 Notion 安装信息时显示。',
+      descriptionEn:
+          'Notion local caches, sign-in state, and offline page copies. '
+          'Edits that were never synced are lost; page content itself lives on '
+          "Notion's servers. Shown only when a Notion installation cannot be "
+          'detected.',
+      dataPathPatterns: [r'%APPDATA%\Notion'],
+      installMarkerPatterns: [
+        r'%LOCALAPPDATA%\Notion\app-*',
+        r'%LOCALAPPDATA%\Programs\Notion\Notion.exe',
+      ],
+      installDisplayNamePrefixes: ['Notion'],
+    ),
+    LeftoverCatalogEntry(
+      id: 'obsidian',
+      appName: 'Obsidian',
+      appNameEn: 'Obsidian',
+      description:
+          'Obsidian 的应用配置、主题与插件设置。'
+          '笔记库（vault）由用户单独选择位置，不在此目录，不会被清理。'
+          '仅在检测不到 Obsidian 安装信息时显示。',
+      descriptionEn:
+          'Obsidian app settings, themes, and plugin configuration. The note '
+          'vault lives wherever the user chose and is never touched. Shown only '
+          'when an Obsidian installation cannot be detected.',
+      dataPathPatterns: [r'%APPDATA%\obsidian'],
+      installMarkerPatterns: [
+        r'%LOCALAPPDATA%\Obsidian\Obsidian.exe',
+        r'%PROGRAMFILES%\Obsidian\Obsidian.exe',
+      ],
+      installDisplayNamePrefixes: ['Obsidian'],
+    ),
+    LeftoverCatalogEntry(
+      id: 'figma',
+      appName: 'Figma',
+      appNameEn: 'Figma',
+      description:
+          'Figma 桌面端的本地缓存、登录状态与离线文件副本。'
+          '未同步到云端的本地草稿会随之丢失。'
+          '仅在检测不到 Figma 安装信息时显示。',
+      descriptionEn:
+          'Figma desktop caches, sign-in state, and offline file copies. Local '
+          'drafts that were never synced are lost. Shown only when a Figma '
+          'installation cannot be detected.',
+      dataPathPatterns: [r'%APPDATA%\Figma'],
+      installMarkerPatterns: [
+        r'%LOCALAPPDATA%\Figma\Figma.exe',
+        r'%LOCALAPPDATA%\Figma\app-*',
+      ],
+      installDisplayNamePrefixes: ['Figma'],
+    ),
+    LeftoverCatalogEntry(
+      id: 'zoom',
+      appName: 'Zoom',
+      appNameEn: 'Zoom',
+      description:
+          'Zoom 的本地配置、登录状态与虚拟背景设置。'
+          '本地录制文件位于“文档\\Zoom”，不在清理范围。'
+          '仅在检测不到 Zoom 安装信息时显示。',
+      descriptionEn:
+          'Zoom local settings, sign-in state, and virtual background '
+          'configuration. Local recordings under Documents\\Zoom are out of '
+          'scope. Shown only when a Zoom installation cannot be detected.',
+      dataPathPatterns: [r'%APPDATA%\Zoom\data'],
+      installMarkerPatterns: [
+        r'%APPDATA%\Zoom\bin\Zoom.exe',
+        r'%PROGRAMFILES%\Zoom\bin\Zoom.exe',
+      ],
+      installDisplayNamePrefixes: ['Zoom'],
+    ),
+    LeftoverCatalogEntry(
+      id: 'signal',
+      appName: 'Signal',
+      appNameEn: 'Signal',
+      description:
+          'Signal 桌面端的本地消息数据库、附件缓存与登录状态。'
+          '清理后本地聊天记录无法恢复，重新使用需要再次配对设备。'
+          '仅在检测不到 Signal 安装信息时显示。',
+      descriptionEn:
+          'Signal desktop local message database, attachment caches, and '
+          'sign-in state. Cleaning removes local chat history permanently and '
+          'requires pairing the device again. Shown only when a Signal '
+          'installation cannot be detected.',
+      dataPathPatterns: [r'%APPDATA%\Signal'],
+      installMarkerPatterns: [
+        r'%LOCALAPPDATA%\Programs\signal-desktop\Signal.exe',
+        r'%LOCALAPPDATA%\Signal\app-*',
+      ],
+      installDisplayNamePrefixes: ['Signal'],
+    ),
+    LeftoverCatalogEntry(
+      id: 'discord-ptb',
+      appName: 'Discord PTB',
+      appNameEn: 'Discord PTB',
+      description:
+          'Discord PTB 的本地配置、登录状态与消息缓存。'
+          '仅在检测不到 Discord PTB 安装信息时显示；清理会丢失本地登录状态和设置。',
+      descriptionEn:
+          'Discord PTB local settings, sign-in state, and message caches. '
+          'Shown only when a Discord PTB installation cannot be detected; '
+          'cleaning removes the local sign-in state and settings.',
+      dataPathPatterns: [r'%APPDATA%\discordptb'],
+      installMarkerPatterns: [r'%LOCALAPPDATA%\DiscordPTB\Update.exe'],
+      installDisplayNamePrefixes: ['Discord PTB'],
+    ),
   ];
 
   static const _allowedDataRoots = <String>[
@@ -135,6 +247,7 @@ abstract final class LeftoverCatalog {
       for (final pattern in entry.installMarkerPatterns) {
         _validateInstallMarker(pattern, entry);
       }
+      _validateNoInstallOverlap(entry);
     }
   }
 
@@ -194,6 +307,38 @@ abstract final class LeftoverCatalog {
       }
     }
   }
+
+  /// A data directory must never be the install directory, a parent of it, or
+  /// a child of it. Otherwise cleaning the leftovers would also delete the
+  /// application itself. Zoom installs into `%APPDATA%\Zoom\bin`, so this is a
+  /// real hazard rather than a theoretical one.
+  static void _validateNoInstallOverlap(LeftoverCatalogEntry entry) {
+    for (final marker in entry.installMarkerPatterns) {
+      final markerDir = _markerDirectory(marker);
+      if (markerDir == null) continue;
+      for (final dataPath in entry.dataPathPatterns) {
+        final data = _normalizeForCompare(dataPath);
+        final install = _normalizeForCompare(markerDir);
+        if (_isSameOrAncestor(data, install) ||
+            _isSameOrAncestor(install, data)) {
+          throw FormatException('${entry.id} 的数据目录与安装目录重叠：$dataPath 与 $marker');
+        }
+      }
+    }
+  }
+
+  /// Returns the directory that contains the marker's last segment.
+  static String? _markerDirectory(String pattern) {
+    final separator = pattern.lastIndexOf(RegExp(r'[\\/]'));
+    if (separator <= 0) return null;
+    return pattern.substring(0, separator);
+  }
+
+  static String _normalizeForCompare(String pattern) =>
+      pattern.replaceAll('/', r'\').toLowerCase();
+
+  static bool _isSameOrAncestor(String ancestor, String candidate) =>
+      candidate == ancestor || candidate.startsWith('$ancestor\\');
 
   static void _validateCommonPath(String pattern, LeftoverCatalogEntry entry) {
     if (pattern.isEmpty || pattern != pattern.trim()) {

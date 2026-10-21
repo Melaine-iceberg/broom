@@ -25,11 +25,53 @@ void main() {
     expect(LeftoverCatalog.validate, returnsNormally);
   });
 
-  test('first batch contains the confirmed applications', () {
-    expect(LeftoverCatalog.entries, hasLength(3));
+  test('curated catalog contains the verified applications', () {
     expect(
       LeftoverCatalog.entries.map((entry) => entry.id),
-      containsAll(<String>['slack', 'discord', 'vscode']),
+      containsAll(<String>[
+        'slack',
+        'discord',
+        'discord-ptb',
+        'vscode',
+        'notion',
+        'obsidian',
+        'figma',
+        'zoom',
+        'signal',
+      ]),
+    );
+  });
+
+  test('data directories never overlap an install directory', () {
+    expect(
+      () => LeftoverCatalog.validateEntries([
+        _entry(
+          dataPaths: const [r'%APPDATA%\Zoom'],
+          markers: const [r'%APPDATA%\Zoom\bin\Zoom.exe'],
+        ),
+      ]),
+      throwsFormatException,
+      reason: '数据目录就是安装目录的父目录时必须拒绝',
+    );
+    expect(
+      () => LeftoverCatalog.validateEntries([
+        _entry(
+          dataPaths: const [r'%APPDATA%\Zoom\bin\data'],
+          markers: const [r'%APPDATA%\Zoom\bin\Zoom.exe'],
+        ),
+      ]),
+      throwsFormatException,
+      reason: '数据目录位于安装目录之内时必须拒绝',
+    );
+    expect(
+      () => LeftoverCatalog.validateEntries([
+        _entry(
+          dataPaths: const [r'%APPDATA%\Zoom\data'],
+          markers: const [r'%APPDATA%\Zoom\bin\Zoom.exe'],
+        ),
+      ]),
+      returnsNormally,
+      reason: '同一应用下的兄弟目录是允许的',
     );
   });
 

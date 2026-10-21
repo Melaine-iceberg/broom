@@ -26,6 +26,8 @@ dart run benchmark/scan_benchmark.dart --million
 
 `leftover_e2e_test.dart` 是例外：它通过原生 `broom/apps` 通道读取真实注册表，并让自己的临时目录充当“已卸载应用”的数据目录。注册表、扫描器、隔离区与撤销都是真实实现，只有清单条目是注入的，因此既覆盖了端到端链路，也不会触碰开发机上已安装应用的真实数据。
 
+清单条目本身由 `test/leftover_catalog_markers_test.dart` 逐条验证：在临时 `AppData` 树上分别构造“只剩数据”“任一安装标记存在”“注册表显示名存在”“清单读取失败”四种状态。新增应用条目无需真实安装即可证明不会把仍在使用的应用判成残留；`LeftoverCatalog.validate` 另外强制数据目录与安装目录互不重叠。
+
 ## 可注入文件系统
 
 `lib/core/platform/file_system.dart` 定义了扫描与隔离区需要的最小接口：
