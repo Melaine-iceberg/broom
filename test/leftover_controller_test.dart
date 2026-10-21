@@ -56,12 +56,13 @@ class _EmptyInstalledApps implements InstalledApps {
 }
 
 class _FakeLeftoverService extends LeftoverService {
-  _FakeLeftoverService({required this.detection}) : super(
-         installedApps: const _EmptyInstalledApps(),
-         guard: PathGuard(protectedRoots: const []),
-         entries: const [],
-         environment: const {},
-       );
+  _FakeLeftoverService({required this.detection})
+    : super(
+        installedApps: const _EmptyInstalledApps(),
+        guard: PathGuard(protectedRoots: const []),
+        entries: const [],
+        environment: const {},
+      );
 
   LeftoverDetection detection;
   LeftoverValidation validation = const LeftoverValidation();
