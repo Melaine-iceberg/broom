@@ -56,6 +56,18 @@ void main() {
     expect(allKeys.toSet(), hasLength(allKeys.length));
   });
 
+  test('leftover rules use the leftover category key', () {
+    final rule = CleanerRule(
+      id: 'leftover.slack',
+      title: 'Slack 卸载残留',
+      category: '卸载残留',
+      description: '测试规则',
+      pathPatterns: const [r'%APPDATA%\Slack'],
+    );
+
+    expect(ruleCategoryKey(rule), 'leftover');
+  });
+
   test('scan settings map to scan options', () {
     const settings = ScanSettings(
       disabledCategoryIds: {'browser'},

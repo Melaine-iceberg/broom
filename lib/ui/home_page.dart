@@ -10,6 +10,7 @@ import '../core/diagnostics/app_logger.dart';
 import '../core/models/clean_models.dart';
 import '../core/models/cleaner_rule.dart';
 import '../core/models/scan_models.dart';
+import '../core/rules/leftover_catalog.dart';
 import '../core/shell/system_shell.dart';
 import '../l10n/broom_strings.dart';
 import 'analysis_widgets.dart';
@@ -510,6 +511,18 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Map<String, String> _ruleTitles(BuildContext context) {
+    return {
+      for (final rule in controller.rules)
+        rule.id: context.strings.ruleTitle(rule),
+      for (final entry in LeftoverCatalog.entries)
+        entry.ruleId: context.strings.leftoverRuleTitle(
+          entry.appName,
+          entry.appNameEn,
+        ),
+    };
+  }
+
   Widget? _buildSectionPage(AppSection target) {
     switch (target) {
       case AppSection.clean:
@@ -539,21 +552,12 @@ class _HomePageState extends State<HomePage> {
           service: controller.quarantine,
           shell: widget.shell,
           retention: widget.quarantineRetention,
-          ruleTitles: {
-            for (final rule in controller.platform.rules)
-              rule.id: context.strings.ruleTitle(rule),
-          },
+          ruleTitles: _ruleTitles(context),
         );
       case AppSection.history:
         final store = controller.quarantine.historyStore;
         if (store == null) return null;
-        return CleanHistoryPage(
-          store: store,
-          ruleTitles: {
-            for (final rule in controller.platform.rules)
-              rule.id: context.strings.ruleTitle(rule),
-          },
-        );
+        return CleanHistoryPage(store: store, ruleTitles: _ruleTitles(context));
       case AppSection.settings:
         return SettingsPage(
           settings: widget.settingsController,

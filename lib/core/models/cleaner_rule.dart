@@ -1,3 +1,5 @@
+import 'leftover_models.dart';
+
 enum CleanRisk { safe, review, info }
 
 class RuleAudit {
@@ -55,6 +57,7 @@ class RuleAuditSample {
 String ruleCategoryKey(CleanerRule rule) {
   if (rule.id == 'windows.thumbnail_icon_cache') return 'thumbnails';
   if (rule.id == 'browser.extension_scripts') return 'browser_extension';
+  if (rule.id.startsWith(leftoverRuleIdPrefix)) return 'leftover';
   return switch (rule.id.split('.').first) {
     'windows' => 'system',
     'browser' => 'browser',

@@ -36,6 +36,9 @@ class BroomStrings {
   String ruleTitle(CleanerRule rule) =>
       localeName == 'en' ? (rule.titleEn ?? rule.title) : rule.title;
 
+  String leftoverRuleTitle(String appName, String appNameEn) =>
+      localeName == 'en' ? '$appNameEn leftovers' : '$appName 卸载残留';
+
   String ruleCategory(CleanerRule rule) =>
       localeName == 'en' ? (rule.categoryEn ?? rule.category) : rule.category;
 

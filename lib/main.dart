@@ -13,8 +13,10 @@ import 'core/clean/quarantine_service.dart';
 import 'core/clean/system_cache_cleaner.dart';
 import 'core/clean/system_services.dart';
 import 'core/diagnostics/app_logger.dart';
+import 'core/leftover/leftover_service.dart';
 import 'core/platform/cleaner_platform.dart';
 import 'core/platform/file_lock_probe.dart';
+import 'core/platform/installed_apps.dart';
 import 'core/platform/system_access.dart';
 import 'core/platform/system_cache_platform.dart';
 import 'core/rules/rule_catalog_store.dart';
@@ -116,11 +118,17 @@ void main(List<String> args) {
   final ntfsIndex = Platform.isWindows
       ? NtfsIndexClient()
       : const UnavailableNtfsIndex();
+  final leftoverService = LeftoverService(
+    installedApps: createInstalledApps(),
+    guard: guard,
+    exclusions: exclusions,
+  );
   final controller = CleanController(
     platform: platform,
     guard: guard,
     quarantine: quarantine,
     exclusions: exclusions,
+    leftoverService: leftoverService,
     isRuleEnabled: settings.isRuleEnabled,
     scanSettings: () => settings.scanSettings,
     scanResultStore: ScanResultStore(

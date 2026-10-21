@@ -4,8 +4,10 @@ import 'package:flutter/foundation.dart';
 
 import '../core/clean/quarantine_service.dart';
 import '../core/diagnostics/app_logger.dart';
+import '../core/leftover/leftover_service.dart';
 import '../core/models/clean_models.dart';
 import '../core/models/cleaner_rule.dart';
+import '../core/models/leftover_models.dart';
 import '../core/models/scan_models.dart';
 import '../core/platform/cleaner_platform.dart';
 import '../core/platform/file_lock_probe.dart';
@@ -73,6 +75,7 @@ class CleanController extends ChangeNotifier {
     this.isRuleEnabled,
     this.scanSettings,
     this.scanResultStore,
+    this.leftoverService,
     this.ntfsIndex,
     ScanService Function()? scanServiceFactory,
     FileLockProbe? lockProbe,
@@ -87,6 +90,7 @@ class CleanController extends ChangeNotifier {
   bool Function(String ruleId)? isRuleEnabled;
   ScanSettings Function()? scanSettings;
   final ScanResultStore? scanResultStore;
+  final LeftoverService? leftoverService;
   final NtfsIndex? ntfsIndex;
   final ScanService Function() _scanServiceFactory;
   final FileLockProbe _lockProbe;
@@ -123,6 +127,9 @@ class CleanController extends ChangeNotifier {
   final Map<ScanErrorKind, List<String>> _issueSamples = {};
   int _liveFoundCount = 0;
   int _liveFoundBytes = 0;
+  int _persistableFoundCount = 0;
+  int _persistableFoundBytes = 0;
+  List<CleanerRule> _runtimeRules = const [];
   double _scanCompletion = 0;
   static const _streamNotifyInterval = Duration(milliseconds: 200);
   DateTime _lastStreamNotify = DateTime.fromMillisecondsSinceEpoch(0);
@@ -186,6 +193,9 @@ class CleanController extends ChangeNotifier {
   int get scanScannedFiles => _scanScannedFiles;
   Duration? get scanElapsed => _scanElapsed;
   String get rulesVersion => platform.rulesVersion;
+
+  /// Catalog rules plus the leftover rules detected for this session.
+  List<CleanerRule> get rules => [...platform.rules, ..._runtimeRules];
   int get liveFoundCount => _liveFoundCount;
   int get liveFoundBytes => _liveFoundBytes;
 
@@ -206,7 +216,7 @@ class CleanController extends ChangeNotifier {
     final summary = _lastScanSummary;
     if (summary == null) return false;
     if (summary.rulesVersion != platform.rulesVersion) return true;
-    final currentIds = {for (final rule in platform.rules) rule.id};
+    final currentIds = {for (final rule in rules) rule.id};
     return summary.ruleIds.any((id) => !currentIds.contains(id));
   }
 
@@ -316,8 +326,33 @@ class CleanController extends ChangeNotifier {
     await _ensureExclusionsLoaded();
     await _refreshPendingSessions(notify: false);
     await _refreshLastScanSummary(notify: false);
+    await _refreshLeftoverRules();
     _initialized = true;
     _notify();
+  }
+
+  Future<void> _refreshLeftoverRules() async {
+    final service = leftoverService;
+    if (service == null) {
+      _runtimeRules = const [];
+      return;
+    }
+    try {
+      final detection = await service.detect();
+      _runtimeRules = List.unmodifiable([
+        for (final candidate in detection.candidates)
+          leftoverRuleFor(candidate),
+      ]);
+      if (detection.candidates.isNotEmpty) {
+        logger?.info('leftover', '检测到 ${detection.candidates.length} 个卸载残留应用');
+      }
+      if (detection.error != null) {
+        logger?.warning('leftover', detection.error!);
+      }
+    } catch (error) {
+      _runtimeRules = const [];
+      logger?.warning('leftover', '卸载残留检测失败', error: error);
+    }
   }
 
   Future<void> _refreshLastScanSummary({bool notify = true}) async {
@@ -352,7 +387,7 @@ class CleanController extends ChangeNotifier {
     try {
       final settings = scanSettings?.call() ?? const ScanSettings();
       final allowedRules = {
-        for (final rule in platform.rules)
+        for (final rule in rules)
           if ((isRuleEnabled?.call(rule.id) ?? true) &&
               settings.isCategoryEnabled(ruleCategoryKey(rule)))
             rule.id,
@@ -369,7 +404,7 @@ class CleanController extends ChangeNotifier {
       final results = <RuleResult>[];
       var restoredCount = 0;
       var restoredBytes = 0;
-      for (final rule in platform.rules) {
+      for (final rule in rules) {
         final items = data.groups[rule.id];
         if (items == null || items.isEmpty) continue;
         final result = RuleResult(
@@ -447,6 +482,8 @@ class CleanController extends ChangeNotifier {
         return;
       }
 
+      await _refreshLeftoverRules();
+
       _notice = null;
       _error = null;
       _persistenceNotice = null;
@@ -504,7 +541,10 @@ class CleanController extends ChangeNotifier {
         if (store != null) {
           try {
             writer = await store.begin(
-              ruleIds: [for (final job in jobs) job.ruleId],
+              ruleIds: [
+                for (final job in jobs)
+                  if (!_isLeftoverRule(job.ruleId)) job.ruleId,
+              ],
               rulesVersion: platform.rulesVersion,
               roots: _scanRoots,
             );
@@ -565,8 +605,8 @@ class CleanController extends ChangeNotifier {
           try {
             final summary = await writer.complete(
               scannedFiles: result.scannedFiles,
-              foundFiles: _liveFoundCount,
-              foundBytes: _liveFoundBytes,
+              foundFiles: _persistableFoundCount,
+              foundBytes: _persistableFoundBytes,
               issueCount: _scanDirectoryErrors,
               errorCounts: Map<ScanErrorKind, int>.of(_issueCounts),
               truncated: result.truncated,
@@ -605,6 +645,8 @@ class CleanController extends ChangeNotifier {
     _scanRoots = ScanRoots.empty;
     _liveFoundCount = 0;
     _liveFoundBytes = 0;
+    _persistableFoundCount = 0;
+    _persistableFoundBytes = 0;
     _scanCompletion = 0;
     _lastStreamNotify = DateTime.fromMillisecondsSinceEpoch(0);
     _persistQueue = Future<void>.value();
@@ -638,6 +680,10 @@ class CleanController extends ChangeNotifier {
       }
       _liveFoundCount++;
       _liveFoundBytes += item.size;
+      if (!_isLeftoverRule(ruleId)) {
+        _persistableFoundCount++;
+        _persistableFoundBytes += item.size;
+      }
     }
     _recentScanItems.insertAll(0, items.take(5));
     if (_recentScanItems.length > 8) {
@@ -666,9 +712,14 @@ class CleanController extends ChangeNotifier {
   }
 
   void _queuePersist(ScanResultWriter writer, List<JunkItem> items) {
+    final persistable = [
+      for (final item in items)
+        if (!_isLeftoverRule(_ruleIdOf(item))) item,
+    ];
+    if (persistable.isEmpty) return;
     _persistQueue = _persistQueue.then((_) async {
       try {
-        await writer.addItems(items);
+        await writer.addItems(persistable);
       } catch (error) {
         _persistenceNotice = trf('无法保存本次扫描结果：{error}', {'error': error});
       }
@@ -687,9 +738,12 @@ class CleanController extends ChangeNotifier {
 
   String _ruleIdOf(JunkItem item) => _scanRoots.at(item.rootIndex).ruleId;
 
+  bool _isLeftoverRule(String ruleId) =>
+      ruleId.startsWith(leftoverRuleIdPrefix);
+
   List<RuleResult> _groupResultsFromStream() {
     final results = <RuleResult>[];
-    for (final rule in platform.rules) {
+    for (final rule in rules) {
       final items = _streamItemsByRule[rule.id];
       if (items == null || items.isEmpty) continue;
       items.sort((a, b) => b.size.compareTo(a.size));
@@ -858,23 +912,47 @@ class CleanController extends ChangeNotifier {
         _undoBusy) {
       return;
     }
-    final items = selectedItems;
-    if (items.isEmpty) return;
+    final selected = selectedItems;
+    if (selected.isEmpty) return;
 
     _cancelLockProbe();
     _phase = CleanPhase.cleaning;
     _cleanProgress = CleanProgress(
       moved: 0,
       processed: 0,
-      total: items.length,
+      total: selected.length,
       movedBytes: 0,
     );
     _cleanCancelRequested = false;
     _error = null;
-    logger?.info('clean', '开始清理：${items.length} 个文件');
+    logger?.info('clean', '开始清理：${selected.length} 个文件');
     _notify();
 
     try {
+      final items = await _validatedCleanItems(selected);
+      if (items.isEmpty) {
+        _phase = CleanPhase.preview;
+        _cleanProgress = null;
+        _error = tr('检测到应用已重新安装，已跳过卸载残留清理。');
+        _notify();
+        return;
+      }
+      if (items.length != selected.length) {
+        _cleanProgress = CleanProgress(
+          moved: 0,
+          processed: 0,
+          total: items.length,
+          movedBytes: 0,
+        );
+        _error = trf('检测到应用已重新安装，已跳过 {count} 个残留文件。', {
+          'count': selected.length - items.length,
+        });
+        logger?.info(
+          'leftover',
+          '清理前校验跳过 ${selected.length - items.length} 个残留文件',
+        );
+        _notify();
+      }
       final report = await quarantine.clean(
         items,
         roots: _scanRoots,
@@ -913,6 +991,49 @@ class CleanController extends ChangeNotifier {
       await _refreshPendingSessions(notify: false);
       _notify();
     }
+  }
+
+  Future<List<JunkItem>> _validatedCleanItems(List<JunkItem> items) async {
+    final service = leftoverService;
+    if (service == null) return items;
+
+    final leftoverRuleIds = <String>{
+      for (final item in items)
+        if (_isLeftoverRule(_ruleIdOf(item))) _ruleIdOf(item),
+    };
+    if (leftoverRuleIds.isEmpty) return items;
+
+    final validation = await service.revalidate(leftoverRuleIds);
+    if (validation.error != null) {
+      logger?.warning('leftover', validation.error!);
+      throw StateError(tr('无法确认应用的安装状态，已取消清理。'));
+    }
+
+    final staleRuleIds = leftoverRuleIds.difference(validation.orphanedRuleIds);
+    if (staleRuleIds.isEmpty) return items;
+
+    _discardLeftoverResults(staleRuleIds);
+    return [
+      for (final item in items)
+        if (!_isLeftoverRule(_ruleIdOf(item)) ||
+            validation.orphanedRuleIds.contains(_ruleIdOf(item)))
+          item,
+    ];
+  }
+
+  void _discardLeftoverResults(Set<String> ruleIds) {
+    for (final ruleId in ruleIds) {
+      final result = _findResult(ruleId);
+      if (result == null) continue;
+      for (final item in result.items) {
+        _deselectPath(item);
+      }
+      _lockedCountByRule.remove(ruleId);
+    }
+    _replaceResults([
+      for (final result in _results)
+        if (!ruleIds.contains(result.rule.id)) result,
+    ]);
   }
 
   void cancelCleaning() {
@@ -1072,13 +1193,14 @@ class CleanController extends ChangeNotifier {
     final jobs = <ScanJob>[];
     final seenRoots = <String>{};
     final settings = scanSettings?.call() ?? const ScanSettings();
+    final rules = this.rules;
     _activeCategoryIds = {
-      for (final rule in platform.rules)
+      for (final rule in rules)
         if ((isRuleEnabled?.call(rule.id) ?? true) &&
             settings.isCategoryEnabled(ruleCategoryKey(rule)))
           ruleCategoryKey(rule),
     };
-    for (final rule in platform.rules.where(
+    for (final rule in rules.where(
       (rule) =>
           (isRuleEnabled?.call(rule.id) ?? true) &&
           settings.isCategoryEnabled(ruleCategoryKey(rule)),
@@ -1145,7 +1267,7 @@ class CleanController extends ChangeNotifier {
       return;
     }
 
-    final rules = platform.rules;
+    final rules = this.rules;
     final scopes = <String, RuleExclusionScope>{};
     if (exclusions.paths.isEmpty) {
       for (final rule in rules) {
