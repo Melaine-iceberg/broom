@@ -57,11 +57,66 @@ void main() {
 
     final data = await store.load(latest);
     expect(data, isNotNull);
-    expect(data!.items, hasLength(2));
-    expect(data.items.first.path, p.windows.join(temp.path, 'cache', 'a.tmp'));
-    final root = data.roots.at(data.items.first.rootIndex);
+    final items = data!.groups['test.rule']!;
+    expect(items, hasLength(2));
+    // Groups are sorted by size descending inside the worker.
+    expect(items.first.path, p.windows.join(temp.path, 'cache', 'b.tmp'));
+    expect(items.last.path, p.windows.join(temp.path, 'cache', 'a.tmp'));
+    expect(data.totalItems, 2);
+    final root = data.roots.at(items.first.rootIndex);
     expect(root.ruleId, 'test.rule');
     expect(root.rootPath, p.windows.join(temp.path, 'cache'));
+  });
+
+  test('loads grouped, sorted and filtered rule groups', () async {
+    final multiRoots = ScanRoots([
+      ScanRoot(ruleId: 'rule.a', rootPath: p.windows.join(temp.path, 'a')),
+      ScanRoot(ruleId: 'rule.b', rootPath: p.windows.join(temp.path, 'b')),
+    ]);
+    JunkItem groupedItem(String name, int size, int rootIndex) => JunkItem(
+      rootIndex: rootIndex,
+      path: p.windows.join(temp.path, 'cache', name),
+      size: size,
+      modifiedMicros: DateTime.utc(2026, 10, 18, 12).microsecondsSinceEpoch,
+    );
+    final writer = await store.begin(
+      ruleIds: const ['rule.a', 'rule.b'],
+      rulesVersion: 'builtin',
+      roots: multiRoots,
+    );
+    await writer.addItems([
+      groupedItem('a-small.tmp', 1, 0),
+      groupedItem('a-big.tmp', 30, 0),
+      groupedItem('b-mid.tmp', 20, 1),
+    ]);
+    final summary = await writer.complete(
+      scannedFiles: 3,
+      foundFiles: 3,
+      foundBytes: 51,
+      issueCount: 0,
+      errorCounts: const {},
+      truncated: false,
+    );
+
+    final all = await store.load(summary);
+    expect(all!.totalItems, 3);
+    expect(all.groups.keys, unorderedEquals(['rule.a', 'rule.b']));
+    expect(
+      all.groups['rule.a']!.map((item) => item.size),
+      orderedEquals([30, 1]),
+    );
+    expect(
+      all.roots.at(all.groups['rule.a']!.first.rootIndex).ruleId,
+      'rule.a',
+    );
+
+    final filtered = await store.load(summary, allowedRuleIds: {'rule.b'});
+    expect(filtered!.totalItems, 3);
+    expect(filtered.groups.keys, ['rule.b']);
+    expect(
+      filtered.groups['rule.b']!.single.path,
+      p.windows.join(temp.path, 'cache', 'b-mid.tmp'),
+    );
   });
 
   test('replaces the previous result and removes the old directory', () async {
@@ -149,7 +204,8 @@ void main() {
     expect(summary.persistenceLimited, isTrue);
     expect(summary.persistedItemCount, lessThan(10));
     final data = await limited.load(summary);
-    expect(data!.items.length, summary.persistedItemCount);
+    final items = data!.groups.values.expand((group) => group);
+    expect(items.length, summary.persistedItemCount);
   });
 
   test('rejects unsafe ids in latest.json', () async {

@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math';
-import 'dart:typed_data';
 
 import '../models/scan_models.dart';
 import '../platform/path_semantics.dart';
+import 'scan_writer_isolate.dart';
 
 const _schemaVersion = 1;
 const _itemsFileName = 'items.jsonl';
@@ -117,16 +118,25 @@ class StoredScanSummary {
 class StoredScanData {
   const StoredScanData({
     required this.summary,
-    required this.items,
+    required this.groups,
     this.roots = ScanRoots.empty,
+    this.totalItems = 0,
   });
 
   final StoredScanSummary summary;
-  final List<JunkItem> items;
 
-  /// Root table for [items]. Rebuilt from the `ruleId` / `rootPath` columns in
-  /// `items.jsonl`, so the file format is unchanged.
+  /// Items grouped by rule id and sorted by size, descending.
+  ///
+  /// Parsing, grouping and sorting all happen in a worker isolate; the calling
+  /// isolate only receives the finished lists.
+  final Map<String, List<JunkItem>> groups;
+
+  /// Root table for the items in [groups]. Rebuilt from the `ruleId` /
+  /// `rootPath` columns in `items.jsonl`, so the file format is unchanged.
   final ScanRoots roots;
+
+  /// Valid items read from disk before [allowedRuleIds] filtering.
+  final int totalItems;
 }
 
 /// Streams scan batches into a per-scan directory and publishes a small
@@ -212,7 +222,10 @@ class ScanResultStore {
     }
   }
 
-  Future<StoredScanData?> load(StoredScanSummary summary) async {
+  Future<StoredScanData?> load(
+    StoredScanSummary summary, {
+    Set<String>? allowedRuleIds,
+  }) async {
     final itemsFile = File(
       semantics.forIo(
         semantics.join(
@@ -222,63 +235,19 @@ class ScanResultStore {
       ),
     );
     if (!await itemsFile.exists()) return null;
-    final items = <JunkItem>[];
-    final roots = <ScanRoot>[];
-    final rootIndexes = <String, int>{};
+    final itemsPath = itemsFile.path;
     try {
-      await for (final line
-          in itemsFile
-              .openRead()
-              .transform(utf8.decoder)
-              .transform(const LineSplitter())) {
-        if (line.trim().isEmpty) continue;
-        final item = _decodeItem(line, roots, rootIndexes);
-        if (item != null) items.add(item);
-      }
+      final parsed = await Isolate.run(
+        () => _parseItemsFile(itemsPath, allowedRuleIds),
+      );
+      return StoredScanData(
+        summary: summary,
+        groups: parsed.groups,
+        roots: parsed.roots,
+        totalItems: parsed.totalItems,
+      );
     } on FileSystemException catch (error) {
       throw ScanResultStoreException('无法读取上次扫描结果：${error.message}');
-    }
-    return StoredScanData(
-      summary: summary,
-      items: items,
-      roots: ScanRoots(roots),
-    );
-  }
-
-  JunkItem? _decodeItem(
-    String line,
-    List<ScanRoot> roots,
-    Map<String, int> rootIndexes,
-  ) {
-    try {
-      final value = jsonDecode(line);
-      if (value is! Map<String, dynamic>) return null;
-      final path = value['path'];
-      final rootPath = value['rootPath'];
-      final ruleId = value['ruleId'];
-      final size = value['size'];
-      final modified = value['modified'];
-      if (path is! String ||
-          rootPath is! String ||
-          ruleId is! String ||
-          size is! int ||
-          modified is! String) {
-        return null;
-      }
-      final time = DateTime.tryParse(modified);
-      if (time == null) return null;
-      final rootIndex = rootIndexes.putIfAbsent('$ruleId\u0000$rootPath', () {
-        roots.add(ScanRoot(ruleId: ruleId, rootPath: rootPath));
-        return roots.length - 1;
-      });
-      return JunkItem(
-        rootIndex: rootIndex,
-        path: path,
-        size: size,
-        modifiedMicros: time.microsecondsSinceEpoch,
-      );
-    } on FormatException {
-      return null;
     }
   }
 
@@ -350,8 +319,7 @@ class ScanResultWriter {
   final ScanRoots roots;
   final Directory _directory;
   final ScanResultStore _store;
-  IOSink? _sink;
-  int _bytesWritten = 0;
+  ScanWriterIsolate? _writer;
   int _itemsWritten = 0;
   bool _closed = false;
   bool _persistenceLimited = false;
@@ -367,47 +335,28 @@ class ScanResultWriter {
         _store.semantics.join(_directory.path, _itemsFileName),
       ),
     );
-    _sink = file.openWrite();
+    _writer = await ScanWriterIsolate.start(
+      path: file.path,
+      roots: roots,
+      maxBytes: _store.maxItemsFileBytes,
+    );
   }
 
   Future<void> addItems(List<JunkItem> items) async {
     if (_closed || _persistenceLimited || items.isEmpty) return;
-    final sink = _sink;
-    if (sink == null) return;
-    // Encode each line once and hand bytes to the sink. Encoding the line to
-    // measure it and then writing the joined String re-encoded the whole batch
-    // a second time, on the UI isolate, for every batch of every scan.
-    final buffer = BytesBuilder(copy: false);
-    for (final item in items) {
-      final root = roots.at(item.rootIndex);
-      final line = jsonEncode({
-        'ruleId': root.ruleId,
-        'rootPath': root.rootPath,
-        'path': item.path,
-        'size': item.size,
-        'modified': DateTime.fromMicrosecondsSinceEpoch(item.modifiedMicros)
-            .toUtc()
-            .toIso8601String(),
-      });
-      final lineBytes = utf8.encode(line);
-      final cost = lineBytes.length + 1;
-      if (_bytesWritten + cost > _store.maxItemsFileBytes) {
-        _persistenceLimited = true;
-        break;
-      }
-      buffer
-        ..add(lineBytes)
-        ..addByte(0x0A);
-      _bytesWritten += cost;
-      _itemsWritten++;
-    }
+    final writer = _writer;
+    if (writer == null) return;
     try {
-      if (buffer.isNotEmpty) {
-        sink.add(buffer.takeBytes());
-        await sink.flush();
-      }
-    } on FileSystemException catch (error) {
-      _persistenceError = error.message;
+      await writer.append(items);
+    } on ScanWriterException catch (failure) {
+      _persistenceError = failure.message;
+      _persistenceLimited = true;
+    }
+    _itemsWritten = writer.itemsWritten;
+    if (writer.limited) _persistenceLimited = true;
+    final writerError = writer.error;
+    if (writerError != null) {
+      _persistenceError = writerError;
       _persistenceLimited = true;
     }
   }
@@ -424,10 +373,21 @@ class ScanResultWriter {
       throw const ScanResultStoreException('扫描结果写入器已关闭');
     }
     _closed = true;
+    final writer = _writer;
+    _writer = null;
     try {
-      await _sink?.flush();
-      await _sink?.close();
-      _sink = null;
+      await writer?.complete();
+    } on ScanWriterException catch (failure) {
+      throw ScanResultStoreException('无法保存扫描结果：${failure.message}');
+    }
+    _itemsWritten = writer?.itemsWritten ?? _itemsWritten;
+    if (writer?.limited ?? false) _persistenceLimited = true;
+    final writerError = writer?.error;
+    if (writerError != null) {
+      _persistenceError = writerError;
+      _persistenceLimited = true;
+    }
+    try {
       final summary = StoredScanSummary(
         id: id,
         completedAt: DateTime.now(),
@@ -453,12 +413,16 @@ class ScanResultWriter {
   Future<void> abort() async {
     if (_closed) return;
     _closed = true;
-    try {
-      await _sink?.close();
-    } on FileSystemException {
-      // Best effort.
+    final writer = _writer;
+    _writer = null;
+    await writer?.abort();
+    _itemsWritten = writer?.itemsWritten ?? _itemsWritten;
+    if (writer?.limited ?? false) _persistenceLimited = true;
+    final writerError = writer?.error;
+    if (writerError != null) {
+      _persistenceError = writerError;
+      _persistenceLimited = true;
     }
-    _sink = null;
     try {
       if (await _directory.exists()) {
         await _directory.delete(recursive: true);
@@ -466,5 +430,93 @@ class ScanResultWriter {
     } on FileSystemException {
       // Best effort; orphan directories are ignored by readers.
     }
+  }
+}
+
+class _ParsedScanFile {
+  const _ParsedScanFile({
+    required this.groups,
+    required this.roots,
+    required this.totalItems,
+  });
+
+  final Map<String, List<JunkItem>> groups;
+  final ScanRoots roots;
+  final int totalItems;
+}
+
+/// Parses, filters, groups and sorts a result file inside a worker isolate.
+Future<_ParsedScanFile> _parseItemsFile(
+  String path,
+  Set<String>? allowedRuleIds,
+) async {
+  final groups = <String, List<JunkItem>>{};
+  final roots = <ScanRoot>[];
+  final rootIndexes = <String, int>{};
+  var totalItems = 0;
+  await for (final line in File(
+    path,
+  ).openRead().transform(utf8.decoder).transform(const LineSplitter())) {
+    if (line.trim().isEmpty) continue;
+    final decoded = _decodeLine(line);
+    if (decoded == null) continue;
+    totalItems++;
+    if (allowedRuleIds != null && !allowedRuleIds.contains(decoded.ruleId)) {
+      continue;
+    }
+    final rootIndex = rootIndexes.putIfAbsent(
+      '${decoded.ruleId}\u0000${decoded.rootPath}',
+      () {
+        roots.add(ScanRoot(ruleId: decoded.ruleId, rootPath: decoded.rootPath));
+        return roots.length - 1;
+      },
+    );
+    (groups[decoded.ruleId] ??= []).add(
+      JunkItem(
+        rootIndex: rootIndex,
+        path: decoded.path,
+        size: decoded.size,
+        modifiedMicros: decoded.modifiedMicros,
+      ),
+    );
+  }
+  for (final items in groups.values) {
+    items.sort((a, b) => b.size.compareTo(a.size));
+  }
+  return _ParsedScanFile(
+    groups: groups,
+    roots: ScanRoots(roots),
+    totalItems: totalItems,
+  );
+}
+
+({String ruleId, String rootPath, String path, int size, int modifiedMicros})?
+_decodeLine(String line) {
+  try {
+    final value = jsonDecode(line);
+    if (value is! Map<String, dynamic>) return null;
+    final path = value['path'];
+    final rootPath = value['rootPath'];
+    final ruleId = value['ruleId'];
+    final size = value['size'];
+    final modified = value['modified'];
+    if (path is! String ||
+        rootPath is! String ||
+        ruleId is! String ||
+        size is! int ||
+        modified is! String) {
+      return null;
+    }
+    final time = DateTime.tryParse(modified);
+    if (time == null) return null;
+    return (
+      ruleId: ruleId,
+      rootPath: rootPath,
+      path: path,
+      size: size,
+      modifiedMicros: time.microsecondsSinceEpoch,
+    );
+  } on FormatException {
+    return null;
   }
 }

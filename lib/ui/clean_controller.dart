@@ -337,7 +337,14 @@ class CleanController extends ChangeNotifier {
     _persistenceNotice = null;
     _notify();
     try {
-      final data = await store.load(summary);
+      final settings = scanSettings?.call() ?? const ScanSettings();
+      final allowedRules = {
+        for (final rule in platform.rules)
+          if ((isRuleEnabled?.call(rule.id) ?? true) &&
+              settings.isCategoryEnabled(ruleCategoryKey(rule)))
+            rule.id,
+      };
+      final data = await store.load(summary, allowedRuleIds: allowedRules);
       if (data == null) {
         _lastScanSummary = null;
         _error = tr('上次扫描结果已不可用，请重新扫描。');
@@ -346,28 +353,25 @@ class CleanController extends ChangeNotifier {
       }
       _resetScanStreamState();
       _scanRoots = data.roots;
-      final settings = scanSettings?.call() ?? const ScanSettings();
-      final allowedRules = {
-        for (final rule in platform.rules)
-          if ((isRuleEnabled?.call(rule.id) ?? true) &&
-              settings.isCategoryEnabled(ruleCategoryKey(rule)))
-            rule.id,
-      };
-      final restoredItems = [
-        for (final item in data.items)
-          if (allowedRules.contains(_ruleIdOf(item))) item,
-      ];
-      final filteredCount = data.items.length - restoredItems.length;
+      final results = <RuleResult>[];
+      var restoredCount = 0;
+      var restoredBytes = 0;
+      for (final rule in platform.rules) {
+        final items = data.groups[rule.id];
+        if (items == null || items.isEmpty) continue;
+        final result = RuleResult(rule: rule, items: items);
+        results.add(result);
+        restoredCount += items.length;
+        restoredBytes += result.totalBytes;
+      }
+      final filteredCount = data.totalItems - restoredCount;
       _resetSelection();
       _resetLockProbeState();
-      _replaceResults(_groupResults(restoredItems));
+      _replaceResults(results);
       _resetSelection();
       _selectDefaultItems(notify: false);
-      _liveFoundCount = restoredItems.length;
-      _liveFoundBytes = restoredItems.fold(
-        0,
-        (total, item) => total + item.size,
-      );
+      _liveFoundCount = restoredCount;
+      _liveFoundBytes = restoredBytes;
       _scanDirectoryErrors = summary.issueCount;
       _scanScannedFiles = summary.scannedFiles;
       _scanElapsed = null;
@@ -380,7 +384,7 @@ class CleanController extends ChangeNotifier {
       _lastReport = null;
       _cleanProgress = null;
       _phase = CleanPhase.preview;
-      _notice = restoredItems.isEmpty
+      _notice = restoredCount == 0
           ? tr('已恢复上次扫描结果：按当前规则与类别没有可清理的内容。')
           : trf('已恢复 {time} 的扫描结果，清理前会重新校验路径。', {
               'time': _formatRestoreTime(summary.completedAt),
@@ -657,6 +661,8 @@ class CleanController extends ChangeNotifier {
     }
     await writer.abort();
   }
+
+  String _ruleIdOf(JunkItem item) => _scanRoots.at(item.rootIndex).ruleId;
 
   List<RuleResult> _groupResultsFromStream() {
     final results = <RuleResult>[];
@@ -1160,24 +1166,6 @@ class CleanController extends ChangeNotifier {
       if (result.rule.id == ruleId) return result;
     }
     return null;
-  }
-
-  String _ruleIdOf(JunkItem item) => _scanRoots.at(item.rootIndex).ruleId;
-
-  List<RuleResult> _groupResults(List<JunkItem> items) {
-    final grouped = <String, List<JunkItem>>{};
-    for (final item in items) {
-      grouped.putIfAbsent(_ruleIdOf(item), () => []).add(item);
-    }
-
-    final results = <RuleResult>[];
-    for (final rule in platform.rules) {
-      final ruleItems = grouped.remove(rule.id);
-      if (ruleItems == null || ruleItems.isEmpty) continue;
-      ruleItems.sort((a, b) => b.size.compareTo(a.size));
-      results.add(RuleResult(rule: rule, items: ruleItems));
-    }
-    return results;
   }
 
   Future<void> _refreshPendingSessions({bool notify = true}) async {

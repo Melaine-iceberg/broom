@@ -379,35 +379,43 @@ flutter test benchmark/ntfs_index_benchmark_test.dart
 
 **风险**：低。指纹只用于"是否见过"的判断，碰撞会把两条不同路径中的一条当成重复而漏扫；62 位在 1M 量级的生日碰撞概率约 `1e-7`。`test/path_fingerprint_test.dart` 断言了稳定性、Smi 范围与 20 万条不同路径无碰撞。若未来单次扫描条数进入 10M 量级，应按 `n²/2^63` 重新评估。
 
-### P2-8 持久化 JSON 编解码留在 UI isolate（待实施）
+### P2-8 持久化 JSON 编解码留在 UI isolate（已实施）
 
-`lib/core/scan/scan_result_store.dart:348` 的 `addItems` 在 UI isolate 上逐条 `jsonEncode` + `utf8.encode`，1M 条就是 100 万次编码，以 256 条一批的节奏穿插在扫描通知之间。可移到专用 isolate，通过 `SendPort` 单向投递（结果只用于落盘，无需回传）。
+**现象**：`ScanResultWriter.addItems` 在 UI isolate 上逐条 `jsonEncode` + `utf8.encode`；`ScanResultStore.load` 同样在调用方 isolate 上逐行 `jsonDecode` 并构造 `JunkItem`。改造前实测（2026-10-21，`benchmark/scan_restore_benchmark_test.dart`，3 轮交错取中位数）：
 
-**恢复侧补充测量（2026-10-21）**：`ScanResultStore.load` 也在调用方 isolate 上逐行 `jsonDecode` 并构造 `JunkItem`，读侧大概率比写侧更重。复现命令：
+| 条数 | 文件 | 当前 `store.load` | 完整 restore | 解析后主线程 |
+| ---: | ---: | ---: | ---: | ---: |
+| 100,000 | 23.0 MiB | 582 ms | 653 ms | 70 ms |
+| 1,000,000 | 230.6 MiB | 5,496 ms | 6,328 ms | 832 ms（其中分组排序 388 ms） |
+
+**改法**：
+
+1. **写侧**：新增 `ScanWriterIsolate`（`lib/core/scan/scan_writer_isolate.dart`）。每个 `ScanResultWriter` 的 isolate 自己持有 `IOSink`，主 isolate 只发送 256 条一批的 `JunkItem` 并等待确认。`maxItemsFileBytes` 上限、写入错误、`abort` 清理与 `itemsWritten` 语义原样保留；`meta.json` / `latest.json` 仍由主 isolate 发布（只有一次小写入）。
+2. **读侧**：`ScanResultStore.load` 改为在 `Isolate.run` 中读文件、解析、按 `allowedRuleIds` 过滤、按规则分组并按体积降序排序，返回 `Map<ruleId, List<JunkItem>>`、根表与过滤前的 `totalItems`。`CleanController.restoreLastScan` 直接把这些分组包装成 `RuleResult`，删除原来的 `_groupResults`；默认选择、摘要 fold 与锁探测路径表仍在主线程。
+
+**改造后实测（同一基准，改造后 3 次运行的中位区间）**：
+
+| 条数 | `load`（isolate 内解析+过滤+分组+排序） | 完整 restore | 解析后主线程 |
+| ---: | ---: | ---: | ---: |
+| 100,000 | 583–638 ms | 585–611 ms | 噪声内（≤2 ms） |
+| 1,000,000 | 5,656–5,749 ms | 6,148–6,445 ms | 0.40–0.65 s |
+
+与改造前相比，总恢复时长没有回退：100k 从 653 ms 降到约 585–611 ms，1M 在 6.1–6.4 s 区间内波动（改造前 6.33 s）。真正的变化是 **UI isolate 不再连续解析 5.4 s**：1M 条的连续 JSON 解析被移到 worker，主线程只在最后做一圈选择与摘要，停顿从 0.83 s 降到 0.40–0.65 s。`load` 数字略高于改造前的纯解析（因为它同时完成了原本在主线程的分组与排序），但总账持平。
+
+写侧没有单独的帧时间基准，但基准里用真实 `ScanResultWriter` 生成文件（10 万 / 100 万条）的 setup 在改造前后都约为 0.95 s / 9.2 s，没有观察到写入吞吐回退；`jsonEncode` + `utf8.encode` 已从 UI isolate 移走。
+
+**风险**：中低。
+
+- 写入 isolate 每个 writer 一个，`complete` / `abort` 都会关闭并 kill；worker 异常退出时挂起的 `append` 以 `ScanWriterException` 结束，`persistenceError` / `persistenceLimited` 走既有提示。既有 round-trip、限量与 abort 测试全部通过。
+- 恢复结果通过一次 isolate 消息整体回传。改造前测得 1M 条纯接收上界约 125 ms，可接受；代价是传输期间临时多一份条目内存。若未来进入 10M 量级，需要改为分批回传。
+- `StoredScanData` 由平铺 `items` 改为 `groups` + `totalItems`；调用方（控制器、测试、基准）已同步。`totalItems` 保留"按当前规则过滤 N 项"的提示；根表只为保留条目重建。
+- 回归：`test/scan_result_store_test.dart` 新增分组、排序与 `allowedRuleIds` 过滤用例；既有写侧 round-trip / 限量 / abort 用例继续覆盖 isolate 生命周期。全量 419 项测试与 `flutter analyze --fatal-infos` 通过。
+
+复现命令：
 
 ```bash
 flutter test benchmark/scan_restore_benchmark_test.dart
 ```
-
-该基准用真实 `ScanResultWriter` 生成结果文件并预热文件缓存，3 轮交错取中位数：
-
-| 条数 | 文件 | 当前 `store.load` | isolate 流式解析 | 主 isolate 纯接收上界 |
-| ---: | ---: | ---: | ---: | ---: |
-| 100,000 | 23.0 MiB | 582 ms | 556 ms（−4%） | 7 ms |
-| 1,000,000 | 230.6 MiB | 5,496 ms | 5,452 ms（−1%） | 125 ms |
-
-"纯接收上界"用只发不解析的 worker 测得，包含消息序列化、反序列化与列表追加；真实流式解析时这些工作与 worker 解析重叠，因此是主 isolate 成本的上界。结论：把解析移到后台 isolate 不会拖慢总恢复时长，同时把 1M 条约 5.4 s 的连续解析从 UI isolate 移走。
-
-解析之后的主线程工作（同一基准，直接驱动真实 `CleanController.restoreLastScan`，锁探测替换为挂起探针以排除异步竞争）：
-
-| 条数 | 当前完整 restore | `_groupResults`（分组 + 按体积排序） | 解析后主线程 | 其中 group 占比 |
-| ---: | ---: | ---: | ---: | ---: |
-| 100,000 | 653 ms | 29 ms | 70 ms | 41% |
-| 1,000,000 | 6,328 ms | 388 ms | 832 ms | 47% |
-
-"解析后主线程" = 完整 restore − 当前 `store.load`，包含允许规则的过滤、`_groupResults`、默认选择、摘要 fold 与锁探测的路径表构建；`_startLockProbe` 之后真正的异步探测已排除。也就是说，isolate 化后 1M 条仍会有约 **0.83 s** 的收尾停顿，其中分组与排序约 0.39 s。把 `_groupResults` 一并移入持久化 isolate 可以再省掉这 0.39 s（worker 已经按规则分组，主线程只收 `List<RuleResult>`）；剩下的默认选择与过滤约 0.44 s 需要改选择模型才能继续压缩，不建议在 P2-8 里做。
-
-若实施，建议写侧编码、读侧解析与分组共用一个持久化 isolate，并在主线程只做选择与首帧。
 
 ### P2-9 目录枚举通道按目录逐个往返（待实施）
 
@@ -431,7 +439,7 @@ flutter test benchmark/scan_restore_benchmark_test.dart
 4. **P1-5**（已实施）：walker 复用 `listDetailed`，逐文件 `stat` 归零；分析 isolate 通过根 isolate 探测 + token 接入原生枚举。
 5. **P1-6 + P1-7**（已实施）：压缩条目形状并引入根表，两处去重集合改为指纹；1M 条结果常驻从约 227 MiB 降到约 89 MiB。
 6. **P0-2**（已实施）：索引路径复用目录遍历的 8 路 stat 流水线；2 万真实文件两次实测 8 路为串行的 2.54× / 2.64×，10 万候选约省 8–9 s。
-7. **P2-8**（待实施，含恢复侧）：读侧 A/B 已证明 isolate 化不增加总时长，且能把 1M 条约 5.4 s 的解析移出 UI isolate；解析后仍有约 0.83 s 主线程工作，其中分组排序 0.39 s，建议把 `_groupResults` 一起移入持久化 isolate。
+7. **P2-8**（已实施）：写侧编码进 writer isolate，读侧解析、过滤、分组排序进 `Isolate.run`；1M 条总恢复时长持平，UI isolate 的连续解析归零，收尾停顿从 0.83 s 降到 0.40–0.65 s。
 8. **P2-9 / P2-10**：需要原生侧改动或只影响系统缓存清理，按实测收益排期。
 
 ## 变更记录
@@ -443,8 +451,8 @@ flutter test benchmark/scan_restore_benchmark_test.dart
 - **P0-4 已落地**：新增 `VisibleItemsCache`（按 `source` 身份 + filter 值 + sort + `itemsRevision` 记忆化）、`CleanController.itemsRevision`、`ResultItemFilter` 值相等。排序按"键是否已在条目上"分流：数值键直接比较并在并列时惰性缓存小写路径，路径/扩展名键先派生一次再排序。默认视图每次重建 50.4→0 ms；`pathAsc` 405.1→166.7 ms，`extensionAsc` 2,443.6→273.8 ms。新增 `benchmark/ui_preview_benchmark.dart`，把旧实现作为参照副本保留在基准内以便复现同轮 A/B。
 - **P1-5 已落地**：分析 walker 改用 `BroomFileSystem` 并优先 `DetailedDirectoryListing`，访问者签名改为 `(String, FsStat)`；`AnalysisService` 在根 isolate 探测原生枚举并通过 `RootIsolateToken` 在分析 isolate 初始化 messenger，失败时回退 `list + stat`。详细枚举路径下每文件 `stat` 从 1 次降为 0（3 个文件对应 2 次 `listDetailed` + 0 次 `stat`），回退路径保持 N 次 `stat` 与错误计数。新增 7 项回归用例，全量 410 项测试与 `flutter analyze --fatal-infos` 通过。
 - **P1-6 + P1-7 已落地**：`JunkItem` 改为 `rootIndex` + `modifiedMicros`，新增 `ScanRoots` 根表并贯穿扫描（含 worker 的 `rootIndexBase`）、持久化、UI 与清理服务；删除 `_itemsByPath` / `_itemLocations`，锁探测改报全局条目下标；`items.jsonl` 格式与 `schemaVersion` 不变，加载时重建根表。去重集合改用 62 位 FNV-1a 指纹，同时覆盖 `ScanService._seenPaths` 与 `JunkScanner.seen`。1M 条基准：条目 226–228 → 89–91 MiB，单处去重集合 80–95 → 19–31 MiB。新增 `benchmark/item_memory_benchmark.dart`、`test/path_fingerprint_test.dart` 与多根扫描用例，全量 413 项测试与 `flutter analyze --fatal-infos` 通过。
-- **恢复侧 A/B 已测量（未实施）**：新增 `benchmark/scan_restore_benchmark_test.dart`。10 万 / 100 万条真实结果文件的当前 `load` 为 582 / 5,496 ms；后台 isolate 流式解析为 556 / 5,452 ms，主 isolate 纯接收上界为 7 / 125 ms。解析之后仍有 70 / 832 ms 主线程工作，其中 `_groupResults` 为 29 / 388 ms；结论是 P2-8 应把读侧与分组一起纳入持久化 isolate。
 - **P0-2 已落地**：索引枚举按 512 条攒批交给 `processFiles` 的 8 路 stat 流水线，删除逐条 `processCandidate` 与 `_LimitReached`；根包含、排除、扩展名与年龄过滤、去重、上限与索引失败回退语义不变。新增 `benchmark/ntfs_index_benchmark_test.dart`（2 万真实文件，1 / 2 / 4 / 8 路交错 3 轮）与 `test/junk_scanner_ntfs_pipeline_test.dart`（5 项）。两次运行的 8 路分别为 2.54× 与 2.64×（2 路两次都是 2.01×）；全量 418 项测试与 `flutter analyze --fatal-infos` 通过。
+- **P2-8 已落地**：新增 `ScanWriterIsolate`，每个 writer 的 isolate 自己编码并写 `items.jsonl`；`ScanResultStore.load` 改为 `Isolate.run` 内解析、按允许规则过滤、分组与排序，`CleanController` 直接消费分组并删除 `_groupResults`。改造后 10 万 / 100 万条：`load` 583–638 / 5,656–5,749 ms，完整 restore 585–611 / 6,148–6,445 ms，主线程收尾 ≤2 ms / 0.40–0.65 s；总时长与改造前持平。新增分组/过滤用例，全量 419 项测试与 `flutter analyze --fatal-infos` 通过。
 - 记录一处方向性修正：装饰-排序并非对所有排序都更快。数值键本来就在条目上，装饰只是多出 O(N) 次分配，`sizeDesc` 实测因此从 46.4 涨到 63.5 ms。收益成立的区间是"派生键比分配贵得多"（`pathAsc`、`extensionAsc`）与"键大量并列"（惰性缓存生效）。全量 403 项测试与 `flutter analyze --fatal-infos` 通过。
 - 评审过程中修正了一个判断：最初按单价推算认为"清理时间几乎全花在重复元数据查询上"，端到端 A/B 证明元数据只占约 12%，rename 与文件读取才是主体。文档中的收益数字以实测为准，未采用推算值。
 - 另一处修正：P0-1 时的单步归因把约 1,000 µs 记为"其余未归因"，其中相当一部分并非散落在循环里，而是两项此前没被列入分解的操作——`finalize` 阶段的逐条 `type()` 与清理计划文件的逐条写入。这说明"按已知项求和再取差额"容易把整类操作漏在统计口径之外，凡涉及归因应以"每一次调用都有账"的方式重做。

@@ -1,28 +1,23 @@
-// Restore-side A/B benchmark for docs/perf-review.md (candidate optimization
-// after P0-2).
+// Restore benchmark for P2-8 (docs/perf-review.md).
 //
-// Current restore parses `items.jsonl` on the calling isolate; on desktop that
-// is the UI isolate. This benchmark writes a real result file through
-// `ScanResultWriter`, warms the OS cache, and measures:
+// `ScanResultStore.load` now parses, filters, groups and sorts `items.jsonl`
+// inside a worker isolate. This benchmark measures that load and the real
+// `CleanController.restoreLastScan()` that follows it, so the remaining
+// main-isolate work (default selection, summary folds, lock-probe path table)
+// stays visible.
 //
-//   main    - `ScanResultStore.load()` as shipped
-//   isolate - the same schema decoded in a background isolate, streamed back
-//             in batches so the main isolate only pays message handling
-//   group   - `CleanController._groupResults` reproduced on the flat items
-//   restore - the real `CleanController.restoreLastScan()` end to end, which
-//             adds filtering, grouping, default selection and summary folds
+// The pre-change main-isolate vs worker A/B numbers are recorded in
+// docs/perf-review.md; this file is the post-change regression baseline.
 //
 // Run manually; `flutter test` only scans `test/`, so this never runs in CI:
 //
 //   flutter test benchmark/scan_restore_benchmark_test.dart
 //
-// The generated result files live under the system temporary directory and are
-// removed afterwards.
+// Result files are created under the system temporary directory and removed
+// afterwards.
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate';
 
 import 'package:broom/core/clean/file_metadata.dart';
 import 'package:broom/core/clean/quarantine_service.dart';
@@ -42,7 +37,6 @@ import 'package:path/path.dart' as p;
 const _sizes = [100000, 1000000];
 const _rounds = 3;
 const _writeBatchSize = 2048;
-const _isolateBatchSize = 4096;
 const _ruleIds = [
   'browser.chrome',
   'browser.edge',
@@ -55,7 +49,7 @@ const _ruleIds = [
 ];
 
 void main() {
-  test('restore parse A/B', () async {
+  test('restore parse + group benchmark', () async {
     final base = await Directory.systemTemp.createTemp('broom_restore_bench_');
     try {
       for (final count in _sizes) {
@@ -70,72 +64,9 @@ void main() {
           p.windows.join(store.rootDirectory, summary.id, 'items.jsonl'),
         );
         final mib = file.lengthSync() / (1024 * 1024);
-        stdout.writeln('');
-        stdout.writeln(
-          'RESTORE [$count items, ${mib.toStringAsFixed(1)} MiB, '
-          'setup ${setup.elapsedMilliseconds} ms]',
-        );
-
         // Measure parsing, not first-touch disk reads.
         await file.openRead().drain<void>();
 
-        final main = <Duration>[];
-        final isolate = <Duration>[];
-        final isolateMain = <Duration>[];
-        final isolateWorker = <Duration>[];
-        StoredScanData? lastData;
-        for (var round = 0; round < _rounds; round++) {
-          final mainsFirst = round.isEven;
-          for (final kind
-              in mainsFirst ? ['main', 'isolate'] : ['isolate', 'main']) {
-            final stopwatch = Stopwatch()..start();
-            if (kind == 'main') {
-              final data = await store.load(summary);
-              stopwatch.stop();
-              _expectCount(data?.items.length, count, 'main');
-              lastData = data;
-              main.add(stopwatch.elapsed);
-            } else {
-              final result = await _parseInIsolate(file.path);
-              stopwatch.stop();
-              _expectCount(result.items, count, 'isolate');
-              isolate.add(stopwatch.elapsed);
-              isolateMain.add(result.mainReceive);
-              isolateWorker.add(result.workerParse);
-            }
-          }
-        }
-
-        final mainMedian = _median(main);
-        final isolateMedian = _median(isolate);
-        final isolateMainMedian = _median(isolateMain);
-        final workerMedian = _median(isolateWorker);
-        final outsideWorker = isolateMedian - workerMedian;
-        stdout.writeln('  main isolate load : ${_ms(mainMedian)} (current)');
-        stdout.writeln(
-          '  isolate parse     : ${_ms(isolateMedian)} total '
-          '(${(isolateMedian.inMicroseconds / mainMedian.inMicroseconds * 100).toStringAsFixed(0)}% '
-          'of current)',
-        );
-        stdout.writeln('    worker read+decode : ${_ms(workerMedian)}');
-        stdout.writeln(
-          '    outside worker     : ${_ms(outsideWorker)} '
-          '(transfer, deserialize, scheduling)',
-        );
-        stdout.writeln(
-          '    main receive callback: ${_ms(isolateMainMedian)} '
-          '(list append only; deserialization happens before the callback)',
-        );
-        final transferOnly = _median([
-          await _measureReceiveOnly(count),
-          await _measureReceiveOnly(count),
-        ]);
-        stdout.writeln(
-          '    receive-only upper bound: ${_ms(transferOnly)} '
-          '(send + deserialize + append, no parsing)',
-        );
-
-        final data = lastData!;
         final rules = [
           for (var index = 0; index < _ruleIds.length; index++)
             CleanerRule(
@@ -147,57 +78,48 @@ void main() {
               risk: index.isEven ? CleanRisk.safe : CleanRisk.review,
             ),
         ];
-        final group = <Duration>[];
-        for (var round = 0; round < _rounds; round++) {
-          final stopwatch = Stopwatch()..start();
-          final grouped = _groupResults(data.items, rules, data.roots);
-          stopwatch.stop();
-          _expectCount(
-            grouped.fold<int>(
-              0,
-              (total, result) => total + result.items.length,
-            ),
-            count,
-            'group',
-          );
-          group.add(stopwatch.elapsed);
-        }
-        final groupMedian = _median(group);
-
         final controller = await _createController(
           store: store,
           rules: rules,
           basePath: p.windows.join(base.path, 'c$count'),
         );
+        final loads = <Duration>[];
         final restores = <Duration>[];
+        final residuals = <Duration>[];
         try {
           for (var round = 0; round < _rounds; round++) {
-            final stopwatch = Stopwatch()..start();
-            await controller.restoreLastScan();
-            stopwatch.stop();
-            _expectCount(
-              controller.results.fold<int>(
-                0,
-                (total, result) => total + result.items.length,
-              ),
-              count,
-              'restore',
-            );
-            restores.add(stopwatch.elapsed);
+            if (round.isEven) {
+              final load = await _measuredLoad(store, summary, count);
+              final restore = await _measuredRestore(controller, count);
+              loads.add(load);
+              restores.add(restore);
+              residuals.add(restore - load);
+            } else {
+              final restore = await _measuredRestore(controller, count);
+              final load = await _measuredLoad(store, summary, count);
+              loads.add(load);
+              restores.add(restore);
+              residuals.add(restore - load);
+            }
           }
         } finally {
           controller.dispose();
         }
+
+        final loadMedian = _median(loads);
         final restoreMedian = _median(restores);
-        final postParse = restoreMedian - mainMedian;
-        stdout.writeln('  group+sort only   : ${_ms(groupMedian)}');
+        final residualMedian = _median(residuals);
+        stdout.writeln('');
         stdout.writeln(
-          '  full restore      : ${_ms(restoreMedian)} '
-          '(parse + filter + group + selection + folds)',
+          'RESTORE+GROUP [$count items, ${mib.toStringAsFixed(1)} MiB, '
+          'setup ${setup.elapsedMilliseconds} ms]',
         );
+        stdout.writeln('  load (isolate parse+group) : ${_ms(loadMedian)}');
+        stdout.writeln('  full restore              : ${_ms(restoreMedian)}');
         stdout.writeln(
-          '    post-parse      : ${_ms(postParse)} '
-          '(derived: full restore - main load)',
+          '    selection + folds       : '
+          '${residualMedian.isNegative ? 'within noise' : _ms(residualMedian)} '
+          '(paired: full restore - load)',
         );
       }
     } finally {
@@ -208,6 +130,47 @@ void main() {
       }
     }
   }, timeout: const Timeout(Duration(minutes: 15)));
+}
+
+Future<Duration> _measuredLoad(
+  ScanResultStore store,
+  StoredScanSummary summary,
+  int expected,
+) async {
+  final stopwatch = Stopwatch()..start();
+  final data = await store.load(summary);
+  stopwatch.stop();
+  _expectCount(
+    data?.groups.values.fold<int>(0, (total, group) => total + group.length),
+    expected,
+    'load',
+  );
+  for (final group in data!.groups.values) {
+    for (var index = 1; index < group.length; index++) {
+      if (group[index - 1].size < group[index].size) {
+        throw StateError('group is not sorted by size');
+      }
+    }
+  }
+  return stopwatch.elapsed;
+}
+
+Future<Duration> _measuredRestore(
+  CleanController controller,
+  int expected,
+) async {
+  final stopwatch = Stopwatch()..start();
+  await controller.restoreLastScan();
+  stopwatch.stop();
+  _expectCount(
+    controller.results.fold<int>(
+      0,
+      (total, result) => total + result.items.length,
+    ),
+    expected,
+    'restore',
+  );
+  return stopwatch.elapsed;
 }
 
 Future<StoredScanSummary> _writeResult(ScanResultStore store, int count) async {
@@ -263,210 +226,6 @@ Future<StoredScanSummary> _writeResult(ScanResultStore store, int count) async {
   );
 }
 
-Future<({int items, Duration mainReceive, Duration workerParse})>
-_parseInIsolate(String path) async {
-  final ready = ReceivePort();
-  final isolate = await Isolate.spawn(_restoreWorker, ready.sendPort);
-  final control = await ready.first as SendPort;
-  ready.close();
-
-  final replies = ReceivePort();
-  final done = Completer<int>();
-  final items = <JunkItem>[];
-  var mainMicros = 0;
-  var workerMicros = 0;
-  final subscription = replies.listen((message) {
-    final stopwatch = Stopwatch()..start();
-    switch (message) {
-      case _Batch(:final batch):
-        items.addAll(batch);
-      case _Done(:final itemCount, :final parseMicros):
-        workerMicros = parseMicros;
-        if (!done.isCompleted) done.complete(itemCount);
-      case _WorkerError(:final message):
-        if (!done.isCompleted) done.completeError(StateError(message));
-    }
-    mainMicros += stopwatch.elapsedMicroseconds;
-  });
-
-  try {
-    control.send(_Request(path, replies.sendPort));
-    final itemCount = await done.future;
-    if (itemCount != items.length) {
-      throw StateError('worker=$itemCount received=${items.length}');
-    }
-    return (
-      items: items.length,
-      mainReceive: Duration(microseconds: mainMicros),
-      workerParse: Duration(microseconds: workerMicros),
-    );
-  } finally {
-    await subscription.cancel();
-    replies.close();
-    isolate.kill(priority: Isolate.immediate);
-  }
-}
-
-/// Upper bound on what the main isolate pays when items come back from a
-/// worker: the worker only serializes prebuilt items, so the time is transfer
-/// + deserialization + the receiving list append.
-Future<Duration> _measureReceiveOnly(int count) async {
-  final ready = ReceivePort();
-  final isolate = await Isolate.spawn(_sendOnlyWorker, ready.sendPort);
-  final control = await ready.first as SendPort;
-  ready.close();
-
-  final replies = ReceivePort();
-  final done = Completer<void>();
-  final items = <JunkItem>[];
-  final subscription = replies.listen((message) {
-    switch (message) {
-      case _Batch(:final batch):
-        items.addAll(batch);
-      case _Done():
-        if (!done.isCompleted) done.complete();
-      case _WorkerError(:final message):
-        if (!done.isCompleted) done.completeError(StateError(message));
-    }
-  });
-  final stopwatch = Stopwatch()..start();
-  try {
-    control.send(_SendOnly(count, replies.sendPort));
-    await done.future;
-    stopwatch.stop();
-    if (items.length != count) {
-      throw StateError('received=${items.length} expected=$count');
-    }
-    return stopwatch.elapsed;
-  } finally {
-    await subscription.cancel();
-    replies.close();
-    isolate.kill(priority: Isolate.immediate);
-  }
-}
-
-Future<void> _sendOnlyWorker(SendPort ready) async {
-  final inbox = ReceivePort();
-  ready.send(inbox.sendPort);
-  await for (final message in inbox) {
-    if (message is! _SendOnly) continue;
-    try {
-      final sample = [
-        for (var index = 0; index < _isolateBatchSize; index++)
-          JunkItem(
-            rootIndex: 0,
-            path:
-                'C:\\Users\\Bench\\AppData\\Local\\Temp\\cache\\'
-                'file${index.toString().padLeft(10, '0')}.tmp',
-            size: 4096,
-            modifiedMicros: 1759276800000000,
-          ),
-      ];
-      var sent = 0;
-      while (sent < message.count) {
-        final remaining = message.count - sent;
-        final take = remaining < sample.length ? remaining : sample.length;
-        message.reply.send(
-          _Batch(take == sample.length ? sample : sample.sublist(0, take)),
-        );
-        sent += take;
-      }
-      message.reply.send(_Done(message.count, 0));
-    } catch (error) {
-      message.reply.send(_WorkerError('$error'));
-    }
-  }
-}
-
-Future<void> _restoreWorker(SendPort ready) async {
-  final inbox = ReceivePort();
-  ready.send(inbox.sendPort);
-  await for (final message in inbox) {
-    if (message is! _Request) continue;
-    try {
-      final roots = <ScanRoot>[];
-      final rootIndexes = <String, int>{};
-      var count = 0;
-      var batch = <JunkItem>[];
-      final parse = Stopwatch()..start();
-      await for (final line in File(
-        message.path,
-      ).openRead().transform(utf8.decoder).transform(const LineSplitter())) {
-        final item = _decodeItem(line, roots, rootIndexes);
-        if (item == null) continue;
-        count++;
-        batch.add(item);
-        if (batch.length < _isolateBatchSize) continue;
-        message.reply.send(_Batch(batch));
-        batch = <JunkItem>[];
-      }
-      if (batch.isNotEmpty) message.reply.send(_Batch(batch));
-      parse.stop();
-      message.reply.send(_Done(count, parse.elapsedMicroseconds));
-    } catch (error) {
-      message.reply.send(_WorkerError('$error'));
-    }
-  }
-}
-
-/// Mirrors `ScanResultStore._decodeItem`; keep the two in sync.
-JunkItem? _decodeItem(
-  String line,
-  List<ScanRoot> roots,
-  Map<String, int> rootIndexes,
-) {
-  if (line.trim().isEmpty) return null;
-  try {
-    final value = jsonDecode(line);
-    if (value is! Map<String, dynamic>) return null;
-    final path = value['path'];
-    final rootPath = value['rootPath'];
-    final ruleId = value['ruleId'];
-    final size = value['size'];
-    final modified = value['modified'];
-    if (path is! String ||
-        rootPath is! String ||
-        ruleId is! String ||
-        size is! int ||
-        modified is! String) {
-      return null;
-    }
-    final time = DateTime.tryParse(modified);
-    if (time == null) return null;
-    final rootIndex = rootIndexes.putIfAbsent('$ruleId\u0000$rootPath', () {
-      roots.add(ScanRoot(ruleId: ruleId, rootPath: rootPath));
-      return roots.length - 1;
-    });
-    return JunkItem(
-      rootIndex: rootIndex,
-      path: path,
-      size: size,
-      modifiedMicros: time.microsecondsSinceEpoch,
-    );
-  } on FormatException {
-    return null;
-  }
-}
-
-void _expectCount(int? actual, int expected, String label) {
-  if (actual != expected) {
-    throw StateError('$label parsed=$actual expected=$expected');
-  }
-}
-
-Duration _median(List<Duration> values) {
-  final sorted = [...values]..sort();
-  final middle = sorted.length ~/ 2;
-  if (sorted.length.isOdd) return sorted[middle];
-  return Duration(
-    microseconds:
-        (sorted[middle - 1].inMicroseconds + sorted[middle].inMicroseconds) ~/
-        2,
-  );
-}
-
-String _ms(Duration value) => '${value.inMilliseconds} ms';
-
 Future<CleanController> _createController({
   required ScanResultStore store,
   required List<CleanerRule> rules,
@@ -492,27 +251,6 @@ Future<CleanController> _createController({
   );
   await controller.initialize();
   return controller;
-}
-
-/// Mirrors `CleanController._groupResults`; keep the two in sync.
-List<RuleResult> _groupResults(
-  List<JunkItem> items,
-  List<CleanerRule> rules,
-  ScanRoots roots,
-) {
-  final grouped = <String, List<JunkItem>>{};
-  for (final item in items) {
-    grouped.putIfAbsent(roots.at(item.rootIndex).ruleId, () => []).add(item);
-  }
-
-  final results = <RuleResult>[];
-  for (final rule in rules) {
-    final ruleItems = grouped.remove(rule.id);
-    if (ruleItems == null || ruleItems.isEmpty) continue;
-    ruleItems.sort((a, b) => b.size.compareTo(a.size));
-    results.add(RuleResult(rule: rule, items: ruleItems));
-  }
-  return results;
 }
 
 class _BenchPlatform implements CleanerPlatform {
@@ -548,35 +286,21 @@ class _HangingLockProbe implements FileLockProbe {
       Completer<List<bool>>().future;
 }
 
-class _Request {
-  _Request(this.path, this.reply);
-
-  final String path;
-  final SendPort reply;
+void _expectCount(int? actual, int expected, String label) {
+  if (actual != expected) {
+    throw StateError('$label parsed=$actual expected=$expected');
+  }
 }
 
-class _SendOnly {
-  _SendOnly(this.count, this.reply);
-
-  final int count;
-  final SendPort reply;
+Duration _median(List<Duration> values) {
+  final sorted = [...values]..sort();
+  final middle = sorted.length ~/ 2;
+  if (sorted.length.isOdd) return sorted[middle];
+  return Duration(
+    microseconds:
+        (sorted[middle - 1].inMicroseconds + sorted[middle].inMicroseconds) ~/
+        2,
+  );
 }
 
-class _Batch {
-  _Batch(this.batch);
-
-  final List<JunkItem> batch;
-}
-
-class _Done {
-  _Done(this.itemCount, this.parseMicros);
-
-  final int itemCount;
-  final int parseMicros;
-}
-
-class _WorkerError {
-  _WorkerError(this.message);
-
-  final String message;
-}
+String _ms(Duration value) => '${value.inMilliseconds} ms';
