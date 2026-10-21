@@ -348,7 +348,7 @@ class _HomePageState extends State<HomePage> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setState) => AlertDialog(
-            icon: const Icon(LucideIcons.sparkles, size: 30),
+            icon: const Icon(LucideIcons.archive, size: 30),
             title: Text(strings.t('移入隔离区？')),
             content: SizedBox(
               width: 480,
@@ -2684,7 +2684,7 @@ class _CleanActionBar extends StatelessWidget {
                 onPressed: controller.selectedCount == 0
                     ? null
                     : onCleanRequested,
-                icon: const Icon(LucideIcons.sparkles, size: 18),
+                icon: const Icon(LucideIcons.broom, size: 18),
                 label: Text(
                   context.tf('清理 {count} 项', {
                     'count': formatCount(controller.selectedCount),
@@ -2734,7 +2734,7 @@ class _CleaningView extends StatelessWidget {
                       color: scheme.primaryContainer.withValues(alpha: 0.55),
                     ),
                     child: Icon(
-                      LucideIcons.sparkles,
+                      LucideIcons.archive,
                       size: 34,
                       color: scheme.primary,
                     ),

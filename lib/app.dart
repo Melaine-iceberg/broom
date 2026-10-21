@@ -179,7 +179,7 @@ class _UnsupportedView extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(LucideIcons.sparkles, size: 56),
+              const Icon(LucideIcons.monitorX, size: 56),
               const SizedBox(height: 20),
               Text(
                 strings.tf('Broom 暂不支持 {platform}', {'platform': platformName}),

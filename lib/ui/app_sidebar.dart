@@ -60,7 +60,7 @@ class AppSidebar extends StatelessWidget {
         children: [
           _NavItem(
             key: const ValueKey('sidebar-clean'),
-            icon: LucideIcons.sparkles,
+            icon: LucideIcons.broom,
             label: context.t('清理'),
             expanded: expanded,
             selected: section == AppSection.clean,

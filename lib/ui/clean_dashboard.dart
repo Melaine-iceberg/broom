@@ -481,7 +481,7 @@ class _ScanActionState extends State<_ScanAction> {
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
                                 colors: [
-                                  Colors.white.withValues(alpha: 0.28),
+                                  Colors.white.withValues(alpha: 0.16),
                                   Colors.white.withValues(alpha: 0),
                                 ],
                               ),
@@ -491,8 +491,8 @@ class _ScanActionState extends State<_ScanAction> {
                         Icon(
                           widget.busy
                               ? LucideIcons.hourglass
-                              : LucideIcons.sparkles,
-                          size: 34,
+                              : LucideIcons.broom,
+                          size: widget.busy ? 40 : 50,
                           color: Colors.white,
                         ),
                       ],

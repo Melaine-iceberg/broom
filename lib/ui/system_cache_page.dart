@@ -526,7 +526,7 @@ class _IdleView extends StatelessWidget {
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Icon(
-                      LucideIcons.sparkles,
+                      LucideIcons.database,
                       size: 23,
                       color: scheme.primary,
                     ),

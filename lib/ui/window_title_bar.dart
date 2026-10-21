@@ -73,7 +73,7 @@ class WindowTitleBar extends StatelessWidget {
                           excludeFromSemantics: true,
                           errorBuilder: (context, error, stackTrace) {
                             return Icon(
-                              LucideIcons.sparkles,
+                              LucideIcons.broom,
                               size: 16,
                               color: scheme.onSurfaceVariant,
                             );

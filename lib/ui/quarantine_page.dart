@@ -2293,7 +2293,7 @@ class _ResumeProgressCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(LucideIcons.sparkles, size: 18, color: scheme.primary),
+              Icon(LucideIcons.archive, size: 18, color: scheme.primary),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
