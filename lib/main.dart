@@ -14,6 +14,7 @@ import 'core/clean/system_cache_cleaner.dart';
 import 'core/clean/system_services.dart';
 import 'core/diagnostics/app_logger.dart';
 import 'core/leftover/leftover_service.dart';
+import 'core/platform/app_version.dart';
 import 'core/platform/cleaner_platform.dart';
 import 'core/platform/file_lock_probe.dart';
 import 'core/platform/installed_apps.dart';
@@ -30,6 +31,7 @@ import 'core/settings/quarantine_policy_store.dart';
 import 'core/settings/settings_store.dart';
 import 'core/shell/system_shell.dart';
 import 'platform/window_chrome.dart';
+import 'ui/app_update_controller.dart';
 import 'ui/clean_controller.dart';
 import 'ui/rule_update_controller.dart';
 import 'ui/settings_controller.dart';
@@ -157,6 +159,11 @@ void main(List<String> args) {
     }),
   );
 
+  final appUpdates = AppUpdateController(
+    versionSource: createAppVersionSource(),
+  );
+  unawaited(appUpdates.loadVersion());
+
   final systemAccess = createSystemAccess();
   final systemCacheController = SystemCacheController(
     platform: createSystemCachePlatform(access: systemAccess),
@@ -177,6 +184,7 @@ void main(List<String> args) {
       analysisExcludedPaths: [quarantineRoot],
       startInSystemCache: args.contains('--system-cache'),
       ruleUpdates: ruleUpdates,
+      appUpdates: appUpdates,
       logger: logger,
     ),
   );

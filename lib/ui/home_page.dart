@@ -15,6 +15,7 @@ import '../core/shell/system_shell.dart';
 import '../l10n/broom_strings.dart';
 import 'analysis_widgets.dart';
 import 'app_sidebar.dart';
+import 'app_update_controller.dart';
 import 'clean_controller.dart';
 import 'clean_dashboard.dart';
 import 'clean_history_page.dart';
@@ -46,6 +47,7 @@ class HomePage extends StatefulWidget {
     this.analysisExcludedPaths = const [],
     this.startInSystemCache = false,
     this.ruleUpdates,
+    this.appUpdates,
     this.logger,
   });
 
@@ -59,6 +61,7 @@ class HomePage extends StatefulWidget {
   final List<String> analysisExcludedPaths;
   final bool startInSystemCache;
   final RuleUpdateController? ruleUpdates;
+  final AppUpdateController? appUpdates;
   final AppLogger? logger;
 
   @override
@@ -565,6 +568,7 @@ class _HomePageState extends State<HomePage> {
           shell: widget.shell,
           retention: widget.quarantineRetention,
           ruleUpdates: widget.ruleUpdates,
+          appUpdates: widget.appUpdates,
           onShowOnboarding: _showOnboarding,
           logger: widget.logger,
         );

@@ -8,6 +8,7 @@ import 'core/clean/quarantine_retention_service.dart';
 import 'core/diagnostics/app_logger.dart';
 import 'core/shell/system_shell.dart';
 import 'l10n/broom_strings.dart';
+import 'ui/app_update_controller.dart';
 import 'ui/broom_fonts.dart';
 import 'ui/clean_controller.dart';
 import 'ui/glass_ui.dart';
@@ -30,6 +31,7 @@ class BroomApp extends StatefulWidget {
     this.analysisExcludedPaths = const [],
     this.startInSystemCache = false,
     this.ruleUpdates,
+    this.appUpdates,
     this.logger,
   });
 
@@ -43,6 +45,7 @@ class BroomApp extends StatefulWidget {
   final List<String> analysisExcludedPaths;
   final bool startInSystemCache;
   final RuleUpdateController? ruleUpdates;
+  final AppUpdateController? appUpdates;
   final AppLogger? logger;
 
   @override
@@ -107,6 +110,7 @@ class _BroomAppState extends State<BroomApp> {
             analysisExcludedPaths: widget.analysisExcludedPaths,
             startInSystemCache: widget.startInSystemCache,
             ruleUpdates: widget.ruleUpdates,
+            appUpdates: widget.appUpdates,
             logger: widget.logger,
           ),
         );

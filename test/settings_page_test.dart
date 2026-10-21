@@ -7,6 +7,7 @@ import 'package:broom/core/diagnostics/app_logger.dart';
 import 'package:broom/core/models/app_settings.dart';
 import 'package:broom/core/models/cleaner_rule.dart';
 import 'package:broom/core/models/quarantine_policy_models.dart';
+import 'package:broom/core/platform/app_version.dart';
 import 'package:broom/core/platform/cleaner_platform.dart';
 import 'package:broom/core/platform/memory_file_system.dart';
 import 'package:broom/core/rules/rule_catalog_store.dart';
@@ -17,6 +18,7 @@ import 'package:broom/core/settings/exclusion_store.dart';
 import 'package:broom/core/settings/quarantine_policy_store.dart';
 import 'package:broom/core/settings/settings_store.dart';
 import 'package:broom/core/shell/system_shell.dart';
+import 'package:broom/ui/app_update_controller.dart';
 import 'package:broom/ui/clean_controller.dart';
 import 'package:broom/ui/rule_update_controller.dart';
 import 'package:broom/ui/settings_controller.dart';
@@ -129,6 +131,7 @@ void main() {
   Future<(SettingsController, CleanController)> pumpApp(
     WidgetTester tester, {
     RuleUpdateController? ruleUpdates,
+    AppUpdateController? appUpdates,
     _FakeSystemShell? shell,
     QuarantineRetentionService? retention,
     AppLogger? logger,
@@ -164,6 +167,7 @@ void main() {
         systemShell: shell ?? _FakeSystemShell(),
         quarantineRetention: retention,
         ruleUpdates: ruleUpdates,
+        appUpdates: appUpdates,
         logger: logger,
       ),
     );
@@ -259,6 +263,31 @@ void main() {
     await tester.tap(lowPriority);
     await tester.pumpAndSettle();
     expect(settingsStore.load().scanLowPriority, isFalse);
+  });
+
+  testWidgets('shows the software update section and reports a newer version', (
+    tester,
+  ) async {
+    final appUpdates = AppUpdateController(
+      versionSource: const StaticAppVersion('0.4.0+4'),
+      fetcher: (uri) async => '<AppInstaller Version="0.5.0.0" />',
+    );
+    addTearDown(appUpdates.dispose);
+    await appUpdates.loadVersion();
+
+    await pumpApp(tester, appUpdates: appUpdates);
+
+    await tester.ensureVisible(find.text('软件更新'));
+    expect(find.text('软件更新'), findsOneWidget);
+    expect(find.text('当前版本：0.4.0.4'), findsOneWidget);
+
+    final checkButton = find.byKey(const ValueKey('settings-check-app-update'));
+    await tester.ensureVisible(checkButton);
+    await tester.tap(checkButton);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('0.5.0.0'), findsWidgets);
+    expect(find.text('当前已是最新版本。'), findsNothing);
   });
 
   testWidgets('shows rule update status for a build without a key', (

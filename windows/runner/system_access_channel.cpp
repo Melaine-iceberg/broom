@@ -178,6 +178,12 @@ void SystemAccessChannel::HandleMethodCall(
     return;
   }
 
+  if (method == "appVersion") {
+    // Stamped from pubspec.yaml at build time by windows/runner/CMakeLists.txt.
+    result->Success(flutter::EncodableValue(FLUTTER_VERSION));
+    return;
+  }
+
   if (method == "relaunchElevated") {
     if (IsProcessElevated()) {
       result->Success(flutter::EncodableValue(false));

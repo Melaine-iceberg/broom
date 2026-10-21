@@ -16,6 +16,7 @@ import '../core/settings/config_bundle.dart';
 import '../core/shell/system_shell.dart';
 import '../l10n/broom_strings.dart';
 import 'analysis_widgets.dart';
+import 'app_update_controller.dart';
 import 'clean_controller.dart';
 import 'exclusions_page.dart';
 import 'format.dart';
@@ -34,6 +35,7 @@ class SettingsPage extends StatelessWidget {
     required this.shell,
     this.retention,
     this.ruleUpdates,
+    this.appUpdates,
     this.onShowOnboarding,
     this.logger,
   });
@@ -43,6 +45,7 @@ class SettingsPage extends StatelessWidget {
   final SystemShell shell;
   final QuarantineRetentionService? retention;
   final RuleUpdateController? ruleUpdates;
+  final AppUpdateController? appUpdates;
   final VoidCallback? onShowOnboarding;
   final AppLogger? logger;
 
@@ -52,7 +55,12 @@ class SettingsPage extends StatelessWidget {
     final scheme = theme.colorScheme;
 
     return ListenableBuilder(
-      listenable: Listenable.merge([settings, cleanController, ?ruleUpdates]),
+      listenable: Listenable.merge([
+        settings,
+        cleanController,
+        ?ruleUpdates,
+        ?appUpdates,
+      ]),
       builder: (context, _) {
         final strings = context.strings;
         final rules = cleanController.platform.rules;
@@ -296,6 +304,13 @@ class SettingsPage extends StatelessWidget {
                       ],
                     ),
                   ),
+                  if (appUpdates case final updates?) ...[
+                    const SizedBox(height: 16),
+                    _AppUpdateSection(
+                      updates: updates,
+                      onCheck: () => _checkAppUpdates(context, updates),
+                    ),
+                  ],
                   if (ruleUpdates case final updates?) ...[
                     const SizedBox(height: 16),
                     _RuleUpdateSection(
@@ -690,6 +705,13 @@ class SettingsPage extends StatelessWidget {
     await updates.checkForUpdates();
   }
 
+  Future<void> _checkAppUpdates(
+    BuildContext context,
+    AppUpdateController updates,
+  ) async {
+    await updates.check();
+  }
+
   Future<void> _applyRuleUpdate(
     BuildContext context,
     RuleUpdateController updates,
@@ -896,6 +918,94 @@ class SettingsPage extends StatelessWidget {
           backgroundColor: Theme.of(context).colorScheme.errorContainer,
         ),
       );
+  }
+}
+
+class _AppUpdateSection extends StatelessWidget {
+  const _AppUpdateSection({required this.updates, required this.onCheck});
+
+  final AppUpdateController updates;
+  final VoidCallback onCheck;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final info = updates.info;
+    final current = updates.currentVersion;
+
+    return _Section(
+      icon: LucideIcons.packageCheck,
+      title: context.t('软件更新'),
+      subtitle: context.t(
+        '通过 App Installer 更新源检查新版本。下载、安装与签名校验都由 Windows 完成，'
+        '应用本身只读取清单、不运行任何安装程序。',
+      ),
+      trailing: updates.busy
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (updates.error case final error?)
+            _SettingsBanner(message: error, isError: true),
+          if (updates.notice case final notice?)
+            _SettingsBanner(message: notice),
+          ListTile(
+            key: const ValueKey('settings-app-version'),
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(LucideIcons.packageCheck),
+            title: Text(
+              context.tf('当前版本：{version}', {
+                'version': current ?? context.t('未知'),
+              }),
+            ),
+            subtitle: info == null
+                ? null
+                : Text(
+                    context.tf('更新源版本：{version}', {
+                      'version': info.latestVersion.toString(),
+                    }),
+                  ),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(LucideIcons.globe),
+            title: Text(context.t('更新源')),
+            subtitle: SelectableText(
+              updates.feedUrl,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              FilledButton.tonalIcon(
+                key: const ValueKey('settings-check-app-update'),
+                onPressed: updates.busy ? null : onCheck,
+                icon: const Icon(LucideIcons.download, size: 18),
+                label: Text(context.t('检查更新')),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  context.t('发现新版本后，Windows 会在后台完成下载与安装，重启应用即可生效。'),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 
