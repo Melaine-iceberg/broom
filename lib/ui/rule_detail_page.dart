@@ -33,9 +33,6 @@ class _RuleDetailPageState extends State<RuleDetailPage> {
   final VisibleItemsCache _visibleItems = VisibleItemsCache();
   ResultItemSort _sort = ResultItemSort.sizeDesc;
   ResultItemFilter _filter = const ResultItemFilter();
-  late final List<String> _extensions = availableExtensions(
-    widget.result.items,
-  );
 
   List<RuleRootInspection>? _roots;
   bool _rootsLoading = true;
@@ -131,7 +128,7 @@ class _RuleDetailPageState extends State<RuleDetailPage> {
       context: context,
       builder: (_) => _FileFilterDialog(
         initial: _filter.copyWith(query: _searchController.text),
-        extensions: _extensions,
+        extensions: result.extensions,
       ),
     );
     if (applied == null || !mounted) return;

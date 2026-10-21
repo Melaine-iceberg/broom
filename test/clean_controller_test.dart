@@ -869,6 +869,7 @@ void main() {
 
     expect(first.phase, CleanPhase.preview);
     expect(first.results.single.items, hasLength(1));
+    expect(first.results.single.extensions, ['tmp']);
     expect(await store.loadLatest(), isNotNull);
     first.dispose();
 
@@ -893,6 +894,7 @@ void main() {
     expect(second.phase, CleanPhase.preview);
     expect(second.results.single.items, hasLength(1));
     expect(second.results.single.items.single.path, item.path);
+    expect(second.results.single.extensions, ['tmp']);
     expect(second.scanRestoredFromPersistence, isTrue);
     expect(second.selectedCount, 1);
   });
@@ -952,6 +954,52 @@ void main() {
     expect(controller.scanElapsed, isNotNull);
     expect(controller.scanDirectoryErrors, 0);
     expect(controller.scanTruncated, isFalse);
+  });
+
+  test('collects sorted distinct extensions per rule during scan', () async {
+    final exclusions = createStore();
+    await exclusions.ensureLoaded();
+    final rule = createRule();
+    final items = [
+      JunkItem(
+        rootIndex: 0,
+        path: p.windows.join(rootA.path, 'b.LOG'),
+        size: 10,
+        modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
+      ),
+      JunkItem(
+        rootIndex: 0,
+        path: p.windows.join(rootA.path, 'a.tmp'),
+        size: 20,
+        modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
+      ),
+      JunkItem(
+        rootIndex: 0,
+        path: p.windows.join(rootA.path, 'c.tmp'),
+        size: 30,
+        modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
+      ),
+      JunkItem(
+        rootIndex: 0,
+        path: p.windows.join(rootA.path, 'no-extension'),
+        size: 40,
+        modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
+      ),
+    ];
+    final controller = createController(
+      exclusions: exclusions,
+      scanner: _RecordingScanService(items: items),
+      rules: [rule],
+      rootsByRule: {
+        rule.id: [rootA.path],
+      },
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    await controller.scan();
+
+    expect(controller.results.single.extensions, ['log', 'tmp']);
   });
 
   test('blocks scan, restore and undo while cleaning is in progress', () async {

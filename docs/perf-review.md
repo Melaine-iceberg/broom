@@ -425,6 +425,31 @@ flutter test benchmark/scan_restore_benchmark_test.dart
 
 `lib/core/clean/system_cache_cleaner.dart:144-173` 先 `FileSystemEntity.type()` 再 `File.length()`，可合并为一次 `FileStat.stat()`（112 µs vs 155 µs）。唯一的顾虑是 `FileStat.stat` 无法区分符号链接，而现有代码显式跳过链接；直接替换会改变链接语义，因此需要先确认 `stat` 的链接行为再做，暂不纳入本轮。
 
+### P2-11 规则详情页每次打开都重新扫描扩展名（已实施）
+
+**现象**：`lib/ui/rule_detail_page.dart` 用 `late final _extensions = availableExtensions(result.items)` 在页面首次打开时全量遍历该规则的所有条目，只为生成筛选菜单里的几十个扩展名。`lib/ui/result_filters.dart` 的 `availableExtensions` 在 10 万条上实测 46.6 ms，按同轮单价外推到 100 万条约 0.5 s。每次重新打开规则详情页都会再付一次。
+
+**改法**：
+
+1. `extensionOfPath` 下沉到 `lib/core/models/scan_models.dart`，扫描、恢复、UI 过滤/排序共用同一份语义。实现不再先做 `p.windows.basename`，而是直接查找扩展名点与最后一个分隔符；前导点、尾随点、目录名中的点仍按原规则处理。
+2. **扫描时**：`CleanController._acceptScanBatch` 本来就在逐条做规则分组与计数，顺带把扩展名加入按规则的 `Set<String>`；`_groupResultsFromStream` 包装 `RuleResult` 时生成排序去重后的列表。
+3. **恢复时**：`ScanResultStore._parseItemsFile` 本来就在 worker isolate 内逐条解析并按规则分组，顺带收集扩展名，随 `StoredScanData.extensionsByRule` 一起返回。
+4. `RuleResult.extensions` 持有最终列表，`RuleDetailPage` 打开筛选对话框时直接读取，页面侧不再遍历条目。
+
+**收益（`dart run benchmark/ui_preview_benchmark.dart --items=100000`，5 轮中位数，同轮 A/B）**：
+
+| 操作 | 耗时（3 次运行区间） |
+| --- | ---: |
+| 旧：每次打开页面全量扫描 `availableExtensions` | 36.2–38.5 ms |
+| 新：扫描/恢复时增量维护（每条一次 `Set.add`） | 19.7–22.4 ms |
+| 新：打开页面读取 `RuleResult.extensions` | 0.000 ms |
+
+10 万条下，页面打开从约 37 ms 降为 0；扩展名收集变成扫描/恢复时的一次性成本，且恢复侧发生在 worker isolate 内，不占 UI 线程。按同轮单价外推，100 万条的一次性成本约 0.2 s（旧实现每次打开约 0.37 s）。重复打开页面彻底归零。
+
+**风险**：低。扩展名集合只搭在扫描/恢复已有的逐条循环上，没有新增遍历；`RuleResult` 构造时统一排序去重，页面拿到的顺序稳定。`items.jsonl` 格式不变，扩展名不落盘，恢复时在 worker 重新收集。
+
+- 回归：`test/result_filters_test.dart` 覆盖前导点、目录名带点、尾随点、正斜杠与大写扩展名；`test/scan_result_store_test.dart` 覆盖 worker 分组时的去重与规则过滤；`test/clean_controller_test.dart` 覆盖扫描与恢复两条路径；规则详情页既有的扩展名筛选用例继续覆盖 `.bin` 的展示与筛选。
+
 ## 不建议做的
 
 - **继续提高扫描并行度**。实测目录枚举 1→16 并发无差异（1.95 s vs 1.98 s），瓶颈在 OS 侧且已饱和。加 worker、加 isolate、调 `statConcurrency` 都不会更快。
@@ -440,7 +465,8 @@ flutter test benchmark/scan_restore_benchmark_test.dart
 5. **P1-6 + P1-7**（已实施）：压缩条目形状并引入根表，两处去重集合改为指纹；1M 条结果常驻从约 227 MiB 降到约 89 MiB。
 6. **P0-2**（已实施）：索引路径复用目录遍历的 8 路 stat 流水线；2 万真实文件两次实测 8 路为串行的 2.54× / 2.64×，10 万候选约省 8–9 s。
 7. **P2-8**（已实施）：写侧编码进 writer isolate，读侧解析、过滤、分组排序进 `Isolate.run`；1M 条总恢复时长持平，UI isolate 的连续解析归零，收尾停顿从 0.83 s 降到 0.40–0.65 s。
-8. **P2-9 / P2-10**：需要原生侧改动或只影响系统缓存清理，按实测收益排期。
+8. **P2-11**（已实施）：扩展名集合改在扫描/恢复的既有循环里维护，页面直接读取；10 万条页面打开从 37 ms 降为 0，100 万条省下每次约 0.4 s 的重复遍历。
+9. **P2-9 / P2-10**：需要原生侧改动或只影响系统缓存清理，按实测收益排期。
 
 ## 变更记录
 
@@ -453,6 +479,7 @@ flutter test benchmark/scan_restore_benchmark_test.dart
 - **P1-6 + P1-7 已落地**：`JunkItem` 改为 `rootIndex` + `modifiedMicros`，新增 `ScanRoots` 根表并贯穿扫描（含 worker 的 `rootIndexBase`）、持久化、UI 与清理服务；删除 `_itemsByPath` / `_itemLocations`，锁探测改报全局条目下标；`items.jsonl` 格式与 `schemaVersion` 不变，加载时重建根表。去重集合改用 62 位 FNV-1a 指纹，同时覆盖 `ScanService._seenPaths` 与 `JunkScanner.seen`。1M 条基准：条目 226–228 → 89–91 MiB，单处去重集合 80–95 → 19–31 MiB。新增 `benchmark/item_memory_benchmark.dart`、`test/path_fingerprint_test.dart` 与多根扫描用例，全量 413 项测试与 `flutter analyze --fatal-infos` 通过。
 - **P0-2 已落地**：索引枚举按 512 条攒批交给 `processFiles` 的 8 路 stat 流水线，删除逐条 `processCandidate` 与 `_LimitReached`；根包含、排除、扩展名与年龄过滤、去重、上限与索引失败回退语义不变。新增 `benchmark/ntfs_index_benchmark_test.dart`（2 万真实文件，1 / 2 / 4 / 8 路交错 3 轮）与 `test/junk_scanner_ntfs_pipeline_test.dart`（5 项）。两次运行的 8 路分别为 2.54× 与 2.64×（2 路两次都是 2.01×）；全量 418 项测试与 `flutter analyze --fatal-infos` 通过。
 - **P2-8 已落地**：新增 `ScanWriterIsolate`，每个 writer 的 isolate 自己编码并写 `items.jsonl`；`ScanResultStore.load` 改为 `Isolate.run` 内解析、按允许规则过滤、分组与排序，`CleanController` 直接消费分组并删除 `_groupResults`。改造后 10 万 / 100 万条：`load` 583–638 / 5,656–5,749 ms，完整 restore 585–611 / 6,148–6,445 ms，主线程收尾 ≤2 ms / 0.40–0.65 s；总时长与改造前持平。新增分组/过滤用例，全量 419 项测试与 `flutter analyze --fatal-infos` 通过。
+- **P2-11 已落地**：`extensionOfPath` 下沉到 core；扫描时 `CleanController` 在接入批次时按规则维护扩展名集合，恢复时 `ScanResultStore` 在 worker 分组阶段顺带收集，`RuleResult.extensions` 直接供规则详情页筛选菜单使用。10 万条同轮 A/B：旧页面打开 `availableExtensions` 36.2–38.5 ms → 新读取 0 ms，增量维护一次性成本 19.7–22.4 ms。新增/更新扩展名语义、worker 收集与扫描/恢复用例。
 - 记录一处方向性修正：装饰-排序并非对所有排序都更快。数值键本来就在条目上，装饰只是多出 O(N) 次分配，`sizeDesc` 实测因此从 46.4 涨到 63.5 ms。收益成立的区间是"派生键比分配贵得多"（`pathAsc`、`extensionAsc`）与"键大量并列"（惰性缓存生效）。全量 403 项测试与 `flutter analyze --fatal-infos` 通过。
 - 评审过程中修正了一个判断：最初按单价推算认为"清理时间几乎全花在重复元数据查询上"，端到端 A/B 证明元数据只占约 12%，rename 与文件读取才是主体。文档中的收益数字以实测为准，未采用推算值。
 - 另一处修正：P0-1 时的单步归因把约 1,000 µs 记为"其余未归因"，其中相当一部分并非散落在循环里，而是两项此前没被列入分解的操作——`finalize` 阶段的逐条 `type()` 与清理计划文件的逐条写入。这说明"按已知项求和再取差额"容易把整类操作漏在统计口径之外，凡涉及归因应以"每一次调用都有账"的方式重做。

@@ -53,6 +53,29 @@ class ScanRoots {
   ScanRoot at(int index) => entries[index];
 }
 
+/// Extension of [path] without the leading dot, lowercased.
+///
+/// Only the component after the last dot of the basename counts, and a leading
+/// dot (".gitignore") is not an extension. This is the single definition used
+/// by scanning, result persistence and the preview filters.
+String extensionOfPath(String path) {
+  // Match the previous basename-based implementation: trailing separators are
+  // ignored and a leading dot is part of the name, not an extension.
+  var end = path.length;
+  while (end > 0) {
+    final unit = path.codeUnitAt(end - 1);
+    if (unit != 0x5C && unit != 0x2F) break;
+    end--;
+  }
+  final dot = end == 0 ? -1 : path.lastIndexOf('.', end - 1);
+  if (dot <= 0 || dot == end - 1) return '';
+  final separator = path.lastIndexOf(r'\', end - 1);
+  final slash = path.lastIndexOf('/', end - 1);
+  final boundary = separator > slash ? separator : slash;
+  if (dot <= boundary + 1) return '';
+  return path.substring(dot + 1, end).toLowerCase();
+}
+
 class JunkItem {
   const JunkItem({
     required this.rootIndex,

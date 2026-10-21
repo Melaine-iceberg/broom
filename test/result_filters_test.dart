@@ -112,10 +112,17 @@ void main() {
     ]);
   });
 
-  test('reports extensions and filter counts', () {
-    expect(availableExtensions(items), ['log', 'tmp']);
+  test('derives extensions from the basename', () {
     expect(extensionOfPath(r'C:\cache\archive.tar.gz'), 'gz');
     expect(extensionOfPath(r'C:\cache\no-extension'), isEmpty);
+    expect(extensionOfPath(r'C:\cache\.gitignore'), isEmpty);
+    expect(extensionOfPath(r'C:\cache\folder.with.dot\file'), isEmpty);
+    expect(extensionOfPath(r'C:\cache\file.'), isEmpty);
+    expect(extensionOfPath(r'C:\cache/folder/file.TMP'), 'tmp');
+    expect(extensionOfPath(r'C:\cache\folder.with.dot\'), 'dot');
+
+    expect(extensionOfPath(items.first.path), 'tmp');
+    expect(extensionOfPath(items[1].path), 'log');
 
     const filter = ResultItemFilter(
       query: 'x',

@@ -1,11 +1,12 @@
-// UI preview aggregation and sorting benchmark (P0-3 and P0-4 in
-// docs/perf-review.md).
+// UI preview aggregation, sorting and extension benchmark (P0-3, P0-4 and
+// P2-11 in docs/perf-review.md).
 //
-// Measures the two costs the preview page used to pay on every rebuild:
+// Measures the costs the preview page used to pay on every rebuild:
 //
 //   1. the O(N) selection aggregates (`selectedBytes`,
-//      `selectedPossiblyLockedCount`, `selectedBytesForRule`), and
-//   2. filtering + sorting one rule's items for display.
+//      `selectedPossiblyLockedCount`, `selectedBytesForRule`),
+//   2. filtering + sorting one rule's items for display, and
+//   3. scanning every item for the extension filter menu on page open.
 //
 // The "legacy" rows are verbatim copies of the pre-optimisation code, kept
 // here as a reference so the comparison stays reproducible after the
@@ -22,6 +23,7 @@ import 'dart:math';
 
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/ui/result_filters.dart';
+import 'package:path/path.dart' as p;
 
 const _defaultItemCount = 100000;
 const _rounds = 5;
@@ -40,6 +42,8 @@ void main(List<String> args) {
   _benchmarkAggregates(items);
   stdout.writeln('');
   _benchmarkVisibleList(items);
+  stdout.writeln('');
+  _benchmarkExtensions(items);
   stdout.writeln('');
   stdout.writeln(
     '以上是 $itemCount 条目的纯 CPU 成本，不含 Flutter 布局与绘制。'
@@ -180,6 +184,34 @@ void _benchmarkVisibleList(List<JunkItem> items) {
   );
 }
 
+void _benchmarkExtensions(List<JunkItem> items) {
+  stdout.writeln('扩展名集合（规则详情页打开筛选对话框）');
+
+  _row(
+    'availableExtensions（旧：打开页面时全量扫描）',
+    _time(() => _sink = _legacyAvailableExtensions(items).length),
+  );
+
+  final extensions = <String>{};
+  _row(
+    '增量维护（新：扫描/恢复时每条一次 Set.add）',
+    _time(() {
+      extensions.clear();
+      for (final item in items) {
+        final extension = extensionOfPath(item.path);
+        if (extension.isNotEmpty) extensions.add(extension);
+      }
+      _sink = extensions.length;
+    }),
+  );
+
+  final sorted = List<String>.unmodifiable(extensions.toList()..sort());
+  _row(
+    '打开页面（新：读取 RuleResult.extensions）',
+    _time(() => _sink = sorted.length),
+  );
+}
+
 class _IncrementalAggregates {
   const _IncrementalAggregates({
     required this.selectedBytes,
@@ -241,6 +273,17 @@ List<JunkItem> _buildItems(int count) {
 
 // ---------------------------------------------------------------------------
 // Reference copies of the pre-optimisation implementations.
+
+List<String> _legacyAvailableExtensions(List<JunkItem> items) {
+  final extensions = <String>{};
+  for (final item in items) {
+    final name = p.windows.basename(item.path);
+    final dot = name.lastIndexOf('.');
+    if (dot <= 0 || dot == name.length - 1) continue;
+    extensions.add(name.substring(dot + 1).toLowerCase());
+  }
+  return extensions.toList()..sort();
+}
 
 List<JunkItem> _legacySelectedItems(
   List<JunkItem> items,

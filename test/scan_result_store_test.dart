@@ -113,10 +113,38 @@ void main() {
     final filtered = await store.load(summary, allowedRuleIds: {'rule.b'});
     expect(filtered!.totalItems, 3);
     expect(filtered.groups.keys, ['rule.b']);
+    expect(filtered.extensionsByRule.keys, ['rule.b']);
     expect(
       filtered.groups['rule.b']!.single.path,
       p.windows.join(temp.path, 'cache', 'b-mid.tmp'),
     );
+  });
+
+  test('collects distinct extensions per rule while grouping', () async {
+    final writer = await store.begin(
+      ruleIds: const ['test.rule'],
+      rulesVersion: 'builtin',
+      roots: roots(),
+    );
+    await writer.addItems([
+      item('a.TMP', 1),
+      item('b.log', 2),
+      item('c.tmp', 3),
+      item('no-extension', 4),
+      item('d.Tmp.', 5),
+    ]);
+    final summary = await writer.complete(
+      scannedFiles: 5,
+      foundFiles: 5,
+      foundBytes: 15,
+      issueCount: 0,
+      errorCounts: const {},
+      truncated: false,
+    );
+
+    final data = await store.load(summary);
+
+    expect(data!.extensionsByRule['test.rule'], {'log', 'tmp'});
   });
 
   test('replaces the previous result and removes the old directory', () async {

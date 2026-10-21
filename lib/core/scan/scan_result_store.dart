@@ -119,6 +119,7 @@ class StoredScanData {
   const StoredScanData({
     required this.summary,
     required this.groups,
+    required this.extensionsByRule,
     this.roots = ScanRoots.empty,
     this.totalItems = 0,
   });
@@ -130,6 +131,9 @@ class StoredScanData {
   /// Parsing, grouping and sorting all happen in a worker isolate; the calling
   /// isolate only receives the finished lists.
   final Map<String, List<JunkItem>> groups;
+
+  /// Distinct extensions per rule id, collected while grouping in the worker.
+  final Map<String, Set<String>> extensionsByRule;
 
   /// Root table for the items in [groups]. Rebuilt from the `ruleId` /
   /// `rootPath` columns in `items.jsonl`, so the file format is unchanged.
@@ -243,6 +247,7 @@ class ScanResultStore {
       return StoredScanData(
         summary: summary,
         groups: parsed.groups,
+        extensionsByRule: parsed.extensionsByRule,
         roots: parsed.roots,
         totalItems: parsed.totalItems,
       );
@@ -436,11 +441,13 @@ class ScanResultWriter {
 class _ParsedScanFile {
   const _ParsedScanFile({
     required this.groups,
+    required this.extensionsByRule,
     required this.roots,
     required this.totalItems,
   });
 
   final Map<String, List<JunkItem>> groups;
+  final Map<String, Set<String>> extensionsByRule;
   final ScanRoots roots;
   final int totalItems;
 }
@@ -451,6 +458,7 @@ Future<_ParsedScanFile> _parseItemsFile(
   Set<String>? allowedRuleIds,
 ) async {
   final groups = <String, List<JunkItem>>{};
+  final extensionsByRule = <String, Set<String>>{};
   final roots = <ScanRoot>[];
   final rootIndexes = <String, int>{};
   var totalItems = 0;
@@ -479,12 +487,17 @@ Future<_ParsedScanFile> _parseItemsFile(
         modifiedMicros: decoded.modifiedMicros,
       ),
     );
+    final extension = extensionOfPath(decoded.path);
+    if (extension.isNotEmpty) {
+      (extensionsByRule[decoded.ruleId] ??= <String>{}).add(extension);
+    }
   }
   for (final items in groups.values) {
     items.sort((a, b) => b.size.compareTo(a.size));
   }
   return _ParsedScanFile(
     groups: groups,
+    extensionsByRule: extensionsByRule,
     roots: ScanRoots(roots),
     totalItems: totalItems,
   );

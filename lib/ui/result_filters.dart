@@ -1,5 +1,4 @@
 import '../core/models/scan_models.dart';
-import 'format.dart';
 
 /// Sort orders offered by the scan preview and the per-rule file list.
 enum ResultItemSort {
@@ -75,24 +74,6 @@ class ResultItemFilter {
   @override
   int get hashCode =>
       Object.hash(query, extension, minimumSize, olderThan, lockedOnly);
-}
-
-String extensionOfPath(String path) {
-  final name = fileNameOf(path);
-  final dot = name.lastIndexOf('.');
-  if (dot <= 0 || dot == name.length - 1) return '';
-  return name.substring(dot + 1).toLowerCase();
-}
-
-/// Returns the distinct extensions in [items], sorted for a filter menu.
-List<String> availableExtensions(List<JunkItem> items) {
-  final extensions = <String>{};
-  for (final item in items) {
-    final extension = extensionOfPath(item.path);
-    if (extension.isNotEmpty) extensions.add(extension);
-  }
-  final result = extensions.toList()..sort();
-  return result;
 }
 
 List<JunkItem> filterResultItems(

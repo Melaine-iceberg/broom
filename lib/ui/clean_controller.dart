@@ -21,12 +21,24 @@ enum CleanPhase { idle, scanning, preview, cleaning, done }
 enum RuleExclusionScope { none, partial, all }
 
 class RuleResult {
-  RuleResult({required this.rule, required this.items})
-    : totalBytes = items.fold(0, (total, item) => total + item.size);
+  RuleResult({
+    required this.rule,
+    required this.items,
+    required Iterable<String> extensions,
+  }) : totalBytes = items.fold(0, (total, item) => total + item.size),
+       extensions = List<String>.unmodifiable(
+         extensions.toSet().toList()..sort(),
+       );
 
   final CleanerRule rule;
   final List<JunkItem> items;
   final int totalBytes;
+
+  /// Distinct extensions in [items], sorted for the filter dialog.
+  ///
+  /// Collected while scanning or restoring so opening the detail page does not
+  /// walk the (possibly million-item) list again.
+  final List<String> extensions;
 }
 
 class ScanIssueGroup {
@@ -105,6 +117,7 @@ class CleanController extends ChangeNotifier {
   Duration? _scanElapsed;
   bool _scanStarting = false;
   final Map<String, List<JunkItem>> _streamItemsByRule = {};
+  final Map<String, Set<String>> _streamExtensionsByRule = {};
   final List<JunkItem> _recentScanItems = [];
   final Map<ScanErrorKind, int> _issueCounts = {};
   final Map<ScanErrorKind, List<String>> _issueSamples = {};
@@ -359,7 +372,11 @@ class CleanController extends ChangeNotifier {
       for (final rule in platform.rules) {
         final items = data.groups[rule.id];
         if (items == null || items.isEmpty) continue;
-        final result = RuleResult(rule: rule, items: items);
+        final result = RuleResult(
+          rule: rule,
+          items: items,
+          extensions: data.extensionsByRule[rule.id] ?? const <String>{},
+        );
         results.add(result);
         restoredCount += items.length;
         restoredBytes += result.totalBytes;
@@ -581,6 +598,7 @@ class CleanController extends ChangeNotifier {
 
   void _resetScanStreamState() {
     _streamItemsByRule.clear();
+    _streamExtensionsByRule.clear();
     _recentScanItems.clear();
     _issueCounts.clear();
     _issueSamples.clear();
@@ -610,9 +628,14 @@ class CleanController extends ChangeNotifier {
   void _acceptScanBatch(List<JunkItem> items) {
     if (items.isEmpty) return;
     for (final item in items) {
-      _streamItemsByRule
-          .putIfAbsent(_ruleIdOf(item), () => <JunkItem>[])
-          .add(item);
+      final ruleId = _ruleIdOf(item);
+      _streamItemsByRule.putIfAbsent(ruleId, () => <JunkItem>[]).add(item);
+      final extension = extensionOfPath(item.path);
+      if (extension.isNotEmpty) {
+        _streamExtensionsByRule
+            .putIfAbsent(ruleId, () => <String>{})
+            .add(extension);
+      }
       _liveFoundCount++;
       _liveFoundBytes += item.size;
     }
@@ -670,7 +693,13 @@ class CleanController extends ChangeNotifier {
       final items = _streamItemsByRule[rule.id];
       if (items == null || items.isEmpty) continue;
       items.sort((a, b) => b.size.compareTo(a.size));
-      results.add(RuleResult(rule: rule, items: items));
+      results.add(
+        RuleResult(
+          rule: rule,
+          items: items,
+          extensions: _streamExtensionsByRule[rule.id] ?? const <String>{},
+        ),
+      );
     }
     return results;
   }
