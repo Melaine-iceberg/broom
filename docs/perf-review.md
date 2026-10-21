@@ -221,13 +221,37 @@ flutter test benchmark/clean_attribution_test.dart
 同卷 rename 的 995 µs（本轮环境下 1,280 µs）是必要工作。作为对照，脱离清理流程的同步 `renameSync` 紧循环也要 756–1,040 µs/次，说明成本在 OS 侧（过滤驱动对每次重命名都要过一遍），Dart 侧的异步封装只额外增加约 240 µs 的事件循环往返。因此"减少 rename 次数"只能通过减少选中文件数实现，不属于引擎优化范围；扫描豁免属于用户级安全设置，程序不应自行修改（诊断结论保留，不做建议）。
 
 
-### P0-2 NTFS 索引路径逐条串行 stat（待实施）
+### P0-2 NTFS 索引路径逐条串行 stat（已实施）
 
-`lib/core/scan/junk_scanner.dart:286-310` 在 `await for (ntfsIndex.enumerate(...))` 中逐条 `await processCandidate()`，而 `processCandidate` 内部是 `await fileSystem.stat(path)`（`:300`）。USN 索引只给出名称与 FRN，体积和时间必须逐个 stat，于是索引省下的枚举时间又被串行 stat 还回去：10 万候选项 × 112 µs ≈ **11 s**。
+**现象**：`lib/core/scan/junk_scanner.dart` 原来在 `await for (ntfsIndex.enumerate(...))` 中逐条 `await processCandidate()`，而 `processCandidate` 内部是 `await fileSystem.stat(path)`。USN 索引只给出名称与 FRN，体积和时间必须逐个 stat，于是索引省下的枚举时间又被串行 stat 还回去：10 万候选项 × 112 µs ≈ **11 s**。同一文件的目录遍历路径已经把 stat 做成了 8 路流水线（`processFiles`），索引路径没有复用。
 
-同一文件的目录遍历路径已经把 stat 做成了 8 路流水线（`processFiles`，`:191`），索引路径没有复用。改法是让 `enumerate` 的产出累积成 512 条一批，走同一个 `processFiles`。
+**改法**：索引候选先应用与目录遍历相同的排除 / 根包含 / 扩展名过滤，再按 `_fileChunkSize = 512` 攒批交给 `processFiles`；后者并发 stat、按索引顺序消费，去重、上限与结果顺序因此不变。只服务索引路径的 `processCandidate` 与 `_LimitReached` 一并删除。取消时尚未 stat 的候选直接跳过；索引流结束后补一次取消检查，避免最后一批内发生的取消被吞掉。
 
-**注意**：目录枚举的并发实验显示 OS 侧会串行化，因此这里不要假设 8 路能拿到 8 倍；先用 `benchmark/scan_benchmark.dart` 验证再投入。保守预期是 2–4 倍。
+复现命令（`benchmark/ntfs_index_benchmark_test.dart`，仅在开发机手工运行）：
+
+```bash
+flutter test benchmark/ntfs_index_benchmark_test.dart
+```
+
+**收益（2 万个真实文件，4 种并发度交错 3 轮取中位数）**：
+
+| 并发度 | 中位耗时 | µs/文件 | 相对串行 |
+| ---: | ---: | ---: | ---: |
+| 1（改造前逐条 await 的等价基线） | 2,745 ms | 137.3 | 1.00× |
+| 2 | 1,366 ms | 68.3 | 2.01× |
+| 4 | 1,093 ms | 54.7 | 2.51× |
+| 8 | 1,080 ms | 54.0 | 2.54× |
+
+基准里的索引是假的（原生 USN 枚举不在测量范围内），但每个路径都指向真实文件，因此每次 `stat` 都是真实的 `FileStat.stat`。基准只改同一套代码的 `statConcurrency` 并交错运行，避免两次整体运行之间的机器漂移。同日复跑（另一批 2 万文件）的 8 路为 2.64×、2 路为 2.01×，排序与饱和点一致。
+
+按 10 万候选折算，串行 13.7–14.2 s → 8 路约 5.4 s，节省约 **8–9 s（约 −60%）**。8 路只比 4 路快 1–3%，说明剩下的瓶颈是 OS 侧元数据查询排队；2 路已经拿走一半收益，4 路接近饱和。这与原先"保守 2–4 倍"的预期一致，也说明没有必要继续加并发。
+
+**风险**：低。
+
+- `scannedFiles` 在候选进入批次时计数，取消时可能比逐条版多算最多 511 个"已枚举、未 stat"的文件；目录遍历路径本来就是这一口径，只影响进度显示。
+- 索引流出错时仍整体回退目录扫描；批次内单个文件的 `FileSystemException` 仍逐条记为 issue、不触发回退。
+- `processFiles` 在批次内保持索引顺序消费，`acceptItem` 继续负责跨批去重与上限，截断位置与旧实现一致（都是索引前缀）。
+- 回归：新增 `test/junk_scanner_ntfs_pipeline_test.dart`（5 项）固定并发上限、stat 前的过滤、年龄 / 上限、消失文件的 issue 行为，以及批次内取消后不再发起剩余 stat；全量 418 项测试与 `flutter analyze --fatal-infos` 通过。
 
 ### P0-3 UI 每帧重复做 O(N) 聚合（已实施）
 
@@ -380,7 +404,8 @@ flutter test benchmark/clean_attribution_test.dart
 3. **P0-3 + P0-4**（已实施）：都是 UI 侧"重复计算"。P0-3 把每次重建的三个聚合从 22 ms 降到 0；P0-4 把每次重建的过滤+排序从 50 ms 降到 0（缓存命中），并把 `pathAsc` 从 405 ms 降到 167 ms。
 4. **P1-5**（已实施）：walker 复用 `listDetailed`，逐文件 `stat` 归零；分析 isolate 通过根 isolate 探测 + token 接入原生枚举。
 5. **P1-6 + P1-7**（已实施）：压缩条目形状并引入根表，两处去重集合改为指纹；1M 条结果常驻从约 227 MiB 降到约 89 MiB。
-6. **P0-2 / P2-8 / P2-9 / P2-10**：需要基准验证或涉及原生侧，按实测收益排期。
+6. **P0-2**（已实施）：索引路径复用目录遍历的 8 路 stat 流水线；2 万真实文件两次实测 8 路为串行的 2.54× / 2.64×，10 万候选约省 8–9 s。
+7. **P2-8 / P2-9 / P2-10**：需要基准验证或涉及原生侧，按实测收益排期。
 
 ## 变更记录
 
@@ -391,6 +416,7 @@ flutter test benchmark/clean_attribution_test.dart
 - **P0-4 已落地**：新增 `VisibleItemsCache`（按 `source` 身份 + filter 值 + sort + `itemsRevision` 记忆化）、`CleanController.itemsRevision`、`ResultItemFilter` 值相等。排序按"键是否已在条目上"分流：数值键直接比较并在并列时惰性缓存小写路径，路径/扩展名键先派生一次再排序。默认视图每次重建 50.4→0 ms；`pathAsc` 405.1→166.7 ms，`extensionAsc` 2,443.6→273.8 ms。新增 `benchmark/ui_preview_benchmark.dart`，把旧实现作为参照副本保留在基准内以便复现同轮 A/B。
 - **P1-5 已落地**：分析 walker 改用 `BroomFileSystem` 并优先 `DetailedDirectoryListing`，访问者签名改为 `(String, FsStat)`；`AnalysisService` 在根 isolate 探测原生枚举并通过 `RootIsolateToken` 在分析 isolate 初始化 messenger，失败时回退 `list + stat`。详细枚举路径下每文件 `stat` 从 1 次降为 0（3 个文件对应 2 次 `listDetailed` + 0 次 `stat`），回退路径保持 N 次 `stat` 与错误计数。新增 7 项回归用例，全量 410 项测试与 `flutter analyze --fatal-infos` 通过。
 - **P1-6 + P1-7 已落地**：`JunkItem` 改为 `rootIndex` + `modifiedMicros`，新增 `ScanRoots` 根表并贯穿扫描（含 worker 的 `rootIndexBase`）、持久化、UI 与清理服务；删除 `_itemsByPath` / `_itemLocations`，锁探测改报全局条目下标；`items.jsonl` 格式与 `schemaVersion` 不变，加载时重建根表。去重集合改用 62 位 FNV-1a 指纹，同时覆盖 `ScanService._seenPaths` 与 `JunkScanner.seen`。1M 条基准：条目 226–228 → 89–91 MiB，单处去重集合 80–95 → 19–31 MiB。新增 `benchmark/item_memory_benchmark.dart`、`test/path_fingerprint_test.dart` 与多根扫描用例，全量 413 项测试与 `flutter analyze --fatal-infos` 通过。
+- **P0-2 已落地**：索引枚举按 512 条攒批交给 `processFiles` 的 8 路 stat 流水线，删除逐条 `processCandidate` 与 `_LimitReached`；根包含、排除、扩展名与年龄过滤、去重、上限与索引失败回退语义不变。新增 `benchmark/ntfs_index_benchmark_test.dart`（2 万真实文件，1 / 2 / 4 / 8 路交错 3 轮）与 `test/junk_scanner_ntfs_pipeline_test.dart`（5 项）。两次运行的 8 路分别为 2.54× 与 2.64×（2 路两次都是 2.01×）；全量 418 项测试与 `flutter analyze --fatal-infos` 通过。
 - 记录一处方向性修正：装饰-排序并非对所有排序都更快。数值键本来就在条目上，装饰只是多出 O(N) 次分配，`sizeDesc` 实测因此从 46.4 涨到 63.5 ms。收益成立的区间是"派生键比分配贵得多"（`pathAsc`、`extensionAsc`）与"键大量并列"（惰性缓存生效）。全量 403 项测试与 `flutter analyze --fatal-infos` 通过。
 - 评审过程中修正了一个判断：最初按单价推算认为"清理时间几乎全花在重复元数据查询上"，端到端 A/B 证明元数据只占约 12%，rename 与文件读取才是主体。文档中的收益数字以实测为准，未采用推算值。
 - 另一处修正：P0-1 时的单步归因把约 1,000 µs 记为"其余未归因"，其中相当一部分并非散落在循环里，而是两项此前没被列入分解的操作——`finalize` 阶段的逐条 `type()` 与清理计划文件的逐条写入。这说明"按已知项求和再取差额"容易把整类操作漏在统计口径之外，凡涉及归因应以"每一次调用都有账"的方式重做。

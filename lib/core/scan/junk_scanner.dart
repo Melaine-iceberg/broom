@@ -16,7 +16,7 @@ import 'ntfs_index.dart';
 /// mechanical disk's reorder window.
 const int defaultStatConcurrency = 8;
 
-/// How many files one directory walk buffers before it starts stat-ing them.
+/// How many files one enumeration buffers before it starts stat-ing them.
 const int _fileChunkSize = 512;
 
 class JunkScanner {
@@ -151,41 +151,6 @@ class JunkScanner {
           !jobExcludedKeys.any((excluded) => _isWithin(excluded, key));
     }
 
-    Future<void> processCandidate({
-      required ScanJob job,
-      required String root,
-      required String rootKey,
-      required String path,
-      required String pathKey,
-      required int rootIndex,
-    }) async {
-      if (_isWithin(rootKey, pathKey) == false) return;
-      if (!_acceptsExtension(job, path)) return;
-      scannedFiles++;
-      FsStat stat;
-      try {
-        stat = await fileSystem.stat(path);
-      } on FileSystemException catch (error) {
-        reportIssue(_issue(job.ruleId, path, error));
-        return;
-      }
-      if (stat.type != FsEntityType.file) return;
-      if (job.minAge > Duration.zero &&
-          _clock().difference(stat.modified) < job.minAge) {
-        return;
-      }
-      final stopped = acceptItem(
-        JunkItem(
-          rootIndex: rootIndex,
-          path: path,
-          size: stat.size,
-          modifiedMicros: stat.modified.microsecondsSinceEpoch,
-        ),
-        key: pathKey,
-      );
-      if (stopped) throw const _LimitReached();
-    }
-
     /// Stats (when the listing did not provide them) and accepts one chunk of
     /// already-filtered files.
     ///
@@ -292,6 +257,11 @@ class JunkScanner {
           try {
             final availability = await ntfsIndex!.probe(root);
             if (availability.isAvailable) {
+              // USN entries carry no size or timestamp, so every candidate
+              // still needs one `stat`. Buffer them like the directory walk
+              // does: a chunk's stats run [statConcurrency]-wide instead of
+              // paying one round trip per index entry.
+              final chunk = <({String path, String key, FsStat? stat})>[];
               await for (final entry in ntfsIndex!.enumerate(
                 root,
                 extensions: job.extensions,
@@ -305,25 +275,44 @@ class JunkScanner {
                 final entryPath = semantics.canonical(entry.path);
                 final entryKey = _key(entryPath);
                 if (!withinJob(job, entryKey, jobExcludedKeys)) continue;
-                try {
-                  await processCandidate(
-                    job: job,
-                    root: root,
-                    rootKey: rootKey,
-                    path: entryPath,
-                    pathKey: entryKey,
-                    rootIndex: rootIndex,
-                  );
-                } on _LimitReached {
-                  break scanLoop;
-                }
+                if (_isWithin(rootKey, entryKey) == false) continue;
+                if (!_acceptsExtension(job, entryPath)) continue;
+                scannedFiles++;
+                chunk.add((path: entryPath, key: entryKey, stat: null));
+                if (chunk.length < _fileChunkSize) continue;
+                final stopped = await processFiles(
+                  job: job,
+                  root: root,
+                  rootKey: rootKey,
+                  files: chunk,
+                  jobIndex: localJobIndex,
+                  rootIndex: rootIndex,
+                );
+                chunk.clear();
                 report(jobIndex: localJobIndex);
+                if (stopped) break scanLoop;
+              }
+              if (chunk.isNotEmpty) {
+                final stopped = await processFiles(
+                  job: job,
+                  root: root,
+                  rootKey: rootKey,
+                  files: chunk,
+                  jobIndex: localJobIndex,
+                  rootIndex: rootIndex,
+                );
+                chunk.clear();
+                report(jobIndex: localJobIndex);
+                if (stopped) break scanLoop;
+              }
+              if (isCancelled?.call() ?? false) {
+                cancelled = true;
+                break scanLoop;
               }
               report(force: true, jobIndex: localJobIndex);
               continue;
             }
           } catch (error) {
-            if (error is _LimitReached) break scanLoop;
             reportIssue(
               ScanIssue(
                 ruleId: job.ruleId,
@@ -493,8 +482,4 @@ class JunkScanner {
       isDirectory: isDirectory,
     );
   }
-}
-
-class _LimitReached implements Exception {
-  const _LimitReached();
 }
