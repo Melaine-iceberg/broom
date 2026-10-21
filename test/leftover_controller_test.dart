@@ -56,10 +56,7 @@ class _EmptyInstalledApps implements InstalledApps {
 }
 
 class _FakeLeftoverService extends LeftoverService {
-  _FakeLeftoverService({
-    required this.detection,
-    this.validation = const LeftoverValidation(),
-  }) : super(
+  _FakeLeftoverService({required this.detection}) : super(
          installedApps: const _EmptyInstalledApps(),
          guard: PathGuard(protectedRoots: const []),
          entries: const [],
@@ -67,7 +64,7 @@ class _FakeLeftoverService extends LeftoverService {
        );
 
   LeftoverDetection detection;
-  LeftoverValidation validation;
+  LeftoverValidation validation = const LeftoverValidation();
   int detectCalls = 0;
   int revalidateCalls = 0;
   Set<String>? revalidatedRuleIds;
