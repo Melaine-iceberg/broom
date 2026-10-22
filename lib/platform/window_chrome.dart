@@ -14,6 +14,11 @@ class WindowChrome {
 
   final ValueNotifier<bool> isMaximized = ValueNotifier<bool>(false);
 
+  /// Hover state reported by the runner for the custom maximize button, which
+  /// is hit-tested as a native caption button and therefore no longer receives
+  /// Flutter mouse events.
+  final ValueNotifier<bool> isMaximizeHovered = ValueNotifier<bool>(false);
+
   // The singleton lives for the whole application, so the subscription is
   // intentionally kept for the process lifetime.
   // ignore: cancel_subscriptions
@@ -28,6 +33,11 @@ class WindowChrome {
   /// channel handlers.
   void initialize() {
     if (!isSupported || _stateSubscription != null) return;
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'maximizeHover' && call.arguments is bool) {
+        isMaximizeHovered.value = call.arguments as bool;
+      }
+    });
     _stateSubscription = _stateChannel.receiveBroadcastStream().listen((event) {
       if (event is bool) {
         isMaximized.value = event;

@@ -50,6 +50,9 @@ class FlutterWindow : public Win32Window {
 
   void SetUpWindowChannels();
 
+  // Pushes the maximize button's non-client hover state to Flutter.
+  void SetMaximizeHover(bool hovered);
+
   // The project to run.
   flutter::DartProject project_;
 
@@ -64,6 +67,8 @@ class FlutterWindow : public Win32Window {
       window_state_channel_;
   // Owned by |window_state_channel_| once its stream handler is installed.
   WindowStateEmitter* window_state_emitter_ = nullptr;
+
+  bool maximize_hovered_ = false;
 
   std::unique_ptr<SystemShellChannel> system_shell_channel_;
   std::unique_ptr<SystemAccessChannel> system_access_channel_;

@@ -65,6 +65,29 @@ int ResizeBorderHeight(HWND window) {
          GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
 }
 
+// The custom title bar (lib/ui/window_title_bar.dart) ends with three 46x38
+// logical-pixel slots; the maximize/restore button is the middle slot. Report
+// that area as the native non-client button so Windows 11 renders the Snap
+// Layouts flyout on hover.
+bool IsPointInMaximizeButton(HWND window, const POINT& point) {
+  RECT client = {};
+  if (!GetClientRect(window, &client)) {
+    return false;
+  }
+
+  POINT origin = {0, 0};
+  ClientToScreen(window, &origin);
+
+  const UINT dpi = DpiOf(window);
+  const LONG left = origin.x + client.right - MulDiv(92, dpi, 96);
+  const LONG right = left + MulDiv(46, dpi, 96);
+  const LONG top = origin.y + MulDiv(5, dpi, 96);
+  const LONG bottom = top + MulDiv(28, dpi, 96);
+
+  return point.x >= left && point.x < right && point.y >= top &&
+         point.y < bottom;
+}
+
 // Dynamically loads the |EnableNonClientDpiScaling| from the User32 module.
 // This API is only needed for PerMonitor V1 awareness mode.
 void EnableFullDpiSupportIfAvailable(HWND hwnd) {
@@ -242,11 +265,17 @@ Win32Window::MessageHandler(HWND hwnd,
     }
 
     case WM_NCHITTEST: {
+      POINT point = {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+
+      // Windows 11 keys its Snap Layouts flyout off this hit-test result.
+      if (IsPointInMaximizeButton(hwnd, point)) {
+        return HTMAXBUTTON;
+      }
+
       if (IsZoomed(hwnd)) {
         return HTCLIENT;
       }
 
-      POINT point = {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
       RECT rect;
       GetWindowRect(hwnd, &rect);
 
@@ -269,6 +298,22 @@ Win32Window::MessageHandler(HWND hwnd,
       if (on_right) return HTRIGHT;
       return HTCLIENT;
     }
+
+    case WM_NCLBUTTONDOWN:
+      if (static_cast<int>(wparam) == HTMAXBUTTON) {
+        // The caption lives in the client area, so DefWindowProc does not
+        // perform the button's default action for us.
+        PostMessage(hwnd, WM_SYSCOMMAND,
+                    IsZoomed(hwnd) ? SC_RESTORE : SC_MAXIMIZE, 0);
+        return 0;
+      }
+      break;
+
+    case WM_NCLBUTTONUP:
+      if (static_cast<int>(wparam) == HTMAXBUTTON) {
+        return 0;
+      }
+      break;
 
     case WM_GETMINMAXINFO: {
       auto* info = reinterpret_cast<MINMAXINFO*>(lparam);
@@ -372,6 +417,13 @@ bool Win32Window::IsInResizeBorder(const POINT& screen_point) const {
   const bool on_bottom = screen_point.y >= rect.bottom - border_y &&
                          screen_point.y < rect.bottom;
   return on_left || on_right || on_top || on_bottom;
+}
+
+bool Win32Window::IsOverMaximizeButton(const POINT& screen_point) const {
+  if (window_handle_ == nullptr) {
+    return false;
+  }
+  return IsPointInMaximizeButton(window_handle_, screen_point);
 }
 
 HWND Win32Window::GetHandle() {

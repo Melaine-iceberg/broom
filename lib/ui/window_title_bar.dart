@@ -140,12 +140,16 @@ class _WindowControls extends StatelessWidget {
               label: context.t('最小化'),
               onPressed: () => unawaited(WindowChrome.instance.minimize()),
             ),
-            _WindowButton(
-              key: const ValueKey('window-maximize'),
-              glyph: maximized ? _WindowGlyph.restore : _WindowGlyph.maximize,
-              label: maximized ? context.t('还原') : context.t('最大化'),
-              onPressed: () =>
-                  unawaited(WindowChrome.instance.toggleMaximize()),
+            ValueListenableBuilder<bool>(
+              valueListenable: WindowChrome.instance.isMaximizeHovered,
+              builder: (context, hovered, _) => _WindowButton(
+                key: const ValueKey('window-maximize'),
+                glyph: maximized ? _WindowGlyph.restore : _WindowGlyph.maximize,
+                label: maximized ? context.t('还原') : context.t('最大化'),
+                externalHover: hovered,
+                onPressed: () =>
+                    unawaited(WindowChrome.instance.toggleMaximize()),
+              ),
             ),
             _WindowButton(
               key: const ValueKey('window-close'),
@@ -168,12 +172,17 @@ class _WindowButton extends StatefulWidget {
     required this.label,
     required this.onPressed,
     this.isCloseButton = false,
+    this.externalHover = false,
   });
 
   final _WindowGlyph glyph;
   final String label;
   final VoidCallback onPressed;
   final bool isCloseButton;
+
+  /// Hover state reported by the runner. Used for the maximize button, whose
+  /// hit test is owned by the native non-client area.
+  final bool externalHover;
 
   @override
   State<_WindowButton> createState() => _WindowButtonState();
@@ -186,24 +195,26 @@ class _WindowButtonState extends State<_WindowButton> {
   bool _hovered = false;
   bool _pressed = false;
 
+  bool get _isHovered => _hovered || widget.externalHover;
+
   Color _backgroundColor(BuildContext context) {
     if (widget.isCloseButton) {
       if (_pressed) return _closePressed;
-      if (_hovered) return _closeHover;
+      if (_isHovered) return _closeHover;
       return Colors.transparent;
     }
     if (_pressed) {
       return BroomColors.ink(context).withValues(alpha: 0.1);
     }
-    if (_hovered) {
+    if (_isHovered) {
       return BroomColors.ink(context).withValues(alpha: 0.06);
     }
     return Colors.transparent;
   }
 
   Color _foregroundColor(BuildContext context) {
-    if (widget.isCloseButton && _hovered) return Colors.white;
-    return _hovered ? BroomColors.ink(context) : BroomColors.inkMuted(context);
+    if (widget.isCloseButton && _isHovered) return Colors.white;
+    return _isHovered ? BroomColors.ink(context) : BroomColors.inkMuted(context);
   }
 
   void _setHovered(bool hovered) {

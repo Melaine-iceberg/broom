@@ -221,6 +221,18 @@ void FlutterWindow::OnDestroy() {
   Win32Window::OnDestroy();
 }
 
+void FlutterWindow::SetMaximizeHover(bool hovered) {
+  if (maximize_hovered_ == hovered) {
+    return;
+  }
+  maximize_hovered_ = hovered;
+  if (window_channel_ != nullptr) {
+    window_channel_->InvokeMethod(
+        "maximizeHover",
+        std::make_unique<flutter::EncodableValue>(hovered));
+  }
+}
+
 LRESULT CALLBACK FlutterWindow::FlutterViewProc(HWND window, UINT message,
                                                 WPARAM wparam, LPARAM lparam,
                                                 UINT_PTR subclass_id,
@@ -228,8 +240,11 @@ LRESULT CALLBACK FlutterWindow::FlutterViewProc(HWND window, UINT message,
   if (message == WM_NCHITTEST) {
     const POINT point = {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
     auto* self = reinterpret_cast<FlutterWindow*>(ref_data);
-    if (self != nullptr && self->IsInResizeBorder(point)) {
-      // Let the parent window resize itself at the edges of the client area.
+    if (self != nullptr &&
+        (self->IsInResizeBorder(point) ||
+         self->IsOverMaximizeButton(point))) {
+      // Let the parent window handle edge resizing and the maximize button's
+      // native hit test, which is what enables the Snap Layouts flyout.
       return HTTRANSPARENT;
     }
   }
@@ -245,6 +260,20 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   if (message == WM_NCCALCSIZE || message == WM_NCHITTEST ||
       message == WM_GETMINMAXINFO) {
     return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+  }
+
+  if (message == WM_NCMOUSEMOVE) {
+    const int hit = static_cast<int>(wparam);
+    if (hit == HTMAXBUTTON) {
+      SetMaximizeHover(true);
+      TRACKMOUSEEVENT track = {sizeof(TRACKMOUSEEVENT),
+                               TME_LEAVE | TME_NONCLIENT, hwnd, 0};
+      TrackMouseEvent(&track);
+    } else {
+      SetMaximizeHover(false);
+    }
+  } else if (message == WM_NCMOUSELEAVE) {
+    SetMaximizeHover(false);
   }
 
   if (message == WM_SIZE && wparam != SIZE_MINIMIZED &&

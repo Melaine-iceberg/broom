@@ -59,6 +59,10 @@ class Win32Window {
   // resize the window.
   bool IsInResizeBorder(const POINT& screen_point) const;
 
+  // Returns true when |screen_point| falls inside the custom maximize button
+  // drawn by the Flutter title bar.
+  bool IsOverMaximizeButton(const POINT& screen_point) const;
+
  protected:
   // Processes and route salient window messages for mouse handling,
   // size change and DPI. Delegates handling of these to member overloads that
