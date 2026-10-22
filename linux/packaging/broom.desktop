@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Broom
+GenericName=Disk Cleaner
+Comment=Scan junk files, review them, and undo changes from the quarantine
+Exec=broom %U
+Icon=broom
+Terminal=false
+Categories=Utility;System;FileTools;
+Keywords=clean;cache;junk;disk;quarantine;
+StartupNotify=true
+StartupWMClass=com.broom.Broom

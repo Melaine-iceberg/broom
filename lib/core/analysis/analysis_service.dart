@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../models/analysis_models.dart';
 import '../platform/directory_enum.dart';
+import '../platform/path_semantics.dart';
 import 'duplicate_finder.dart';
 import 'file_tree_walker.dart';
 import 'large_file_scanner.dart';
@@ -34,6 +35,11 @@ abstract interface class AnalysisRunner {
 }
 
 class AnalysisService implements AnalysisRunner {
+  AnalysisService({PathSemantics? semantics})
+    : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform();
+
+  final PathSemantics semantics;
+
   Isolate? _isolate;
   ReceivePort? _eventPort;
   ReceivePort? _errorPort;
@@ -133,6 +139,7 @@ class AnalysisService implements AnalysisRunner {
           control: control.sendPort,
           rootIsolateToken: detailedListing ? RootIsolateToken.instance : null,
           useDetailedListing: detailedListing,
+          semantics: semantics,
         ),
         onError: errors.sendPort,
         onExit: exits.sendPort,
@@ -257,6 +264,7 @@ void _analysisEntry(_AnalysisRequest request) async {
             maxFiles: defaultAnalysisMaxFiles,
             excludedPaths: request.excludedPaths,
             useDetailedListing: useDetailedListing,
+            semantics: request.semantics,
           ).scan(
             onProgress: (progress) => request.events.send(progress),
             isCancelled: () => cancelled,
@@ -272,6 +280,7 @@ void _analysisEntry(_AnalysisRequest request) async {
           maxFiles: defaultAnalysisMaxFiles,
           excludedPaths: request.excludedPaths,
           useDetailedListing: useDetailedListing,
+          semantics: request.semantics,
         ).scan(
           onProgress: (progress) => request.events.send(progress),
           isCancelled: () => cancelled,
@@ -300,6 +309,7 @@ class _AnalysisRequest {
     required this.control,
     this.rootIsolateToken,
     this.useDetailedListing = false,
+    required this.semantics,
   });
 
   final _AnalysisMode mode;
@@ -311,6 +321,7 @@ class _AnalysisRequest {
   final SendPort control;
   final RootIsolateToken? rootIsolateToken;
   final bool useDetailedListing;
+  final PathSemantics semantics;
 }
 
 class _AnalysisDone {

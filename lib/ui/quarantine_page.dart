@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:path/path.dart' as p;
 
 import '../core/clean/quarantine_retention_service.dart';
 import '../core/clean/quarantine_service.dart';
 import '../core/models/clean_models.dart';
 import '../core/models/quarantine_policy_models.dart';
+import '../core/platform/path_semantics.dart';
 import '../core/shell/system_shell.dart';
 import '../l10n/broom_strings.dart';
 import 'analysis_widgets.dart';
@@ -75,7 +75,9 @@ class _QuarantinePageState extends State<QuarantinePage> {
       final sessions = await widget.service.listSessions();
       DiskSpaceSnapshot? disk;
       try {
-        final root = p.windows.rootPrefix(widget.service.quarantineRoot);
+        final root = widget.service.guard.semantics.rootPrefix(
+          widget.service.quarantineRoot,
+        );
         disk = await widget.shell.queryDiskSpace(
           root.isEmpty ? widget.service.quarantineRoot : root,
         );
@@ -933,6 +935,7 @@ class _QuarantineSessionPageState extends State<QuarantineSessionPage> {
                                 entry.restorable && entry.originalExists;
                             return _EntryTile(
                               entry: entry,
+                              semantics: widget.service.guard.semantics,
                               selected: _selected.contains(entry.storedName),
                               enabled: _canSelect(entry) && !_busy,
                               onToggle: () => _toggle(entry.storedName),
@@ -1442,6 +1445,7 @@ class _EntryTile extends StatelessWidget {
     required this.selected,
     required this.enabled,
     required this.onToggle,
+    required this.semantics,
     this.conflictPolicy,
     this.onConflictPolicyChanged,
   });
@@ -1450,6 +1454,7 @@ class _EntryTile extends StatelessWidget {
   final bool selected;
   final bool enabled;
   final VoidCallback onToggle;
+  final PathSemantics semantics;
   final UndoConflictPolicy? conflictPolicy;
   final ValueChanged<UndoConflictPolicy>? onConflictPolicyChanged;
 
@@ -1527,7 +1532,7 @@ class _EntryTile extends StatelessWidget {
                     Tooltip(
                       message: entry.originalPath,
                       child: Text(
-                        p.windows.dirname(entry.originalPath),
+                        semantics.dirname(entry.originalPath),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.labelSmall?.copyWith(

@@ -1,6 +1,6 @@
 # Broom
 
-面向 Windows 桌面的安全、可撤销垃圾清理工具。Broom 只处理由规则明确声明的缓存目录：先扫描预览，再把文件移入隔离区，清理后随时可以撤销。
+面向 Windows 与 Linux 桌面的安全、可撤销垃圾清理工具。Broom 只处理由规则明确声明的缓存目录：先扫描预览，再把文件移入隔离区，清理后随时可以撤销。
 
 当前开发版在 v4 的 **隔离区管理与两阶段空间释放** 之上完成了 **扫描引擎升级**：流式结果、无固定数量上限、按类别扫描、结果持久化与恢复、并行 / 低优先级扫描、可选 NTFS USN 索引、可分类的扫描错误、签名校验的在线规则更新，以及可注入的路径语义抽象。详见 [docs/scanning-engine.md](docs/scanning-engine.md)。
 
@@ -12,7 +12,7 @@ v4 内容：在 v3 的 **管理员系统级缓存清理** 之上，完成 **隔�
 
 当前开发版同时完成 **工程与质量收口**：Windows CI（格式校验、严格静态检查、完整测试、Release 构建与产物上传）、可注入文件系统与内存测试替身、恶意 / 损坏隔离元数据防御、清理 / 撤销 / 扫描并发保护、10 万 / 100 万文件与 UI 帧率基准，以及默认关闭的本地滚动诊断日志与 JSON 诊断包导出。详见 [docs/engineering.md](docs/engineering.md)。
 
-规则与类别也已扩展：**Review 级缓存规则进入普通扫描但默认不勾选**，需要手动选择并额外确认；新增缩略图 / 图标、DirectX / GPU、日志诊断、常见应用、Cargo / Go / NuGet / Maven / JetBrains 等开发缓存、浏览器扩展脚本缓存，以及管理员工具中的 Windows.old 清理。当前内置 **31 条用户规则 + 3 条管理员规则**，兼容边界见 [docs/roadmap.md](docs/roadmap.md)。其他平台与清理能力尚未实现。
+规则与类别也已扩展：**Review 级缓存规则进入普通扫描但默认不勾选**，需要手动选择并额外确认；新增缩略图 / 图标、DirectX / GPU、日志诊断、常见应用、Cargo / Go / NuGet / Maven / JetBrains 等开发缓存、浏览器扩展脚本缓存，以及管理员工具中的 Windows.old 清理。当前内置 **31 条用户规则 + 3 条管理员规则**，兼容边界见 [docs/roadmap.md](docs/roadmap.md)。Linux 核心可用版已接入（见下文），macOS 与移动端尚未实现。
 
 ## 如何定义“垃圾”
 
@@ -328,6 +328,23 @@ pwsh -File tool/package_windows.ps1 -UpdateFeedUrl https://<你的域名>/broom/
 
 自动更新的发布流程、`UpdateSettings` 各开关含义、证书轮换与已验证范围见 [docs/packaging.md](docs/packaging.md)。
 
+### Linux 构建与打包
+
+Linux 使用同一套 Dart UI 与规则引擎，平台差异由 `LinuxCleanerPlatform`、`PosixPathSemantics` 和 `linux/runner` 中的原生通道承担：
+
+```bash
+flutter build linux --release
+bash tool/package_linux.sh
+# 产物：dist/broom-<版本>-linux-x64.tar.gz 与同名 .sha256
+```
+
+- **核心可用范围**：规则扫描、预览、隔离区撤销 / 永久释放、设置与配置导入导出、重复文件与大文件分析可用；系统级缓存、回收站、规则在线更新、软件更新与卸载残留仅在 Windows 显示。
+- **数据位置**：隔离区在 `$XDG_DATA_HOME/Broom/quarantine`（默认 `~/.local/share/Broom/quarantine`），配置、历史与日志同样位于该目录；规则使用 `$XDG_CACHE_HOME`、`$XDG_CONFIG_HOME`、`$XDG_DATA_HOME` 与 `$HOME`。
+- **原生能力**：文件选择器、磁盘空间（`statvfs`）、定位文件与进程优先级（`getpriority` / `setpriority`）、POSIX 权限与时间戳恢复（`chmod` / `utimensat`）都由 `linux/runner/native_channels.cc` 提供，不依赖 zenity 或外部命令。
+- **跨卷判断**：隔离区通过 `st_dev` 批量探测判断是否跨卷；无法探测时保守按跨卷复制处理，避免空间预检低估。
+- **分发**：tar.gz 解压后直接运行 `./broom`；`broom.desktop` 与 `broom.png` 一并提供，可复制到 `~/.local/share/applications` 与 `~/.local/share/icons/hicolor/` 完成菜单集成。
+- **CI**：`.github/workflows/linux.yml` 在 Ubuntu 22.04 上执行格式校验、严格静态检查、完整测试、Release 构建与 tar.gz 打包。
+
 ## 工程、测试与诊断
 
 - **测试**：单元 / Widget 测试覆盖扫描、清理、撤销、冲突、续跑、设置与分析页；`integration_test/` 在真实 Windows 窗口运行应用级冒烟与帧率场景。
@@ -342,13 +359,13 @@ pwsh -File tool/package_windows.ps1 -UpdateFeedUrl https://<你的域名>/broom/
 
 ## 平台与移动端扩展
 
-平台差异集中在 `CleanerPlatform` 接口中：`isSupported`、`quarantineRoot`、`rules`、`resolveRoots`。`createCleanerPlatform()` 当前只返回 Windows 实现，其他平台返回 `UnsupportedCleanerPlatform` 并显示不支持页面，因此移动端可以接入而不影响桌面逻辑。
+平台差异集中在 `CleanerPlatform` 接口中：`isSupported`、`quarantineRoot`、`rules`、`resolveRoots`、`pathSemantics` 与 `protectedRoots`。`createCleanerPlatform()` 返回 Windows 或 Linux 实现，其他平台返回 `UnsupportedCleanerPlatform` 并显示不支持页面，因此移动端可以接入而不影响桌面逻辑。
 
-扫描引擎、路径守卫与规则解析已通过 `PathSemantics` 抽象大小写敏感性、分隔符、规范化、根路径与包含关系，并补充了保留设备名检查；Windows 与 POSIX 语义都有实现和测试。隔离区移动与分析遍历器仍直接依赖 Windows 文件系统语义，因此接入 Android / iOS 时还需要更换文件系统后端，并处理 SAF / MediaStore、应用沙箱、权限申请和平台专属的撤销机制。具体拆解见 [docs/roadmap.md](docs/roadmap.md)。
+扫描引擎、路径守卫、规则解析、隔离区与分析遍历器都已通过 `PathSemantics` 抽象大小写敏感性、分隔符、规范化、根路径与包含关系；Windows 与 POSIX 语义都有实现和测试。接入 Android / iOS 时仍需更换文件系统后端，并处理 SAF / MediaStore、应用沙箱、权限申请和平台专属的撤销机制。具体拆解见 [docs/roadmap.md](docs/roadmap.md)。
 
 ## 已知限制
 
-- 仅支持 Windows。普通扫描同时包含 Safe 与 Review 规则；Review 默认不勾选并需要额外确认，但仍通过隔离区清理。回收站、系统级缓存与 Windows.old 是独立 Review 工具。
+- Windows 与 Linux 均支持规则扫描、隔离区撤销与释放、设置和只读分析；系统级缓存、回收站、规则在线更新、软件更新、NTFS 索引与卸载残留为 Windows 专属，Linux 界面会隐藏这些入口。普通扫描同时包含 Safe 与 Review 规则；Review 默认不勾选并需要额外确认，但仍通过隔离区清理。
 - 系统级工具覆盖 Windows Update 的 `SoftwareDistribution\Download`、传递优化的 `DeliveryOptimization\Cache` 与系统盘 `Windows.old`，均为永久删除、无撤销；更新缓存清理期间会临时停止相关服务，服务恢复失败需手动启动或重启系统。
 - Windows.old 可能包含旧用户配置文件副本与旧程序；即使以管理员运行，部分文件仍可能因 TrustedInstaller 权限或占用而删除失败，因此可能只清理已找到的部分。
 - Docker 规则只处理 Windows 侧日志，WSL 规则只处理 `%LOCALAPPDATA%\Temp\wsl-crashes` 中超过 7 天的崩溃转储；镜像、容器、构建缓存、Linux 发行版文件系统与 `ext4.vhdx` 均由各自工具管理，Broom 不会直接删除或压缩虚拟磁盘。

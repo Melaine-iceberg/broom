@@ -29,6 +29,7 @@ class _FakeServiceControl implements ServiceControl {
 }
 
 void main() {
+  group('FileSystemCacheCleaner', () {
   late Directory temp;
   late Directory root;
   late Directory outside;
@@ -407,4 +408,5 @@ try {
     expect(report.failureCount, 0);
     expect(await target.exists(), isTrue);
   });
+  }, skip: !Platform.isWindows);
 }

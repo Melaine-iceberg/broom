@@ -21,9 +21,9 @@ import 'ntfs_index.dart';
 /// directory workers.
 class ScanService {
   ScanService({
-    this.semantics = const WindowsPathSemantics(),
+    PathSemantics? semantics,
     this.priorityController = const MethodChannelScanPriorityController(),
-  });
+  }) : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform();
 
   final PathSemantics semantics;
   final ScanPriorityController priorityController;

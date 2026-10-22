@@ -19,7 +19,7 @@ void main() {
       guard: PathGuard(protectedRoots: const []),
       quarantine: FakeQuarantineService(),
       exclusions: ExclusionStore(
-        filePath: p.windows.join(r'C:\Integration', 'exclusions.json'),
+        filePath: p.join(r'C:\Integration', 'exclusions.json'),
       ),
       scanServiceFactory: IntegrationScanService.new,
     );

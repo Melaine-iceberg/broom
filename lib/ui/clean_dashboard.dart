@@ -25,7 +25,7 @@ class CleanDashboard extends StatelessWidget {
   final CleanController controller;
   final SettingsController settingsController;
   final VoidCallback onOpenQuarantine;
-  final VoidCallback onOpenRecycleBin;
+  final VoidCallback? onOpenRecycleBin;
   final VoidCallback onOpenDuplicateFinder;
   final VoidCallback onOpenLargeFiles;
   final Widget scopeSection;
@@ -66,6 +66,7 @@ class CleanDashboard extends StatelessWidget {
               leftoverEnabled: settingsController.isCategoryEnabled(
                 leftoverCategoryKey,
               ),
+              showLeftover: controller.leftoverService != null,
               exclusionCount: controller.exclusionCount,
             );
             final lastScan = _LastScanCard(controller: controller);
@@ -197,6 +198,7 @@ class _ScanHero extends StatelessWidget {
     required this.totalCategories,
     required this.ruleCount,
     required this.leftoverEnabled,
+    required this.showLeftover,
     required this.exclusionCount,
   });
 
@@ -205,6 +207,7 @@ class _ScanHero extends StatelessWidget {
   final int totalCategories;
   final int ruleCount;
   final bool leftoverEnabled;
+  final bool showLeftover;
   final int exclusionCount;
 
   @override
@@ -338,12 +341,13 @@ class _ScanHero extends StatelessWidget {
                         value: '$enabledCategories/$totalCategories',
                       ),
                       _HeroCell(label: context.t('扫描规则'), value: '$ruleCount'),
-                      _HeroCell(
-                        label: context.t('卸载残留'),
-                        value: leftoverEnabled
-                            ? '${controller.leftoverDetectedCount}'
-                            : context.t('已关闭'),
-                      ),
+                      if (showLeftover)
+                        _HeroCell(
+                          label: context.t('卸载残留'),
+                          value: leftoverEnabled
+                              ? '${controller.leftoverDetectedCount}'
+                              : context.t('已关闭'),
+                        ),
                       _HeroCell(
                         label: context.t('排除目录'),
                         value: '$exclusionCount',
@@ -713,7 +717,7 @@ class _ToolsSection extends StatelessWidget {
     this.onOpenSystemCache,
   });
 
-  final VoidCallback onOpenRecycleBin;
+  final VoidCallback? onOpenRecycleBin;
   final VoidCallback onOpenDuplicateFinder;
   final VoidCallback onOpenLargeFiles;
   final VoidCallback? onOpenSystemCache;
@@ -738,13 +742,14 @@ class _ToolsSection extends StatelessWidget {
               description: context.t('Windows 更新与旧系统文件 · 需要管理员权限'),
               onTap: onOpenSystemCache!,
             ),
-          (
-            key: 'tool-recycle-bin',
-            icon: LucideIcons.trash2,
-            title: context.t('回收站'),
-            description: context.t('查看各磁盘回收站占用'),
-            onTap: onOpenRecycleBin,
-          ),
+          if (onOpenRecycleBin != null)
+            (
+              key: 'tool-recycle-bin',
+              icon: LucideIcons.trash2,
+              title: context.t('回收站'),
+              description: context.t('查看各磁盘回收站占用'),
+              onTap: onOpenRecycleBin!,
+            ),
           (
             key: 'tool-duplicate-files',
             icon: LucideIcons.copy,

@@ -62,26 +62,26 @@ void main() {
     });
 
     const appName = 'Broom E2E Removed App';
-    final dataDir = Directory(p.windows.join(temp.path, 'AppData', 'E2EApp'))
+    final dataDir = Directory(p.join(temp.path, 'AppData', 'E2EApp'))
       ..createSync(recursive: true);
-    final firstFile = File(p.windows.join(dataDir.path, 'session.dat'))
+    final firstFile = File(p.join(dataDir.path, 'session.dat'))
       ..writeAsBytesSync(List<int>.filled(4096, 7));
-    final secondFile = File(p.windows.join(dataDir.path, 'cache.bin'))
+    final secondFile = File(p.join(dataDir.path, 'cache.bin'))
       ..writeAsBytesSync(List<int>.filled(2048, 9));
-    final installMarker = p.windows.join(
+    final installMarker = p.join(
       temp.path,
       'LocalAppData',
       'E2EApp',
       'app.exe',
     );
-    final quarantineRoot = p.windows.join(temp.path, 'quarantine');
+    final quarantineRoot = p.join(temp.path, 'quarantine');
 
     final guard = PathGuard.forWindows(
       environment: Platform.environment,
       additionalProtectedRoots: [quarantineRoot],
     );
     final exclusions = ExclusionStore(
-      filePath: p.windows.join(temp.path, 'exclusions.json'),
+      filePath: p.join(temp.path, 'exclusions.json'),
     );
     await exclusions.ensureLoaded();
     final quarantine = QuarantineService(

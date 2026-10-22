@@ -1,10 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path/path.dart' as p;
-
 import '../models/app_settings.dart';
-import '../safety/path_guard.dart';
+import '../platform/path_semantics.dart';
 import 'config_schema.dart';
 
 class SettingsException implements Exception {
@@ -17,18 +15,24 @@ class SettingsException implements Exception {
 }
 
 class SettingsStore {
-  SettingsStore({required this.filePath}) {
-    if (!p.windows.isAbsolute(filePath)) {
+  SettingsStore({
+    required this.filePath,
+    PathSemantics? semantics,
+  }) : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform() {
+    if (!this.semantics.isAbsolute(filePath)) {
       throw ArgumentError.value(filePath, 'filePath', '设置文件路径必须是绝对路径');
     }
   }
 
   static const fileName = 'settings.json';
 
-  static String defaultFilePath(String quarantineRoot) =>
-      p.windows.join(p.windows.dirname(quarantineRoot), fileName);
+  static String defaultFilePath(String quarantineRoot, {PathSemantics? semantics}) {
+    final paths = semantics ?? PathSemanticsFactory.forCurrentPlatform();
+    return paths.join(paths.dirname(quarantineRoot), fileName);
+  }
 
   final String filePath;
+  final PathSemantics semantics;
 
   AppSettings load() {
     try {
@@ -60,7 +64,7 @@ class SettingsStore {
         jsonEncode(encodeSettingsDocument(settings)),
         flush: true,
       );
-      temp.renameSync(PathGuard.normalize(filePath));
+      temp.renameSync(semantics.normalize(semantics.absolute(filePath)));
     } on FileSystemException catch (error) {
       throw SettingsException('无法保存设置：${error.message}');
     }

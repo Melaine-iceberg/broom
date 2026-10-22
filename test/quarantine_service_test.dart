@@ -17,6 +17,8 @@ import 'package:path/path.dart' as p;
 
 import 'support/file_metadata_fakes.dart';
 
+final _windowsOnly = !Platform.isWindows;
+
 void main() {
   late Directory temp;
   late Directory source;
@@ -26,14 +28,14 @@ void main() {
 
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('broom_quarantine_');
-    source = Directory(p.windows.join(temp.path, 'source'));
+    source = Directory(p.join(temp.path, 'source'));
     await source.create(recursive: true);
     testRoots = ScanRoots([
       ScanRoot(ruleId: 'test.rule', rootPath: source.path),
     ]);
     metadata = FakeFileMetadataAccess();
     quarantine = QuarantineService(
-      quarantineRoot: p.windows.join(temp.path, 'quarantine'),
+      quarantineRoot: p.join(temp.path, 'quarantine'),
       guard: PathGuard(protectedRoots: const []),
       metadataAccess: metadata,
     );
@@ -46,7 +48,7 @@ void main() {
   });
 
   Future<File> createFile(String relative, String content) async {
-    final file = File(p.windows.join(source.path, relative));
+    final file = File(p.join(source.path, relative));
     await file.parent.create(recursive: true);
     await file.writeAsString(content);
     return file;
@@ -100,7 +102,7 @@ void main() {
     expect(await second.readAsString(), 'bravo!');
     expect(await quarantine.listSessions(), isEmpty);
     expect(
-      await Directory(p.windows.join(temp.path, 'quarantine')).exists(),
+      await Directory(p.join(temp.path, 'quarantine')).exists(),
       isTrue,
     );
   });
@@ -115,11 +117,11 @@ void main() {
     expect(report.removedDirectoryCount, 2);
     expect(await file.exists(), isFalse);
     expect(
-      await Directory(p.windows.join(source.path, 'cache', 'nested')).exists(),
+      await Directory(p.join(source.path, 'cache', 'nested')).exists(),
       isFalse,
     );
     expect(
-      await Directory(p.windows.join(source.path, 'cache')).exists(),
+      await Directory(p.join(source.path, 'cache')).exists(),
       isFalse,
     );
     expect(await source.exists(), isTrue);
@@ -130,7 +132,7 @@ void main() {
     expect(undo.recreatedDirectoryCount, 2);
     expect(undo.directoryFailureCount, 0);
     expect(
-      await Directory(p.windows.join(source.path, 'cache', 'nested')).exists(),
+      await Directory(p.join(source.path, 'cache', 'nested')).exists(),
       isTrue,
     );
     expect(await file.readAsString(), 'alpha');
@@ -140,7 +142,7 @@ void main() {
     final selected = await createFile(p.join('cache', 'selected.tmp'), 'alpha');
     final kept = await createFile(p.join('cache', 'kept.tmp'), 'bravo');
     final existingEmpty = Directory(
-      p.windows.join(source.path, 'already_empty'),
+      p.join(source.path, 'already_empty'),
     );
     await existingEmpty.create();
 
@@ -148,7 +150,7 @@ void main() {
 
     expect(report.removedDirectoryCount, 0);
     expect(
-      await Directory(p.windows.join(source.path, 'cache')).exists(),
+      await Directory(p.join(source.path, 'cache')).exists(),
       isTrue,
     );
     expect(await existingEmpty.exists(), isTrue);
@@ -173,7 +175,7 @@ void main() {
       expect(interrupted.cancelled, isTrue);
       expect(interrupted.removedDirectoryCount, 0);
       expect(
-        await Directory(p.windows.join(source.path, 'a')).exists(),
+        await Directory(p.join(source.path, 'a')).exists(),
         isTrue,
       );
       expect(await second.exists(), isTrue);
@@ -183,11 +185,11 @@ void main() {
       expect(resumed.movedCount, 1);
       expect(resumed.removedDirectoryCount, 2);
       expect(
-        await Directory(p.windows.join(source.path, 'a')).exists(),
+        await Directory(p.join(source.path, 'a')).exists(),
         isFalse,
       );
       expect(
-        await Directory(p.windows.join(source.path, 'b')).exists(),
+        await Directory(p.join(source.path, 'b')).exists(),
         isFalse,
       );
 
@@ -196,11 +198,11 @@ void main() {
       expect(undo.restoredCount, 2);
       expect(undo.recreatedDirectoryCount, 2);
       expect(
-        await Directory(p.windows.join(source.path, 'a')).exists(),
+        await Directory(p.join(source.path, 'a')).exists(),
         isTrue,
       );
       expect(
-        await Directory(p.windows.join(source.path, 'b')).exists(),
+        await Directory(p.join(source.path, 'b')).exists(),
         isTrue,
       );
     },
@@ -214,7 +216,7 @@ void main() {
     final report = await clean([await itemFor(file)]);
     final entry = (await quarantine.listEntries(report.sessionId!)).single;
     await File(
-      p.windows.join(
+      p.join(
         temp.path,
         'quarantine',
         report.sessionId!,
@@ -229,7 +231,7 @@ void main() {
     expect(undo.missingCount, 1);
     expect(undo.recreatedDirectoryCount, 2);
     expect(
-      await Directory(p.windows.join(source.path, 'cache', 'nested')).exists(),
+      await Directory(p.join(source.path, 'cache', 'nested')).exists(),
       isTrue,
     );
     expect(undo.sessionRemoved, isTrue);
@@ -242,15 +244,15 @@ void main() {
     );
     final report = await clean([await itemFor(file)]);
     final recordsFile = File(
-      p.windows.join(
+      p.join(
         temp.path,
         'quarantine',
         report.sessionId!,
         'removed_dirs.jsonl',
       ),
     );
-    final outside = Directory(p.windows.join(temp.path, 'outside'));
-    final unrelated = Directory(p.windows.join(source.path, 'unrelated'));
+    final outside = Directory(p.join(temp.path, 'outside'));
+    final unrelated = Directory(p.join(source.path, 'unrelated'));
     final existing = await recordsFile.readAsString();
     await recordsFile.writeAsString(
       '$existing'
@@ -297,7 +299,7 @@ void main() {
     // A hard crash leaves the session in "cleaning"; listing must recover the
     // remaining count from the plan and entries instead of trusting metadata.
     final metaFile = File(
-      p.windows.join(
+      p.join(
         temp.path,
         'quarantine',
         interrupted.sessionId!,
@@ -333,7 +335,7 @@ void main() {
     expect(readySession.remainingCount, 0);
     expect(
       File(
-        p.windows.join(
+        p.join(
           temp.path,
           'quarantine',
           interrupted.sessionId!,
@@ -360,7 +362,7 @@ void main() {
     final movable = await createFile('movable.txt', 'alpha');
     final missing = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(source.path, 'missing.txt'),
+      path: p.join(source.path, 'missing.txt'),
       size: 1,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
@@ -417,7 +419,7 @@ void main() {
 
       final report = await clean([await itemFor(file)]);
       final entriesFile = File(
-        p.windows.join(
+        p.join(
           temp.path,
           'quarantine',
           report.sessionId!,
@@ -551,7 +553,7 @@ void main() {
     final report = await clean([await itemFor(file)]);
 
     final entriesFile = File(
-      p.windows.join(
+      p.join(
         temp.path,
         'quarantine',
         report.sessionId!,
@@ -572,7 +574,7 @@ void main() {
 
     final entry = (await quarantine.listEntries(report.sessionId!)).single;
     final stored = File(
-      p.windows.join(
+      p.join(
         temp.path,
         'quarantine',
         report.sessionId!,
@@ -602,7 +604,7 @@ void main() {
 
     final entry = (await quarantine.listEntries(report.sessionId!)).single;
     final stored = File(
-      p.windows.join(
+      p.join(
         temp.path,
         'quarantine',
         report.sessionId!,
@@ -628,7 +630,7 @@ void main() {
     final report = await clean([await itemFor(file)]);
 
     final entriesFile = File(
-      p.windows.join(
+      p.join(
         temp.path,
         'quarantine',
         report.sessionId!,
@@ -739,7 +741,7 @@ void main() {
 
   test('keeps both copies with a unique restored name', () async {
     final file = await createFile('conflict.txt', 'alpha');
-    final occupied = File(p.windows.join(source.path, 'conflict (已恢复).txt'));
+    final occupied = File(p.join(source.path, 'conflict (已恢复).txt'));
     await occupied.writeAsString('occupied');
     final report = await clean([await itemFor(file)]);
     await file.writeAsString('user-content');
@@ -756,7 +758,7 @@ void main() {
     expect(undo.sessionRemoved, isTrue);
     expect(await file.readAsString(), 'user-content');
     expect(await occupied.readAsString(), 'occupied');
-    final restored = File(p.windows.join(source.path, 'conflict (已恢复 2).txt'));
+    final restored = File(p.join(source.path, 'conflict (已恢复 2).txt'));
     expect(await restored.readAsString(), 'alpha');
     expect(await quarantine.listSessions(), isEmpty);
   });
@@ -825,7 +827,7 @@ void main() {
     expect(await quarantine.listSessions(), isEmpty);
     expect(
       await Directory(
-        p.windows.join(temp.path, 'quarantine', report.sessionId!),
+        p.join(temp.path, 'quarantine', report.sessionId!),
       ).exists(),
       isFalse,
     );
@@ -857,7 +859,7 @@ void main() {
   });
 
   test('refuses items outside their declared root', () async {
-    final outside = File(p.windows.join(temp.path, 'outside.txt'));
+    final outside = File(p.join(temp.path, 'outside.txt'));
     await outside.writeAsString('keep-me');
     final stat = await outside.stat();
 
@@ -889,11 +891,11 @@ void main() {
   });
 
   test('refuses to clean items inside excluded paths', () async {
-    final excludedDir = Directory(p.windows.join(source.path, 'keep'));
+    final excludedDir = Directory(p.join(source.path, 'keep'));
     await excludedDir.create(recursive: true);
     final file = await createFile(p.join('keep', 'keep.txt'), 'keep-me');
     final service = QuarantineService(
-      quarantineRoot: p.windows.join(temp.path, 'quarantine'),
+      quarantineRoot: p.join(temp.path, 'quarantine'),
       guard: PathGuard(protectedRoots: const []),
       metadataAccess: FakeFileMetadataAccess(),
       exclusions: PathExclusions([excludedDir.path]),
@@ -915,7 +917,7 @@ void main() {
     final report = await clean([await itemFor(file)]);
 
     final restricted = QuarantineService(
-      quarantineRoot: p.windows.join(temp.path, 'quarantine'),
+      quarantineRoot: p.join(temp.path, 'quarantine'),
       guard: PathGuard(protectedRoots: const []),
       metadataAccess: FakeFileMetadataAccess(),
       exclusions: PathExclusions([source.path]),
@@ -937,8 +939,8 @@ void main() {
 
   test('classifies a file held by another process as skipped', () async {
     final file = await createFile('locked.txt', 'locked-content');
-    final script = File(p.windows.join(temp.path, 'hold_lock.ps1'));
-    final ready = File(p.windows.join(temp.path, 'lock.ready'));
+    final script = File(p.join(temp.path, 'hold_lock.ps1'));
+    final ready = File(p.join(temp.path, 'lock.ready'));
     const scriptText = r'''
 $ErrorActionPreference = 'Stop'
 $target = $args[0]
@@ -1003,7 +1005,7 @@ try {
       );
       final probed = <String>[];
       final service = QuarantineService(
-        quarantineRoot: p.windows.join(temp.path, 'quarantine'),
+        quarantineRoot: p.join(temp.path, 'quarantine'),
         guard: PathGuard(protectedRoots: const []),
         metadataAccess: metadata,
         freeSpaceProbe: (path) async {
@@ -1029,22 +1031,25 @@ try {
         ),
       );
       expect(probed, [
-        p.windows.rootPrefix(p.windows.join(temp.path, 'quarantine')),
+        p.windows.rootPrefix(p.join(temp.path, 'quarantine')),
       ]);
       expect(await service.listSessions(), isEmpty);
       expect(
-        await Directory(p.windows.join(temp.path, 'quarantine')).exists(),
+        await Directory(p.join(temp.path, 'quarantine')).exists(),
         isFalse,
       );
     },
   );
 
-  test('skips the preflight for same-volume moves', () async {
+  test(
+    'skips the preflight for same-volume moves',
+    skip: _windowsOnly,
+    () async {
     final file = await createFile('same-volume.tmp', 'alpha');
     final item = await itemFor(file);
     var probeCalls = 0;
     final service = QuarantineService(
-      quarantineRoot: p.windows.join(temp.path, 'quarantine'),
+      quarantineRoot: p.join(temp.path, 'quarantine'),
       guard: PathGuard(protectedRoots: const []),
       metadataAccess: metadata,
       freeSpaceProbe: (_) async {
@@ -1064,7 +1069,10 @@ try {
     expect(report.sessionId, isNotNull);
   });
 
-  test('refuses to resume when the remaining plan needs unavailable space', () async {
+  test(
+    'refuses to resume when the remaining plan needs unavailable space',
+    skip: _windowsOnly,
+    () async {
     final first = await createFile('first.txt', 'alpha');
     final second = await createFile('second.txt', 'bravo');
     var cancel = false;
@@ -1079,9 +1087,9 @@ try {
     expect(interrupted.cancelled, isTrue);
 
     final sessionDir = Directory(
-      p.windows.join(temp.path, 'quarantine', sessionId),
+      p.join(temp.path, 'quarantine', sessionId),
     );
-    final planFile = File(p.windows.join(sessionDir.path, 'plan.jsonl'));
+    final planFile = File(p.join(sessionDir.path, 'plan.jsonl'));
     final existingPlan = await planFile.readAsString();
     final extra = JunkItem(
       rootIndex: 0,
@@ -1093,7 +1101,7 @@ try {
       '$existingPlan'
       '${jsonEncode({'originalPath': extra.path, 'rootPath': r'D:\cache', 'ruleId': 'test.rule', 'size': extra.size, 'modified': extra.modified.toUtc().toIso8601String()})}\n',
     );
-    final metaFile = File(p.windows.join(sessionDir.path, 'session.json'));
+    final metaFile = File(p.join(sessionDir.path, 'session.json'));
     final meta =
         jsonDecode(await metaFile.readAsString()) as Map<String, dynamic>;
     meta['plannedCount'] = 3;
@@ -1101,7 +1109,7 @@ try {
     await metaFile.writeAsString(jsonEncode(meta));
 
     final limited = QuarantineService(
-      quarantineRoot: p.windows.join(temp.path, 'quarantine'),
+      quarantineRoot: p.join(temp.path, 'quarantine'),
       guard: PathGuard(protectedRoots: const []),
       metadataAccess: metadata,
       freeSpaceProbe: (_) async => 0,
@@ -1126,7 +1134,7 @@ try {
       final second = await createFile('second.txt', 'bravo');
       final report = await clean([await itemFor(first), await itemFor(second)]);
       final metaFile = File(
-        p.windows.join(
+        p.join(
           temp.path,
           'quarantine',
           report.sessionId!,
@@ -1231,7 +1239,7 @@ try {
     expect(await first.readAsString(), 'user-first');
     expect(await second.readAsString(), 'bravo');
     expect(await third.readAsString(), 'user-third');
-    final keptBoth = File(p.windows.join(source.path, 'first (已恢复).txt'));
+    final keptBoth = File(p.join(source.path, 'first (已恢复).txt'));
     expect(await keptBoth.readAsString(), 'alpha');
     expect(undo.sessionRemoved, isFalse);
     expect((await quarantine.listSessions()).single.pendingCount, 1);
@@ -1241,10 +1249,10 @@ try {
     'records cleaning history independently of the session lifecycle',
     () async {
       final history = CleanHistoryStore(
-        filePath: p.windows.join(temp.path, 'clean_history.json'),
+        filePath: p.join(temp.path, 'clean_history.json'),
       );
       final service = QuarantineService(
-        quarantineRoot: p.windows.join(temp.path, 'quarantine'),
+        quarantineRoot: p.join(temp.path, 'quarantine'),
         guard: PathGuard(protectedRoots: const []),
         metadataAccess: metadata,
         historyStore: history,
@@ -1274,10 +1282,10 @@ try {
 
   test('updates one history record when a cleanup is resumed', () async {
     final history = CleanHistoryStore(
-      filePath: p.windows.join(temp.path, 'clean_history.json'),
+      filePath: p.join(temp.path, 'clean_history.json'),
     );
     final service = QuarantineService(
-      quarantineRoot: p.windows.join(temp.path, 'quarantine'),
+      quarantineRoot: p.join(temp.path, 'quarantine'),
       guard: PathGuard(protectedRoots: const []),
       metadataAccess: metadata,
       historyStore: history,
@@ -1314,7 +1322,7 @@ try {
 
   test('a broken history store never fails a cleanup', () async {
     final service = QuarantineService(
-      quarantineRoot: p.windows.join(temp.path, 'quarantine'),
+      quarantineRoot: p.join(temp.path, 'quarantine'),
       guard: PathGuard(protectedRoots: const []),
       metadataAccess: metadata,
       // The path is a directory, so every history write must fail.

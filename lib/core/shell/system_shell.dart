@@ -182,9 +182,11 @@ class MethodChannelSystemShell implements SystemShell {
   ) {
     final details = error.details;
     if (details is int) {
-      final code = details.toRadixString(16).toUpperCase().padLeft(8, '0');
+      final suffix = Platform.isWindows
+          ? '（Windows 错误 0x${details.toRadixString(16).toUpperCase().padLeft(8, '0')}）'
+          : '（errno $details）';
       return SystemShellException(
-        '$fallback（Windows 错误 0x$code）',
+        '$fallback$suffix',
         code: error.code,
       );
     }
@@ -232,6 +234,8 @@ class UnsupportedSystemShell implements SystemShell {
 }
 
 SystemShell createSystemShell() {
-  if (Platform.isWindows) return const MethodChannelSystemShell();
+  if (Platform.isWindows || Platform.isLinux) {
+    return const MethodChannelSystemShell();
+  }
   return const UnsupportedSystemShell();
 }

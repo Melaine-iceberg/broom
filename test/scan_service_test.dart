@@ -61,9 +61,9 @@ void main() {
   });
 
   test('round-trips models and progress through the scan isolate', () async {
-    final directory = Directory(p.windows.join(temp.path, 'cache'));
+    final directory = Directory(p.join(temp.path, 'cache'));
     await directory.create(recursive: true);
-    final file = File(p.windows.join(directory.path, 'old.tmp'));
+    final file = File(p.join(directory.path, 'old.tmp'));
     await file.writeAsString('old-content');
     await file.setLastModified(
       DateTime.now().subtract(const Duration(days: 2)),
@@ -98,10 +98,10 @@ void main() {
   });
 
   test('streams batches while scanning', () async {
-    final directory = Directory(p.windows.join(temp.path, 'stream'));
+    final directory = Directory(p.join(temp.path, 'stream'));
     await directory.create(recursive: true);
     for (var index = 0; index < 5; index++) {
-      await File(p.windows.join(directory.path, 'file-$index.tmp'))
+      await File(p.join(directory.path, 'file-$index.tmp'))
           .writeAsString('x');
     }
 
@@ -128,12 +128,12 @@ void main() {
   });
 
   test('scans disjoint jobs with parallel workers', () async {
-    final first = Directory(p.windows.join(temp.path, 'first'));
-    final second = Directory(p.windows.join(temp.path, 'second'));
+    final first = Directory(p.join(temp.path, 'first'));
+    final second = Directory(p.join(temp.path, 'second'));
     await first.create(recursive: true);
     await second.create(recursive: true);
-    await File(p.windows.join(first.path, 'a.tmp')).writeAsString('a');
-    await File(p.windows.join(second.path, 'b.tmp')).writeAsString('b');
+    await File(p.join(first.path, 'a.tmp')).writeAsString('a');
+    await File(p.join(second.path, 'b.tmp')).writeAsString('b');
 
     final service = ScanService();
     addTearDown(service.dispose);
@@ -158,10 +158,10 @@ void main() {
   });
 
   test('deduplicates overlapping jobs across parallel workers', () async {
-    final directory = Directory(p.windows.join(temp.path, 'overlap'));
+    final directory = Directory(p.join(temp.path, 'overlap'));
     await directory.create(recursive: true);
-    await File(p.windows.join(directory.path, 'a.tmp')).writeAsString('a');
-    await File(p.windows.join(directory.path, 'b.tmp')).writeAsString('b');
+    await File(p.join(directory.path, 'a.tmp')).writeAsString('a');
+    await File(p.join(directory.path, 'b.tmp')).writeAsString('b');
 
     final service = ScanService();
     addTearDown(service.dispose);
@@ -181,10 +181,10 @@ void main() {
   });
 
   test('applies a user-configured result limit globally', () async {
-    final directory = Directory(p.windows.join(temp.path, 'limited'));
+    final directory = Directory(p.join(temp.path, 'limited'));
     await directory.create(recursive: true);
     for (var index = 0; index < 8; index++) {
-      await File(p.windows.join(directory.path, 'file-$index.tmp'))
+      await File(p.join(directory.path, 'file-$index.tmp'))
           .writeAsString('x');
     }
 
@@ -206,9 +206,9 @@ void main() {
   });
 
   test('lowers and restores priority around a scan', () async {
-    final directory = Directory(p.windows.join(temp.path, 'priority'));
+    final directory = Directory(p.join(temp.path, 'priority'));
     await directory.create(recursive: true);
-    await File(p.windows.join(directory.path, 'a.tmp')).writeAsString('a');
+    await File(p.join(directory.path, 'a.tmp')).writeAsString('a');
 
     final priority = _FakePriorityController();
     final service = ScanService(priorityController: priority);
@@ -230,9 +230,9 @@ void main() {
   });
 
   test('uses the indexed path when every root is available', () async {
-    final directory = Directory(p.windows.join(temp.path, 'indexed'));
+    final directory = Directory(p.join(temp.path, 'indexed'));
     await directory.create(recursive: true);
-    final file = File(p.windows.join(directory.path, 'a.tmp'));
+    final file = File(p.join(directory.path, 'a.tmp'));
     await file.writeAsString('a');
     final index = _FakeNtfsIndex(paths: [file.path]);
 
@@ -255,9 +255,9 @@ void main() {
   });
 
   test('falls back to workers when the NTFS index is unavailable', () async {
-    final directory = Directory(p.windows.join(temp.path, 'fallback'));
+    final directory = Directory(p.join(temp.path, 'fallback'));
     await directory.create(recursive: true);
-    final file = File(p.windows.join(directory.path, 'a.tmp'));
+    final file = File(p.join(directory.path, 'a.tmp'));
     await file.writeAsString('a');
     final index = _FakeNtfsIndex(available: false);
 

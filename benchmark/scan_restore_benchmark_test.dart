@@ -54,14 +54,14 @@ void main() {
     try {
       for (final count in _sizes) {
         final store = ScanResultStore(
-          rootDirectory: p.windows.join(base.path, 's$count'),
+          rootDirectory: p.join(base.path, 's$count'),
           semantics: const WindowsPathSemantics(),
         );
         final setup = Stopwatch()..start();
         final summary = await _writeResult(store, count);
         setup.stop();
         final file = File(
-          p.windows.join(store.rootDirectory, summary.id, 'items.jsonl'),
+          p.join(store.rootDirectory, summary.id, 'items.jsonl'),
         );
         final mib = file.lengthSync() / (1024 * 1024);
         // Measure parsing, not first-touch disk reads.
@@ -81,7 +81,7 @@ void main() {
         final controller = await _createController(
           store: store,
           rules: rules,
-          basePath: p.windows.join(base.path, 'c$count'),
+          basePath: p.join(base.path, 'c$count'),
         );
         final loads = <Duration>[];
         final restores = <Duration>[];
@@ -178,7 +178,7 @@ Future<StoredScanSummary> _writeResult(ScanResultStore store, int count) async {
     for (final ruleId in _ruleIds)
       ScanRoot(
         ruleId: ruleId,
-        rootPath: p.windows.join(
+        rootPath: p.join(
           r'C:\Users\Bench\AppData\Local\Temp\cache',
           ruleId.replaceAll('.', '_'),
         ),
@@ -200,7 +200,7 @@ Future<StoredScanSummary> _writeResult(ScanResultStore store, int count) async {
     batch.add(
       JunkItem(
         rootIndex: rootIndex,
-        path: p.windows.join(
+        path: p.join(
           root.rootPath,
           'd${(index ~/ 4096) % 64}',
           'file${index.toString().padLeft(10, '0')}.tmp',
@@ -236,12 +236,12 @@ Future<CleanController> _createController({
     platform: _BenchPlatform(rules),
     guard: guard,
     quarantine: QuarantineService(
-      quarantineRoot: p.windows.join(basePath, 'quarantine'),
+      quarantineRoot: p.join(basePath, 'quarantine'),
       guard: guard,
       metadataAccess: const LocalFileMetadataAccess(),
     ),
     exclusions: ExclusionStore(
-      filePath: p.windows.join(basePath, 'exclusions.json'),
+      filePath: p.join(basePath, 'exclusions.json'),
     ),
     scanServiceFactory: ScanService.new,
     // Keeps the asynchronous probe from competing with the next measured
@@ -267,6 +267,12 @@ class _BenchPlatform implements CleanerPlatform {
 
   @override
   bool get isSupported => true;
+
+  @override
+  PathSemantics get pathSemantics => PathSemanticsFactory.forCurrentPlatform();
+
+  @override
+  List<String> get protectedRoots => const [];
 
   @override
   String? get quarantineRoot => null;

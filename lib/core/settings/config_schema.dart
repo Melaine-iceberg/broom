@@ -1,8 +1,6 @@
-import 'package:path/path.dart' as p;
-
 import '../models/app_settings.dart';
 import '../models/quarantine_policy_models.dart';
-import '../safety/path_guard.dart';
+import '../platform/path_semantics.dart';
 
 /// Current on-disk schema shared by the user configuration files.
 ///
@@ -152,7 +150,11 @@ Map<String, dynamic> encodeExclusionsDocument(Iterable<String> paths) {
 /// connected, so existence is checked only when adding exclusions through the
 /// UI. Paths are normalized, deduplicated and rejected when relative or when
 /// they point at a volume or share root.
-List<String> decodeExclusionsDocument(Map<String, dynamic> raw) {
+List<String> decodeExclusionsDocument(
+  Map<String, dynamic> raw, {
+  PathSemantics? semantics,
+}) {
+  final resolved = semantics ?? PathSemanticsFactory.forCurrentPlatform();
   final migrated = migrateConfigDocument(
     raw,
     kind: exclusionsDocumentKind,
@@ -168,26 +170,26 @@ List<String> decodeExclusionsDocument(Map<String, dynamic> raw) {
     if (rawPath is! String || rawPath.trim().isEmpty) {
       throw const FormatException('排除列表包含无效路径');
     }
-    final normalized = _normalizeExclusionPath(rawPath);
-    byKey.putIfAbsent(normalized.toLowerCase(), () => normalized);
+    final normalized = _normalizeExclusionPath(rawPath, resolved);
+    byKey.putIfAbsent(resolved.key(normalized), () => normalized);
   }
   final paths = byKey.values.toList()
     ..sort(
-      (first, second) => first.toLowerCase().compareTo(second.toLowerCase()),
+      (first, second) => resolved.key(first).compareTo(resolved.key(second)),
     );
   return paths;
 }
 
-String _normalizeExclusionPath(String rawPath) {
+String _normalizeExclusionPath(String rawPath, PathSemantics semantics) {
   final trimmed = rawPath.trim();
   if (trimmed.isEmpty) {
     throw const FormatException('排除路径不能为空');
   }
-  if (!p.windows.isAbsolute(trimmed)) {
+  if (!semantics.isAbsolute(trimmed)) {
     throw FormatException('排除路径必须是绝对路径：$trimmed');
   }
-  final normalized = PathGuard.normalize(trimmed);
-  if (p.windows.rootPrefix(normalized) == normalized) {
+  final normalized = semantics.normalize(semantics.absolute(trimmed));
+  if (semantics.rootPrefix(normalized) == normalized) {
     throw FormatException('不能排除整个磁盘或共享根目录：$trimmed');
   }
   return normalized;

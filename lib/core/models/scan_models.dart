@@ -39,14 +39,14 @@ class ScanRoots {
 
   final List<ScanRoot> entries;
 
-  factory ScanRoots.fromJobs(
-    List<ScanJob> jobs, {
-    PathSemantics semantics = const WindowsPathSemantics(),
-  }) => ScanRoots([
-    for (final job in jobs)
-      for (final root in job.roots)
-        ScanRoot(ruleId: job.ruleId, rootPath: semantics.canonical(root)),
-  ]);
+  factory ScanRoots.fromJobs(List<ScanJob> jobs, {PathSemantics? semantics}) {
+    final paths = semantics ?? PathSemanticsFactory.forCurrentPlatform();
+    return ScanRoots([
+      for (final job in jobs)
+        for (final root in job.roots)
+          ScanRoot(ruleId: job.ruleId, rootPath: paths.canonical(root)),
+    ]);
+  }
 
   int get length => entries.length;
   bool get isEmpty => entries.isEmpty;

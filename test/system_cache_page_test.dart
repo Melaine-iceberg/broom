@@ -33,7 +33,7 @@ Future<void> _pumpPage(
 JunkItem _item() {
   return JunkItem(
     rootIndex: 0,
-    path: p.windows.join(_updateRoot, 'update.cab'),
+    path: p.join(_updateRoot, 'update.cab'),
     size: 2048,
     modifiedMicros: DateTime(2026, 1, 1).microsecondsSinceEpoch,
   );
@@ -165,7 +165,7 @@ void main() {
         items: [
           JunkItem(
             rootIndex: 0,
-            path: p.windows.join(windowsOldRoot, r'Windows\System32\old.dll'),
+            path: p.join(windowsOldRoot, r'Windows\System32\old.dll'),
             size: 4096,
             modifiedMicros: DateTime(2026, 1, 1).microsecondsSinceEpoch,
           ),

@@ -38,19 +38,19 @@ void main() {
   List<JunkItem> sampleItems() => [
     JunkItem(
       rootIndex: 0,
-      path: p.windows.join(updateRoot, 'a.cab'),
+      path: p.join(updateRoot, 'a.cab'),
       size: 100,
       modifiedMicros: DateTime(2026, 1, 1).microsecondsSinceEpoch,
     ),
     JunkItem(
       rootIndex: 0,
-      path: p.windows.join(updateRoot, 'nested', 'b.cab'),
+      path: p.join(updateRoot, 'nested', 'b.cab'),
       size: 50,
       modifiedMicros: DateTime(2026, 1, 2).microsecondsSinceEpoch,
     ),
     JunkItem(
       rootIndex: 1,
-      path: p.windows.join(deliveryRoot, 'c.bin'),
+      path: p.join(deliveryRoot, 'c.bin'),
       size: 25,
       modifiedMicros: DateTime(2026, 1, 3).microsecondsSinceEpoch,
     ),

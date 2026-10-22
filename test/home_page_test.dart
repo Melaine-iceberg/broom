@@ -7,6 +7,7 @@ import 'package:broom/core/models/clean_models.dart';
 import 'package:broom/core/models/cleaner_rule.dart';
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/platform/cleaner_platform.dart';
+import 'package:broom/core/platform/path_semantics.dart';
 import 'package:broom/core/rules/windows_rules.dart';
 import 'package:broom/core/safety/path_guard.dart';
 import 'package:broom/core/scan/ntfs_index.dart';
@@ -25,6 +26,8 @@ import 'package:path/path.dart' as p;
 import 'support/file_metadata_fakes.dart';
 import 'support/quarantine_fakes.dart';
 import 'support/system_cache_fakes.dart';
+
+final _windowsOnly = !Platform.isWindows;
 
 class _FakeSystemShell implements SystemShell {
   @override
@@ -72,6 +75,12 @@ class _FakePlatform implements CleanerPlatform {
   String? get quarantineRoot => null;
 
   @override
+  PathSemantics get pathSemantics => const WindowsPathSemantics();
+
+  @override
+  List<String> get protectedRoots => const [];
+
+  @override
   List<CleanerRule> get rules => windowsSafeRules;
 
   @override
@@ -98,6 +107,12 @@ class _FixedRootsPlatform implements CleanerPlatform {
 
   @override
   String? get quarantineRoot => null;
+
+  @override
+  PathSemantics get pathSemantics => const WindowsPathSemantics();
+
+  @override
+  List<String> get protectedRoots => const [];
 
   @override
   List<CleanerRule> get rules => [rule];
@@ -250,7 +265,7 @@ class _ProgressQuarantineService extends FakeQuarantineService {
 }
 
 ExclusionStore _exclusionsStore() => ExclusionStore(
-  filePath: p.windows.join(r'C:\broom_widget_test', 'exclusions.json'),
+  filePath: p.join(r'C:\broom_widget_test', 'exclusions.json'),
 );
 
 void main() {
@@ -267,7 +282,7 @@ void main() {
       platform: _FakePlatform(),
       guard: guard,
       quarantine: QuarantineService(
-        quarantineRoot: p.windows.join(r'C:\broom_widget_test', 'quarantine'),
+        quarantineRoot: p.join(r'C:\broom_widget_test', 'quarantine'),
         guard: guard,
         metadataAccess: FakeFileMetadataAccess(),
       ),
@@ -294,7 +309,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.text('没有找到可扫描的缓存目录。'), findsOneWidget);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+  }, skip: _windowsOnly, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('opens the recycle bin review tool', (tester) async {
     tester.view.physicalSize = const Size(1200, 1600);
@@ -307,7 +322,7 @@ void main() {
       platform: _FakePlatform(),
       guard: guard,
       quarantine: QuarantineService(
-        quarantineRoot: p.windows.join(r'C:\broom_widget_test', 'quarantine'),
+        quarantineRoot: p.join(r'C:\broom_widget_test', 'quarantine'),
         guard: guard,
         metadataAccess: FakeFileMetadataAccess(),
       ),
@@ -326,7 +341,7 @@ void main() {
 
     expect(find.text('回收站中有 7 个项目'), findsOneWidget);
     expect(find.text('需确认'), findsWidgets);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+  }, skip: _windowsOnly, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('auto-opens and exposes the admin system cache tool', (
     tester,
@@ -341,7 +356,7 @@ void main() {
       platform: _FakePlatform(),
       guard: guard,
       quarantine: QuarantineService(
-        quarantineRoot: p.windows.join(r'C:\broom_widget_test', 'quarantine'),
+        quarantineRoot: p.join(r'C:\broom_widget_test', 'quarantine'),
         guard: guard,
         metadataAccess: FakeFileMetadataAccess(),
       ),
@@ -379,7 +394,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('需要管理员权限'), findsOneWidget);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+  }, skip: _windowsOnly, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('opens the quarantine manager from the home card', (
     tester,
@@ -422,7 +437,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Broom'), findsOneWidget);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+  }, skip: _windowsOnly, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('prompts about unfinished sessions on startup', (tester) async {
     tester.view.physicalSize = const Size(1200, 1600);
@@ -460,7 +475,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('1 次清理未正常结束'), findsOneWidget);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+  }, skip: _windowsOnly, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('marks rules that are partially excluded', (tester) async {
     tester.view.physicalSize = const Size(1200, 1600);
@@ -472,12 +487,12 @@ void main() {
     addTearDown(() {
       if (temp.existsSync()) temp.deleteSync(recursive: true);
     });
-    final root = Directory(p.windows.join(temp.path, 'cache'));
-    final kept = Directory(p.windows.join(root.path, 'keep'));
+    final root = Directory(p.join(temp.path, 'cache'));
+    final kept = Directory(p.join(root.path, 'keep'));
     kept.createSync(recursive: true);
 
     final exclusions = ExclusionStore(
-      filePath: p.windows.join(temp.path, 'exclusions.json'),
+      filePath: p.join(temp.path, 'exclusions.json'),
     );
     await exclusions.ensureLoaded();
     await exclusions.add(kept.path);
@@ -514,7 +529,7 @@ void main() {
 
     expect(find.text('排除项'), findsOneWidget);
     expect(find.text(kept.path), findsOneWidget);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+  }, skip: _windowsOnly, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('reports skipped files separately from failures', (tester) async {
     tester.view.physicalSize = const Size(1200, 1600);
@@ -525,7 +540,7 @@ void main() {
     const root = r'C:\broom_widget_test\cache';
     final item = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(root, 'locked.tmp'),
+      path: p.join(root, 'locked.tmp'),
       size: 42,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
@@ -574,7 +589,7 @@ void main() {
     expect(find.textContaining('文件正被其他程序占用'), findsOneWidget);
     expect(find.text('1 个文件清理失败。'), findsOneWidget);
     expect(find.textContaining('没有访问权限'), findsOneWidget);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+  }, skip: _windowsOnly, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('keeps review rules unselected and requires extra confirmation', (
     tester,
@@ -587,7 +602,7 @@ void main() {
     const root = r'C:\broom_widget_test\review-cache';
     final item = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(root, 'offline-cache.bin'),
+      path: p.join(root, 'offline-cache.bin'),
       size: 128,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
@@ -640,7 +655,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.widget<FilledButton>(confirm).onPressed, isNotNull);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+  }, skip: _windowsOnly, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('reports removed empty cache directories', (tester) async {
     tester.view.physicalSize = const Size(1200, 1600);
@@ -651,7 +666,7 @@ void main() {
     const root = r'C:\broom_widget_test\cache';
     final item = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(root, 'nested', 'cache.tmp'),
+      path: p.join(root, 'nested', 'cache.tmp'),
       size: 42,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
@@ -692,7 +707,7 @@ void main() {
 
     expect(controller.phase, CleanPhase.done);
     expect(find.text('已清理 2 个空缓存目录。'), findsOneWidget);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+  }, skip: _windowsOnly, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('supports keyboard scan/back and shows a scan summary', (
     tester,
@@ -705,7 +720,7 @@ void main() {
     const root = r'C:\broom_widget_test\cache';
     final item = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(root, 'cache.tmp'),
+      path: p.join(root, 'cache.tmp'),
       size: 4096,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
@@ -759,7 +774,7 @@ void main() {
 
     expect(controller.phase, CleanPhase.idle);
     expect(find.text('开始扫描'), findsOneWidget);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+  }, skip: _windowsOnly, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('renders determinate scan progress instead of looping spinners', (
     tester,
@@ -826,7 +841,7 @@ void main() {
     service.release.complete();
     await tester.pumpAndSettle();
     expect(controller.phase, CleanPhase.preview);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+  }, skip: _windowsOnly, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('shows the first-use guide and persists completion', (
     tester,
@@ -841,7 +856,7 @@ void main() {
       if (temp.existsSync()) temp.deleteSync(recursive: true);
     });
     final settingsStore = SettingsStore(
-      filePath: p.windows.join(temp.path, 'settings.json'),
+      filePath: p.join(temp.path, 'settings.json'),
     );
     final settings = SettingsController(store: settingsStore);
     addTearDown(settings.dispose);
@@ -885,7 +900,7 @@ void main() {
     expect(settings.onboardingCompleted, isTrue);
     expect(settingsStore.load().onboardingCompleted, isTrue);
     expect(find.text('开始扫描'), findsOneWidget);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+  }, skip: _windowsOnly, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('shows clean progress and undo success', (tester) async {
     tester.view.physicalSize = const Size(1200, 1600);
@@ -897,13 +912,13 @@ void main() {
     final items = [
       JunkItem(
         rootIndex: 0,
-        path: p.windows.join(root, 'first.tmp'),
+        path: p.join(root, 'first.tmp'),
         size: 32,
         modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
       ),
       JunkItem(
         rootIndex: 0,
-        path: p.windows.join(root, 'second.tmp'),
+        path: p.join(root, 'second.tmp'),
         size: 32,
         modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
       ),
@@ -959,5 +974,5 @@ void main() {
 
     expect(find.text('撤销完成'), findsOneWidget);
     expect(find.textContaining('已恢复 2 个文件'), findsOneWidget);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+  }, skip: _windowsOnly, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 }

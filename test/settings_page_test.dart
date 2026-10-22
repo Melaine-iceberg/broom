@@ -10,6 +10,7 @@ import 'package:broom/core/models/quarantine_policy_models.dart';
 import 'package:broom/core/platform/app_version.dart';
 import 'package:broom/core/platform/cleaner_platform.dart';
 import 'package:broom/core/platform/memory_file_system.dart';
+import 'package:broom/core/platform/path_semantics.dart';
 import 'package:broom/core/rules/rule_catalog_store.dart';
 import 'package:broom/core/rules/rule_update_service.dart';
 import 'package:broom/core/safety/path_guard.dart';
@@ -45,6 +46,12 @@ class _SettingsPlatform implements CleanerPlatform {
 
   @override
   String? get quarantineRoot => null;
+
+  @override
+  PathSemantics get pathSemantics => const WindowsPathSemantics();
+
+  @override
+  List<String> get protectedRoots => const [];
 
   @override
   String get rulesVersion => 'builtin';
@@ -107,7 +114,7 @@ void main() {
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('broom_settings_page_');
     settingsStore = SettingsStore(
-      filePath: p.windows.join(temp.path, 'settings.json'),
+      filePath: p.join(temp.path, 'settings.json'),
     );
   });
 
@@ -121,7 +128,7 @@ void main() {
     final retention = QuarantineRetentionService(
       quarantine: FakeQuarantineService(),
       store: QuarantinePolicyStore(
-        filePath: p.windows.join(temp.path, 'quarantine_policy.json'),
+        filePath: p.join(temp.path, 'quarantine_policy.json'),
       ),
     );
     await retention.ensureInitialized();
@@ -147,7 +154,8 @@ void main() {
     settings.load();
     addTearDown(settings.dispose);
     final exclusions = ExclusionStore(
-      filePath: p.windows.join(temp.path, 'exclusions.json'),
+      filePath: p.join(temp.path, 'exclusions.json'),
+      semantics: const WindowsPathSemantics(),
     );
     await exclusions.ensureLoaded();
     final controller = CleanController(
@@ -294,7 +302,7 @@ void main() {
     tester,
   ) async {
     final store = RuleCatalogStore(
-      directoryPath: p.windows.join(temp.path, 'rules'),
+      directoryPath: p.join(temp.path, 'rules'),
       builtinRules: const [_testRule],
     );
     final ruleSettings = SettingsController(store: settingsStore);
@@ -352,7 +360,7 @@ void main() {
 
   testWidgets('exports configuration without quarantine data', (tester) async {
     final shell = _FakeSystemShell();
-    final exportPath = p.windows.join(temp.path, 'exported-config.json');
+    final exportPath = p.join(temp.path, 'exported-config.json');
     shell.exportPath = exportPath;
     final retention = await createRetention();
     final (settings, controller) = await pumpApp(
@@ -397,7 +405,7 @@ void main() {
 
   testWidgets('imports configuration but keeps retention off', (tester) async {
     final shell = _FakeSystemShell();
-    final importPath = p.windows.join(temp.path, 'import-config.json');
+    final importPath = p.join(temp.path, 'import-config.json');
     shell.importPath = importPath;
     final imported = ConfigBundle(
       settings: const AppSettings(
@@ -441,7 +449,7 @@ void main() {
     expect(retention.policy?.enabled, isFalse);
     expect(retention.policy?.retentionDays, 7);
     final storedPolicy = await QuarantinePolicyStore(
-      filePath: p.windows.join(temp.path, 'quarantine_policy.json'),
+      filePath: p.join(temp.path, 'quarantine_policy.json'),
     ).load();
     expect(storedPolicy.enabled, isFalse);
     expect(find.byType(SnackBar), findsOneWidget);
@@ -483,11 +491,11 @@ void main() {
 
   testWidgets('enables diagnostics and exports a JSON bundle', (tester) async {
     final shell = _FakeSystemShell();
-    final exportFile = File(p.windows.join(temp.path, 'diagnostics.json'));
+    final exportFile = File(p.join(temp.path, 'diagnostics.json'));
     shell.exportPath = exportFile.path;
     final logFs = MemoryFileSystem();
     final logger = AppLogger(
-      directoryPath: p.windows.join(temp.path, 'logs'),
+      directoryPath: p.join(temp.path, 'logs'),
       fileSystem: logFs,
       clock: () => DateTime.utc(2026, 10, 19, 12),
     );

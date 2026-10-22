@@ -150,9 +150,9 @@ class ScanResultStore {
   ScanResultStore({
     required this.rootDirectory,
     this.maxItemsFileBytes = 1024 * 1024 * 1024,
-    this.semantics = const WindowsPathSemantics(),
-  }) {
-    if (!semantics.isAbsolute(rootDirectory)) {
+    PathSemantics? semantics,
+  }) : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform() {
+    if (!this.semantics.isAbsolute(rootDirectory)) {
       throw ArgumentError.value(
         rootDirectory,
         'rootDirectory',

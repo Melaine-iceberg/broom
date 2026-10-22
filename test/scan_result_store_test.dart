@@ -11,7 +11,7 @@ void main() {
 
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('broom_scan_store_');
-    store = ScanResultStore(rootDirectory: p.windows.join(temp.path, 'scans'));
+    store = ScanResultStore(rootDirectory: p.join(temp.path, 'scans'));
   });
 
   tearDown(() async {
@@ -20,13 +20,13 @@ void main() {
 
   JunkItem item(String name, int size) => JunkItem(
     rootIndex: 0,
-    path: p.windows.join(temp.path, 'cache', name),
+    path: p.join(temp.path, 'cache', name),
     size: size,
     modifiedMicros: DateTime.utc(2026, 10, 18, 12).microsecondsSinceEpoch,
   );
 
   ScanRoots roots() => ScanRoots([
-    ScanRoot(ruleId: 'test.rule', rootPath: p.windows.join(temp.path, 'cache')),
+    ScanRoot(ruleId: 'test.rule', rootPath: p.join(temp.path, 'cache')),
   ]);
 
   test('streams items and round-trips the latest result', () async {
@@ -60,22 +60,22 @@ void main() {
     final items = data!.groups['test.rule']!;
     expect(items, hasLength(2));
     // Groups are sorted by size descending inside the worker.
-    expect(items.first.path, p.windows.join(temp.path, 'cache', 'b.tmp'));
-    expect(items.last.path, p.windows.join(temp.path, 'cache', 'a.tmp'));
+    expect(items.first.path, p.join(temp.path, 'cache', 'b.tmp'));
+    expect(items.last.path, p.join(temp.path, 'cache', 'a.tmp'));
     expect(data.totalItems, 2);
     final root = data.roots.at(items.first.rootIndex);
     expect(root.ruleId, 'test.rule');
-    expect(root.rootPath, p.windows.join(temp.path, 'cache'));
+    expect(root.rootPath, p.join(temp.path, 'cache'));
   });
 
   test('loads grouped, sorted and filtered rule groups', () async {
     final multiRoots = ScanRoots([
-      ScanRoot(ruleId: 'rule.a', rootPath: p.windows.join(temp.path, 'a')),
-      ScanRoot(ruleId: 'rule.b', rootPath: p.windows.join(temp.path, 'b')),
+      ScanRoot(ruleId: 'rule.a', rootPath: p.join(temp.path, 'a')),
+      ScanRoot(ruleId: 'rule.b', rootPath: p.join(temp.path, 'b')),
     ]);
     JunkItem groupedItem(String name, int size, int rootIndex) => JunkItem(
       rootIndex: rootIndex,
-      path: p.windows.join(temp.path, 'cache', name),
+      path: p.join(temp.path, 'cache', name),
       size: size,
       modifiedMicros: DateTime.utc(2026, 10, 18, 12).microsecondsSinceEpoch,
     );
@@ -116,7 +116,7 @@ void main() {
     expect(filtered.extensionsByRule.keys, ['rule.b']);
     expect(
       filtered.groups['rule.b']!.single.path,
-      p.windows.join(temp.path, 'cache', 'b-mid.tmp'),
+      p.join(temp.path, 'cache', 'b-mid.tmp'),
     );
   });
 
@@ -182,7 +182,7 @@ void main() {
     final latest = await store.loadLatest();
     expect(latest!.id, secondSummary.id);
     expect(
-      await Directory(p.windows.join(temp.path, 'scans', firstSummary.id))
+      await Directory(p.join(temp.path, 'scans', firstSummary.id))
           .exists(),
       isFalse,
     );
@@ -209,7 +209,7 @@ void main() {
 
   test('stops persisting when the disk protection limit is reached', () async {
     final limited = ScanResultStore(
-      rootDirectory: p.windows.join(temp.path, 'limited'),
+      rootDirectory: p.join(temp.path, 'limited'),
       maxItemsFileBytes: 120,
     );
     final writer = await limited.begin(
@@ -241,7 +241,7 @@ void main() {
     () async {
       final longName = 'x' * 4096;
       final limited = ScanResultStore(
-        rootDirectory: p.windows.join(temp.path, 'limited_batches'),
+        rootDirectory: p.join(temp.path, 'limited_batches'),
         maxItemsFileBytes: 6 * 1024 * 1024,
       );
       final writer = await limited.begin(
@@ -255,7 +255,7 @@ void main() {
           for (var index = start; index < start + 10; index++)
             JunkItem(
               rootIndex: 0,
-              path: p.windows.join(
+              path: p.join(
                 temp.path,
                 'cache',
                 'd$index',
@@ -290,7 +290,7 @@ void main() {
   );
 
   test('rejects unsafe ids in latest.json', () async {
-    final file = File(p.windows.join(store.rootDirectory, 'latest.json'));
+    final file = File(p.join(store.rootDirectory, 'latest.json'));
     await file.parent.create(recursive: true);
     await file.writeAsString('{"schemaVersion":1,"id":"../outside"}');
 

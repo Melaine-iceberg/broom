@@ -119,7 +119,7 @@ class QuarantineRetentionService {
         }
       } catch (error) {
         recordFailure(
-          p.windows.join(quarantine.quarantineRoot, session.id),
+          p.join(quarantine.quarantineRoot, session.id),
           error,
         );
       }

@@ -40,7 +40,7 @@ void main() {
 
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('broom_scanner_');
-    root = Directory(p.windows.join(temp.path, 'root'));
+    root = Directory(p.join(temp.path, 'root'));
     await root.create(recursive: true);
     now = DateTime.now();
   });
@@ -57,7 +57,7 @@ void main() {
     String content, {
     Duration age = Duration.zero,
   }) async {
-    final file = File(p.windows.join(base.path, relative));
+    final file = File(p.join(base.path, relative));
     await file.parent.create(recursive: true);
     await file.writeAsString(content);
     if (age > Duration.zero) {
@@ -82,7 +82,7 @@ void main() {
         age: const Duration(days: 3),
       );
       await createFile(root, 'fresh.tmp', 'fresh');
-      final excluded = Directory(p.windows.join(root.path, 'excluded'));
+      final excluded = Directory(p.join(root.path, 'excluded'));
       await createFile(
         excluded,
         'still-old.tmp',
@@ -156,7 +156,7 @@ void main() {
       'broad',
       age: const Duration(days: 2),
     );
-    final claimedRoot = Directory(p.windows.join(root.path, 'claimed'));
+    final claimedRoot = Directory(p.join(root.path, 'claimed'));
     final claimed = await createFile(
       claimedRoot,
       'old.tmp',
@@ -204,8 +204,8 @@ void main() {
   });
 
   test('maps every item to its own root in a multi-root job', () async {
-    final firstRoot = Directory(p.windows.join(root.path, 'one'));
-    final secondRoot = Directory(p.windows.join(root.path, 'two'));
+    final firstRoot = Directory(p.join(root.path, 'one'));
+    final secondRoot = Directory(p.join(root.path, 'two'));
     await createFile(firstRoot, 'a.tmp', 'a');
     await createFile(secondRoot, 'b.tmp', 'b');
 
@@ -223,11 +223,11 @@ void main() {
         item.path: result.roots.at(item.rootIndex),
     };
     expect(
-      rootsByPath[p.windows.join(firstRoot.path, 'a.tmp')]!.rootPath,
+      rootsByPath[p.join(firstRoot.path, 'a.tmp')]!.rootPath,
       firstRoot.path,
     );
     expect(
-      rootsByPath[p.windows.join(secondRoot.path, 'b.tmp')]!.rootPath,
+      rootsByPath[p.join(secondRoot.path, 'b.tmp')]!.rootPath,
       secondRoot.path,
     );
     expect(
@@ -384,7 +384,7 @@ void main() {
       'x',
       age: const Duration(days: 1),
     );
-    final outside = File(p.windows.join(temp.path, 'outside.tmp'));
+    final outside = File(p.join(temp.path, 'outside.tmp'));
     await outside.writeAsString('x');
     final index = _FakeNtfsIndex(paths: [file.path, outside.path]);
 

@@ -7,6 +7,7 @@ import 'package:broom/core/clean/quarantine_service.dart';
 import 'package:broom/core/models/clean_history_models.dart';
 import 'package:broom/core/models/clean_models.dart';
 import 'package:broom/core/models/quarantine_policy_models.dart';
+import 'package:broom/core/platform/path_semantics.dart';
 import 'package:broom/core/settings/quarantine_policy_store.dart';
 import 'package:broom/core/shell/system_shell.dart';
 import 'package:broom/ui/quarantine_page.dart';
@@ -19,7 +20,10 @@ import 'support/quarantine_fakes.dart';
 
 class _MemoryHistoryStore extends CleanHistoryStore {
   _MemoryHistoryStore(this.records)
-    : super(filePath: r'C:\Broom\clean_history.json');
+    : super(
+        filePath: r'C:\Broom\clean_history.json',
+        semantics: const WindowsPathSemantics(),
+      );
 
   final List<CleanHistoryRecord> records;
 
@@ -76,7 +80,7 @@ void main() {
   });
 
   QuarantinePolicyStore createPolicyStore() => QuarantinePolicyStore(
-    filePath: p.windows.join(temp.path, 'quarantine_policy.json'),
+    filePath: p.join(temp.path, 'quarantine_policy.json'),
   );
 
   QuarantineRetentionService createRetention(

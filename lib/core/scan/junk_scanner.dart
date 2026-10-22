@@ -25,7 +25,7 @@ class JunkScanner {
     this.excludedPaths = const [],
     this.maxItems,
     this.batchSize = 256,
-    this.semantics = const WindowsPathSemantics(),
+    PathSemantics? semantics,
     this.ntfsIndex,
     this.useNtfsIndex = false,
     this.jobIndexBase = 0,
@@ -35,7 +35,8 @@ class JunkScanner {
     this.useDetailedListing = true,
     this.statConcurrency = defaultStatConcurrency,
     DateTime Function()? clock,
-  }) : _clock = clock ?? DateTime.now {
+  }) : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform(),
+       _clock = clock ?? DateTime.now {
     for (final path in excludedPaths) {
       _excludedKeys.add(_key(path));
     }

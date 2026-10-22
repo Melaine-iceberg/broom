@@ -60,7 +60,7 @@ class _OnboardingDialogState extends State<OnboardingDialog> {
           'Broom 不会触碰文档、照片、程序和系统文件，也不会扫描浏览器密码、'
           'Cookie 或历史记录。所有处理都在本机完成，不上传文件、路径或使用数据。',
         ),
-        point: context.t('管理员工具需要独立提权；被占用的文件会跳过并单独报告。'),
+        point: context.t('被占用或无权限的文件会跳过并单独报告。'),
       ),
     ];
     final step = steps[_step];

@@ -38,6 +38,7 @@ class SettingsPage extends StatelessWidget {
     this.appUpdates,
     this.onShowOnboarding,
     this.logger,
+    this.showWindowsOptions = true,
   });
 
   final SettingsController settings;
@@ -48,6 +49,9 @@ class SettingsPage extends StatelessWidget {
   final AppUpdateController? appUpdates;
   final VoidCallback? onShowOnboarding;
   final AppLogger? logger;
+
+  /// Hides options that only apply to Windows (NTFS indexing).
+  final bool showWindowsOptions;
 
   @override
   Widget build(BuildContext context) {
@@ -272,17 +276,18 @@ class SettingsPage extends StatelessWidget {
                           title: Text(strings.t('低优先级扫描')),
                           subtitle: Text(strings.t('扫描时降低后台 I/O 与 CPU 优先级。')),
                         ),
-                        SwitchListTile(
-                          key: const ValueKey('settings-ntfs-index'),
-                          value: settings.settings.useNtfsIndex,
-                          onChanged: (value) => _setNtfsIndex(context, value),
-                          contentPadding: EdgeInsets.zero,
-                          dense: true,
-                          title: Text(strings.t('优先使用 NTFS 索引')),
-                          subtitle: Text(
-                            strings.t('需要管理员权限与 NTFS 卷，不可用时自动回退。'),
+                        if (showWindowsOptions)
+                          SwitchListTile(
+                            key: const ValueKey('settings-ntfs-index'),
+                            value: settings.settings.useNtfsIndex,
+                            onChanged: (value) => _setNtfsIndex(context, value),
+                            contentPadding: EdgeInsets.zero,
+                            dense: true,
+                            title: Text(strings.t('优先使用 NTFS 索引')),
+                            subtitle: Text(
+                              strings.t('需要管理员权限与 NTFS 卷，不可用时自动回退。'),
+                            ),
                           ),
-                        ),
                         ListTile(
                           key: const ValueKey('settings-scan-limit'),
                           contentPadding: EdgeInsets.zero,
@@ -1181,7 +1186,9 @@ class _ConfigTransferSection extends StatefulWidget {
 }
 
 class _ConfigTransferSectionState extends State<_ConfigTransferSection> {
-  static const _transfer = ConfigTransferService();
+  ConfigTransferService get _transfer => ConfigTransferService(
+    semantics: cleanController.platform.pathSemantics,
+  );
 
   bool _busy = false;
 

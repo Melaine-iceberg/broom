@@ -20,9 +20,9 @@ void main() {
   ) async {
     final temp = await Directory.systemTemp.createTemp('broom_enum_');
     addTearDown(() => temp.delete(recursive: true));
-    final file = File(p.windows.join(temp.path, 'a.tmp'));
+    final file = File(p.join(temp.path, 'a.tmp'));
     await file.writeAsString('hello');
-    await Directory(p.windows.join(temp.path, 'nested')).create();
+    await Directory(p.join(temp.path, 'nested')).create();
 
     final entries = await (fileSystem as DetailedDirectoryListing)
         .listDetailed(temp.path)
@@ -60,7 +60,7 @@ void main() {
     tester,
   ) async {
     final temp = await Directory.systemTemp.createTemp('broom_enum_missing_');
-    final missing = p.windows.join(temp.path, 'absent');
+    final missing = p.join(temp.path, 'absent');
     await temp.delete(recursive: true);
 
     await expectLater(
@@ -75,12 +75,12 @@ void main() {
       if (await temp.exists()) await temp.delete(recursive: true);
     });
     // 3 x 120 characters keeps the full path well past MAX_PATH (260).
-    final deep = p.windows.join(
+    final deep = p.join(
       temp.path,
       List<String>.filled(3, 'd' * 120).join(p.windows.separator),
     );
     await Directory(WindowsPath.extended(deep)).create(recursive: true);
-    await File(WindowsPath.extended(p.windows.join(deep, 'deep.tmp')))
+    await File(WindowsPath.extended(p.join(deep, 'deep.tmp')))
         .writeAsString('deep');
 
     final entries = await (fileSystem as DetailedDirectoryListing)

@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 
 import '../models/analysis_models.dart';
 import '../platform/file_system.dart';
+import '../platform/path_semantics.dart';
 import '../platform/windows_path.dart';
 import 'file_tree_walker.dart';
 
@@ -24,7 +25,9 @@ class DuplicateFinder {
     this.partialChunkSize = _defaultPartialChunkSize,
     this.fileSystem = const IoFileSystem(),
     this.useDetailedListing = true,
-  }) : assert(partialChunkSize > 0);
+    PathSemantics? semantics,
+  }) : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform(),
+       assert(partialChunkSize > 0);
 
   final String root;
   final int minFileSize;
@@ -33,6 +36,7 @@ class DuplicateFinder {
   final int partialChunkSize;
   final BroomFileSystem fileSystem;
   final bool useDetailedListing;
+  final PathSemantics semantics;
 
   Future<DuplicateScanReport> scan({
     void Function(DuplicateProgress progress)? onProgress,
@@ -77,6 +81,7 @@ class DuplicateFinder {
           maxFiles: maxFiles,
           fileSystem: fileSystem,
           useDetailedListing: useDetailedListing,
+          semantics: semantics,
         ).walk(
           onFile: (path, stat) {
             if (stat.size == 0 || stat.size < minFileSize) return;

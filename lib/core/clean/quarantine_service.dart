@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
-import 'package:path/path.dart' as p;
 
 import '../models/clean_history_models.dart';
 import '../models/clean_models.dart';
@@ -51,18 +50,20 @@ class QuarantineService {
     PathExclusionSource? exclusions,
     DateTime Function()? clock,
     Future<int?> Function(String path)? freeSpaceProbe,
+    Future<List<int?>> Function(List<String> paths)? deviceIdProbe,
     CleanHistoryStore? historyStore,
     BroomFileSystem fileSystem = const IoFileSystem(),
   }) {
-    if (!p.windows.isAbsolute(quarantineRoot)) {
+    final paths = guard.semantics;
+    if (!paths.isAbsolute(quarantineRoot)) {
       throw ArgumentError.value(
         quarantineRoot,
         'quarantineRoot',
         '隔离区路径必须是绝对路径',
       );
     }
-    final normalized = PathGuard.normalize(quarantineRoot);
-    if (p.windows.rootPrefix(normalized) == normalized) {
+    final normalized = paths.normalize(paths.absolute(quarantineRoot));
+    if (paths.rootPrefix(normalized) == normalized) {
       throw ArgumentError.value(
         quarantineRoot,
         'quarantineRoot',
@@ -76,6 +77,7 @@ class QuarantineService {
       exclusions ?? const EmptyPathExclusionSource(),
       clock ?? DateTime.now,
       freeSpaceProbe,
+      deviceIdProbe,
       historyStore,
       fileSystem,
     );
@@ -88,16 +90,19 @@ class QuarantineService {
     this._exclusions,
     this._clock,
     this._freeSpaceProbe,
+    this._deviceIdProbe,
     this._historyStore,
     this._files,
   );
 
   final String quarantineRoot;
   final PathGuard guard;
+  PathSemantics get _paths => guard.semantics;
   final FileMetadataAccess _metadata;
   final PathExclusionSource _exclusions;
   final DateTime Function() _clock;
   final Future<int?> Function(String path)? _freeSpaceProbe;
+  final Future<List<int?>> Function(List<String> paths)? _deviceIdProbe;
   final CleanHistoryStore? _historyStore;
   final BroomFileSystem _files;
   final AsyncMutex _mutations = AsyncMutex();
@@ -153,8 +158,8 @@ class QuarantineService {
     await _files.createDirectory(baseDir.path);
 
     final sessionId = await _createSessionId(baseDir.path);
-    final sessionDir = Directory(p.windows.join(baseDir.path, sessionId));
-    final filesDir = Directory(p.windows.join(sessionDir.path, 'files'));
+    final sessionDir = Directory(_paths.join(baseDir.path, sessionId));
+    final filesDir = Directory(_paths.join(sessionDir.path, 'files'));
     final createdAt = _clock().toUtc().toIso8601String();
 
     try {
@@ -333,8 +338,26 @@ class QuarantineService {
   Future<QuarantineSpaceAssessment> assessSpace(List<JunkItem> items) async {
     var requiredBytes = 0;
     var crossVolumeCount = 0;
-    for (final item in items) {
-      if (!_requiresCopy(item.path)) continue;
+
+    List<int?>? deviceIds;
+    final deviceProbe = _deviceIdProbe;
+    if (deviceProbe != null && _paths.caseSensitive && items.isNotEmpty) {
+      try {
+        deviceIds = await deviceProbe([
+          quarantineRoot,
+          for (final item in items) item.path,
+        ]);
+      } catch (_) {
+        deviceIds = null;
+      }
+    }
+
+    for (var index = 0; index < items.length; index++) {
+      final item = items[index];
+      final requiresCopy = deviceIds == null
+          ? _requiresCopy(item.path)
+          : _differentDevice(deviceIds, index);
+      if (!requiresCopy) continue;
       requiredBytes += item.size;
       crossVolumeCount++;
     }
@@ -364,10 +387,22 @@ class QuarantineService {
     }
   }
 
+  bool _differentDevice(List<int?> deviceIds, int itemIndex) {
+    if (deviceIds.length < itemIndex + 2) return true;
+    final quarantineDevice = deviceIds.first;
+    final sourceDevice = deviceIds[itemIndex + 1];
+    if (quarantineDevice == null || sourceDevice == null) return true;
+    return quarantineDevice != sourceDevice;
+  }
+
   bool _requiresCopy(String sourcePath) {
+    // POSIX has a single path root, so the Windows drive-letter comparison
+    // cannot tell whether a file crosses a mount point. Treat every move as a
+    // copy unless a device-id probe supplies a precise answer.
+    if (_paths.caseSensitive) return true;
     try {
-      final sourceRoot = p.windows
-          .rootPrefix(PathGuard.normalize(sourcePath))
+      final sourceRoot = _paths
+          .rootPrefix(_paths.normalize(_paths.absolute(sourcePath)))
           .toLowerCase();
       final quarantineVolume = _volumeRoot(quarantineRoot).toLowerCase();
       return sourceRoot != quarantineVolume;
@@ -378,8 +413,8 @@ class QuarantineService {
     }
   }
 
-  static String _volumeRoot(String path) {
-    final root = p.windows.rootPrefix(path);
+  String _volumeRoot(String path) {
+    final root = _paths.rootPrefix(path);
     return root.isEmpty ? path : root;
   }
 
@@ -398,7 +433,7 @@ class QuarantineService {
   }) async {
     final failures = <CleanFailure>[];
     final skips = <CleanFailure>[];
-    final filesDir = Directory(p.windows.join(sessionDir.path, 'files'));
+    final filesDir = Directory(_paths.join(sessionDir.path, 'files'));
     final priorEntries = await _readEntries(sessionDir);
     final priorEntryBytes = priorEntries.fold<int>(
       0,
@@ -492,7 +527,7 @@ class QuarantineService {
     try {
       await _files.createDirectory(filesDir.path);
       entriesFile = await _files.openAppend(
-        p.windows.join(sessionDir.path, 'entries.jsonl'),
+        _paths.join(sessionDir.path, 'entries.jsonl'),
       );
       // Only this process appends to the journal, so its write offset can be
       // tracked locally. One query at open replaces one per file; the offset
@@ -598,7 +633,7 @@ class QuarantineService {
           break;
         }
 
-        final destinationPath = p.windows.join(filesDir.path, storedName);
+        final destinationPath = _paths.join(filesDir.path, storedName);
         try {
           await _moveFile(item.path, destinationPath);
         } on FileSystemException catch (error) {
@@ -715,14 +750,14 @@ class QuarantineService {
 
     final candidates = <String, _RemovedDirectory>{};
     for (final entry in entries) {
-      var directory = p.windows.dirname(entry.originalPath);
+      var directory = _paths.dirname(entry.originalPath);
       while (guard.allows(path: directory, root: entry.rootPath)) {
         final key = _key(directory);
         candidates.putIfAbsent(
           key,
           () => _RemovedDirectory(path: directory, rootPath: entry.rootPath),
         );
-        final parent = p.windows.dirname(directory);
+        final parent = _paths.dirname(directory);
         if (parent == directory) break;
         directory = parent;
       }
@@ -740,7 +775,7 @@ class QuarantineService {
     FsFileWriter? recordFile;
     try {
       recordFile = await _files.openAppend(
-        p.windows.join(sessionDir.path, 'removed_dirs.jsonl'),
+        _paths.join(sessionDir.path, 'removed_dirs.jsonl'),
       );
 
       for (final directory in ordered) {
@@ -794,7 +829,7 @@ class QuarantineService {
     return removedCount;
   }
 
-  static bool _isRelatedToEntries(
+  bool _isRelatedToEntries(
     _RemovedDirectory directory,
     List<_StoredEntry> entries,
   ) {
@@ -928,7 +963,7 @@ class QuarantineService {
               .where((entry) => storedNames.contains(entry.storedName))
               .toList();
     final removedDirectories = await _readRemovedDirectories(sessionDir);
-    final filesDir = p.windows.join(sessionDir.path, 'files');
+    final filesDir = _paths.join(sessionDir.path, 'files');
     final failures = <CleanFailure>[];
     var failureCount = 0;
     var restoredCount = 0;
@@ -995,7 +1030,7 @@ class QuarantineService {
     Future<void> markRestored(_StoredEntry entry) async {
       try {
         await _files.writeString(
-          p.windows.join(sessionDir.path, 'restored.jsonl'),
+          _paths.join(sessionDir.path, 'restored.jsonl'),
           '${entry.storedName}\n',
           append: true,
         );
@@ -1050,7 +1085,7 @@ class QuarantineService {
         continue;
       }
 
-      final storedPath = p.windows.join(filesDir, entry.storedName);
+      final storedPath = _paths.join(filesDir, entry.storedName);
       final storedCheck = await _verifyStoredFile(storedPath, entry);
       if (storedCheck.missing) {
         missingCount++;
@@ -1220,7 +1255,7 @@ class QuarantineService {
       }
 
       try {
-        await _files.createDirectory(p.windows.dirname(entry.originalPath));
+        await _files.createDirectory(_paths.dirname(entry.originalPath));
         await _moveFile(storedPath, entry.originalPath);
       } on FileSystemException catch (error) {
         recordFailure(entry.originalPath, error);
@@ -1293,14 +1328,14 @@ class QuarantineService {
     await _requireSessionMeta(sessionDir);
     final entries = await _readEntries(sessionDir);
     final restoredNames = await _readRestoredNames(sessionDir);
-    final filesDir = p.windows.join(sessionDir.path, 'files');
+    final filesDir = _paths.join(sessionDir.path, 'files');
     final result = <QuarantineEntry>[];
 
     for (final entry in entries) {
       var present = false;
       String? integrityFailure;
       if (_isSafeStoredName(entry.storedName)) {
-        final storedPath = p.windows.join(filesDir, entry.storedName);
+        final storedPath = _paths.join(filesDir, entry.storedName);
         try {
           present = await _files.type(storedPath) == FsEntityType.file;
           if (present) {
@@ -1360,7 +1395,7 @@ class QuarantineService {
       }
     }
 
-    final filesDir = p.windows.join(sessionDir.path, 'files');
+    final filesDir = _paths.join(sessionDir.path, 'files');
     try {
       if (await _files.type(filesDir) == FsEntityType.directory) {
         await for (final entity in _files.list(filesDir)) {
@@ -1433,7 +1468,7 @@ class QuarantineService {
         if (failures.length < _maxFailureDetails) {
           failures.add(
             CleanFailure(
-              path: p.windows.join(quarantineRoot, session.id),
+              path: _paths.join(quarantineRoot, session.id),
               reason: _failureReason(error),
             ),
           );
@@ -1459,7 +1494,7 @@ class QuarantineService {
     try {
       await for (final entity in _files.list(quarantineRoot)) {
         if (entity.type != FsEntityType.directory) continue;
-        final id = p.windows.basename(entity.path);
+        final id = _paths.basename(entity.path);
         if (!_isValidSessionId(id)) continue;
 
         try {
@@ -1554,7 +1589,7 @@ class QuarantineService {
 
     if (pendingCount <= 0 && remainingCount <= 0) return null;
 
-    final id = p.windows.basename(sessionDir.path);
+    final id = _paths.basename(sessionDir.path);
     final createdAt =
         DateTime.tryParse('${meta['createdAt'] ?? ''}') ??
         DateTime.fromMillisecondsSinceEpoch(0);
@@ -1575,7 +1610,7 @@ class QuarantineService {
     if (!_isValidSessionId(sessionId)) {
       throw ArgumentError.value(sessionId, 'sessionId', '无效的清理会话编号');
     }
-    final sessionDir = Directory(p.windows.join(quarantineRoot, sessionId));
+    final sessionDir = Directory(_paths.join(quarantineRoot, sessionId));
     final type = await _files.type(sessionDir.path);
     if (type == FsEntityType.notFound) {
       throw StateError('找不到隔离区记录');
@@ -1591,7 +1626,7 @@ class QuarantineService {
     List<_StoredEntry> entries,
     Set<String> restoredNames,
   ) async {
-    final filesDir = p.windows.join(sessionDir.path, 'files');
+    final filesDir = _paths.join(sessionDir.path, 'files');
     final pending = <_StoredEntry>[];
     for (final entry in entries) {
       if (restoredNames.contains(entry.storedName)) continue;
@@ -1601,7 +1636,7 @@ class QuarantineService {
       }
       try {
         final type = await _files.type(
-          p.windows.join(filesDir, entry.storedName),
+          _paths.join(filesDir, entry.storedName),
         );
         if (type == FsEntityType.file) {
           pending.add(entry);
@@ -1616,7 +1651,7 @@ class QuarantineService {
   Future<String> _createSessionId(String baseDirPath) async {
     for (var attempt = 0; attempt < 32; attempt++) {
       final id = _newSessionId();
-      if (await _files.type(p.windows.join(baseDirPath, id)) ==
+      if (await _files.type(_paths.join(baseDirPath, id)) ==
           FsEntityType.notFound) {
         return id;
       }
@@ -1637,40 +1672,38 @@ class QuarantineService {
     return '${stamp}_$suffix';
   }
 
-  static bool _isValidSessionId(String id) {
+  bool _isValidSessionId(String id) {
     if (id.length > _maxSessionIdLength) return false;
     if (!RegExp(r'^[0-9A-Za-z][0-9A-Za-z_]*$').hasMatch(id)) return false;
-    return !_pathSemantics.isReservedComponent(id);
+    return !_paths.isReservedComponent(id);
   }
 
-  static bool _isSafeStoredName(String name) {
+  bool _isSafeStoredName(String name) {
     if (name.isEmpty || name == '.' || name == '..') return false;
     if (name.length > _maxStoredNameLength) return false;
     if (name.contains('/') || name.contains(r'\')) return false;
     if (name.contains(':')) return false;
     if (name.endsWith('.') || name.endsWith(' ')) return false;
     if (RegExp(r'[\x00-\x1F<>"|?*]').hasMatch(name)) return false;
-    if (_pathSemantics.isReservedComponent(name)) return false;
-    return p.windows.basename(name) == name;
+    if (_paths.isReservedComponent(name)) return false;
+    return _paths.basename(name) == name;
   }
 
-  static const PathSemantics _pathSemantics = WindowsPathSemantics();
-
-  static String _storedName(int sequence, String sourcePath) {
-    var name = p.windows.basename(sourcePath);
+  String _storedName(int sequence, String sourcePath) {
+    var name = _paths.basename(sourcePath);
     if (name.isEmpty) name = 'file';
     name = name.replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F]'), '_');
     if (name.length > 80) name = name.substring(0, 80);
     return '${sequence.toString().padLeft(6, '0')}_$name';
   }
 
-  static String _key(String path) => PathGuard.normalize(path).toLowerCase();
+  String _key(String path) => _paths.key(path);
 
-  static bool _isWithinKey(String rootKey, String candidateKey) {
+  bool _isWithinKey(String rootKey, String candidateKey) {
     if (candidateKey == rootKey) return true;
-    final prefix = rootKey.endsWith(p.windows.separator)
+    final prefix = rootKey.endsWith(_paths.separator)
         ? rootKey
-        : '$rootKey${p.windows.separator}';
+        : '$rootKey${_paths.separator}';
     return candidateKey.startsWith(prefix);
   }
 
@@ -1732,7 +1765,8 @@ class QuarantineService {
       return await _metadata.read(
         path,
         stat: stat,
-        captureAcl: shouldCaptureAcl(path, quarantineRoot),
+        captureAcl: !_paths.caseSensitive &&
+            shouldCaptureAcl(path, quarantineRoot),
       );
     } catch (_) {
       return null;
@@ -1807,12 +1841,16 @@ class QuarantineService {
   }
 
   Future<String?> _availableRestorePath(String originalPath) async {
-    final directory = p.windows.dirname(originalPath);
-    final extension = p.windows.extension(originalPath);
-    final base = p.windows.basenameWithoutExtension(originalPath);
+    final directory = _paths.dirname(originalPath);
+    final extension = _paths.extension(originalPath);
+    final name = _paths.basename(originalPath);
+    final extensionName = _paths.extension(name);
+    final base = extensionName.isEmpty
+        ? name
+        : name.substring(0, name.length - extensionName.length);
     for (var index = 1; index <= 999; index++) {
       final suffix = index == 1 ? ' (已恢复)' : ' (已恢复 $index)';
-      final candidate = p.windows.join(directory, '$base$suffix$extension');
+      final candidate = _paths.join(directory, '$base$suffix$extension');
       try {
         final type = await _files.type(candidate);
         if (type == FsEntityType.notFound) return candidate;
@@ -1846,13 +1884,13 @@ class QuarantineService {
   }
 
   Future<String> _backupPath(String targetPath) async {
-    final directory = p.windows.dirname(targetPath);
+    final directory = _paths.dirname(targetPath);
     for (var attempt = 0; attempt < 8; attempt++) {
       final suffix = List.generate(
         4,
         (_) => _random.nextInt(256).toRadixString(16).padLeft(2, '0'),
       ).join();
-      final candidate = p.windows.join(directory, '.broom-backup-$suffix.tmp');
+      final candidate = _paths.join(directory, '.broom-backup-$suffix.tmp');
       try {
         final type = await _files.type(candidate);
         if (type == FsEntityType.notFound) return candidate;
@@ -1994,7 +2032,7 @@ class QuarantineService {
   }
 
   Future<Map<String, dynamic>?> _readSessionJson(Directory sessionDir) async {
-    final path = p.windows.join(sessionDir.path, 'session.json');
+    final path = _paths.join(sessionDir.path, 'session.json');
     try {
       if (await _files.type(path) == FsEntityType.notFound) return null;
       final value = jsonDecode(await _files.readString(path));
@@ -2021,7 +2059,7 @@ class QuarantineService {
     Directory sessionDir,
     Map<String, dynamic> data,
   ) async {
-    final path = p.windows.join(sessionDir.path, 'session.json');
+    final path = _paths.join(sessionDir.path, 'session.json');
     final tempPath = '$path.tmp';
     await _files.writeString(tempPath, jsonEncode(data));
     await _files.rename(tempPath, path);
@@ -2032,7 +2070,7 @@ class QuarantineService {
   }
 
   Future<_EntryJournal> _readEntryJournal(Directory sessionDir) async {
-    final path = p.windows.join(sessionDir.path, 'entries.jsonl');
+    final path = _paths.join(sessionDir.path, 'entries.jsonl');
     if (await _files.type(path) == FsEntityType.notFound) {
       return const _EntryJournal(entries: [], rejected: 0);
     }
@@ -2094,7 +2132,7 @@ class QuarantineService {
   Future<List<_RemovedDirectory>> _readRemovedDirectories(
     Directory sessionDir,
   ) async {
-    final path = p.windows.join(sessionDir.path, 'removed_dirs.jsonl');
+    final path = _paths.join(sessionDir.path, 'removed_dirs.jsonl');
     if (await _files.type(path) == FsEntityType.notFound) return const [];
     final directories = <_RemovedDirectory>[];
     try {
@@ -2166,7 +2204,7 @@ class QuarantineService {
   }
 
   Future<Set<String>> _readRestoredNames(Directory sessionDir) async {
-    final path = p.windows.join(sessionDir.path, 'restored.jsonl');
+    final path = _paths.join(sessionDir.path, 'restored.jsonl');
     if (await _files.type(path) == FsEntityType.notFound) return <String>{};
     try {
       final lines = await _files.readLines(path);
@@ -2191,7 +2229,7 @@ class QuarantineService {
     List<JunkItem> items,
     ScanRoots roots,
   ) async {
-    final planPath = p.windows.join(sessionDir.path, 'plan.jsonl');
+    final planPath = _paths.join(sessionDir.path, 'plan.jsonl');
     final tempPath = '$planPath.tmp';
     final writer = await _files.openWrite(tempPath);
     var closed = false;
@@ -2247,7 +2285,7 @@ class QuarantineService {
   }
 
   Future<_PlanData> _readPlan(Directory sessionDir) async {
-    final path = p.windows.join(sessionDir.path, 'plan.jsonl');
+    final path = _paths.join(sessionDir.path, 'plan.jsonl');
     if (await _files.type(path) == FsEntityType.notFound) {
       return const _PlanData(items: [], roots: ScanRoots.empty);
     }
@@ -2301,15 +2339,15 @@ class QuarantineService {
     return _PlanData(items: items, roots: ScanRoots(roots));
   }
 
-  static bool _isValidStoredEntry({
+  bool _isValidStoredEntry({
     required String originalPath,
     required String rootPath,
     required String storedName,
     required num size,
   }) {
     if (!_isSafeStoredName(storedName)) return false;
-    if (!p.windows.isAbsolute(originalPath) ||
-        !p.windows.isAbsolute(rootPath)) {
+    if (!_paths.isAbsolute(originalPath) ||
+        !_paths.isAbsolute(rootPath)) {
       return false;
     }
     if (size < 0 || !size.isFinite || size > 9007199254740991) return false;
@@ -2319,11 +2357,11 @@ class QuarantineService {
     return pathKey != rootKey && _isWithinKey(rootKey, pathKey);
   }
 
-  static bool _isValidRemovedDirectory({
+  bool _isValidRemovedDirectory({
     required String path,
     required String rootPath,
   }) {
-    if (!p.windows.isAbsolute(path) || !p.windows.isAbsolute(rootPath)) {
+    if (!_paths.isAbsolute(path) || !_paths.isAbsolute(rootPath)) {
       return false;
     }
     final rootKey = _key(rootPath);
@@ -2331,8 +2369,8 @@ class QuarantineService {
     return pathKey != rootKey && _isWithinKey(rootKey, pathKey);
   }
 
-  static bool _isValidPlanEntry(String path, String rootPath, num size) {
-    if (!p.windows.isAbsolute(path) || !p.windows.isAbsolute(rootPath)) {
+  bool _isValidPlanEntry(String path, String rootPath, num size) {
+    if (!_paths.isAbsolute(path) || !_paths.isAbsolute(rootPath)) {
       return false;
     }
     if (size < 0 || !size.isFinite || size > 9007199254740991) return false;
@@ -2343,7 +2381,7 @@ class QuarantineService {
 
   Future<void> _deletePlanFile(Directory sessionDir) async {
     try {
-      final path = p.windows.join(sessionDir.path, 'plan.jsonl');
+      final path = _paths.join(sessionDir.path, 'plan.jsonl');
       if (await _files.type(path) != FsEntityType.notFound) {
         await _files.deleteFile(path);
       }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/platform/file_system.dart';
 import 'package:broom/core/platform/memory_file_system.dart';
+import 'package:broom/core/platform/path_semantics.dart';
 import 'package:broom/core/scan/junk_scanner.dart';
 import 'package:broom/core/scan/ntfs_index.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -75,6 +76,7 @@ void main() {
       ntfsIndex: _StaticNtfsIndex(paths),
       useNtfsIndex: true,
       fileSystem: fs,
+      semantics: const WindowsPathSemantics(),
       maxItems: maxItems,
       clock: () => clock,
     );
@@ -205,6 +207,7 @@ void main() {
       ntfsIndex: _StaticNtfsIndex(paths),
       useNtfsIndex: true,
       fileSystem: fs,
+      semantics: const WindowsPathSemantics(),
       clock: () => clock,
     );
     final result = await scanner.scan(

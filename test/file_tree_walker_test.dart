@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:broom/core/analysis/file_tree_walker.dart';
 import 'package:broom/core/platform/memory_file_system.dart';
+import 'package:broom/core/platform/path_semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -38,6 +39,7 @@ void main() {
       root: root,
       excludedPaths: const [r'C:\analysis\root\skip'],
       fileSystem: fs,
+      semantics: const WindowsPathSemantics(),
     ).walk(onFile: (path, stat) => files[path.toLowerCase()] = stat.size);
 
     expect(result.rootMissing, isFalse);
@@ -99,6 +101,7 @@ void main() {
       root: root,
       excludedPaths: const [r'C:\analysis\root\skip'],
       fileSystem: fs,
+      semantics: const WindowsPathSemantics(),
       useDetailedListing: false,
     ).walk(onFile: (path, stat) => files.add(path.toLowerCase()));
 
@@ -113,6 +116,7 @@ void main() {
     final result = await FileTreeWalker(
       root: r'C:\analysis\missing',
       fileSystem: MemoryFileSystem(),
+      semantics: const WindowsPathSemantics(),
     ).walk(onFile: (path, stat) {});
 
     expect(result.rootMissing, isTrue);
@@ -130,6 +134,7 @@ void main() {
     final result = await FileTreeWalker(
       root: root,
       fileSystem: fs,
+      semantics: const WindowsPathSemantics(),
       maxFiles: 2,
     ).walk(onFile: (path, stat) => seen.add(path));
 

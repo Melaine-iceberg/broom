@@ -8,6 +8,7 @@ import 'package:broom/core/models/leftover_models.dart';
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/platform/cleaner_platform.dart';
 import 'package:broom/core/platform/installed_apps.dart';
+import 'package:broom/core/platform/path_semantics.dart';
 import 'package:broom/core/safety/path_guard.dart';
 import 'package:broom/core/scan/ntfs_index.dart';
 import 'package:broom/core/scan/scan_service.dart';
@@ -60,6 +61,12 @@ class _TestPlatform implements CleanerPlatform {
 
   @override
   List<CleanerRule> get rules => const [_baseRule];
+
+  @override
+  PathSemantics get pathSemantics => const WindowsPathSemantics();
+
+  @override
+  List<String> get protectedRoots => const [];
 
   @override
   String get rulesVersion => 'builtin';
@@ -165,12 +172,12 @@ void main() {
 
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('broom_category_ui_');
-    cacheDir = await Directory(p.windows.join(temp.path, 'cache'))
+    cacheDir = await Directory(p.join(temp.path, 'cache'))
         .create(recursive: true);
-    leftoverDir = await Directory(p.windows.join(temp.path, 'leftover'))
+    leftoverDir = await Directory(p.join(temp.path, 'leftover'))
         .create(recursive: true);
-    await File(p.windows.join(cacheDir.path, 'a.tmp')).writeAsString('1234');
-    await File(p.windows.join(leftoverDir.path, 'b.dat')).writeAsString('5678');
+    await File(p.join(cacheDir.path, 'a.tmp')).writeAsString('1234');
+    await File(p.join(leftoverDir.path, 'b.dat')).writeAsString('5678');
     candidate = LeftoverCandidate(
       entry: _leftoverEntry,
       paths: [leftoverDir.path],
@@ -199,7 +206,7 @@ void main() {
     final scanner = _RecordingScanService([
       JunkItem(
         rootIndex: 0,
-        path: p.windows.join(leftoverDir.path, 'b.dat'),
+        path: p.join(leftoverDir.path, 'b.dat'),
         size: 4,
         modifiedMicros: DateTime(2026, 10, 21).microsecondsSinceEpoch,
       ),
@@ -215,7 +222,7 @@ void main() {
       guard: PathGuard(protectedRoots: const []),
       quarantine: FakeQuarantineService(),
       exclusions: ExclusionStore(
-        filePath: p.windows.join(temp.path, 'exclusions.json'),
+        filePath: p.join(temp.path, 'exclusions.json'),
       ),
       leftoverService: leftover,
       scanServiceFactory: () => scanner,
@@ -298,7 +305,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     final store = SettingsStore(
-      filePath: p.windows.join(temp.path, 'settings.json'),
+      filePath: p.join(temp.path, 'settings.json'),
     );
     await store.save(AppSettings.defaults);
     final settings = SettingsController(store: store);
@@ -348,7 +355,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     final store = SettingsStore(
-      filePath: p.windows.join(temp.path, 'settings.json'),
+      filePath: p.join(temp.path, 'settings.json'),
     );
     await store.save(AppSettings.defaults);
     final settings = SettingsController(store: store);

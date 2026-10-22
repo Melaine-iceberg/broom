@@ -214,7 +214,9 @@ class _WindowButtonState extends State<_WindowButton> {
 
   Color _foregroundColor(BuildContext context) {
     if (widget.isCloseButton && _isHovered) return Colors.white;
-    return _isHovered ? BroomColors.ink(context) : BroomColors.inkMuted(context);
+    return _isHovered
+        ? BroomColors.ink(context)
+        : BroomColors.inkMuted(context);
   }
 
   void _setHovered(bool hovered) {

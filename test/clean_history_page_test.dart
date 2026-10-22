@@ -1,13 +1,17 @@
 import 'package:broom/app.dart';
 import 'package:broom/core/clean/clean_history_store.dart';
 import 'package:broom/core/models/clean_history_models.dart';
+import 'package:broom/core/platform/path_semantics.dart';
 import 'package:broom/ui/clean_history_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _FakeHistoryStore extends CleanHistoryStore {
   _FakeHistoryStore({this.records = const [], this.error})
-    : super(filePath: r'C:\Broom\clean_history.json');
+    : super(
+        filePath: r'C:\Broom\clean_history.json',
+        semantics: const WindowsPathSemantics(),
+      );
 
   final List<CleanHistoryRecord> records;
   final Object? error;

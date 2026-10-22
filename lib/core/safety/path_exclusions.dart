@@ -1,6 +1,4 @@
-import 'package:path/path.dart' as p;
-
-import 'path_guard.dart';
+import '../platform/path_semantics.dart';
 
 abstract interface class PathExclusionSource {
   List<String> get paths;
@@ -19,51 +17,62 @@ class EmptyPathExclusionSource implements PathExclusionSource {
 }
 
 class PathExclusions implements PathExclusionSource {
-  PathExclusions(Iterable<String> paths)
-    : paths = List.unmodifiable(_normalize(paths));
+  PathExclusions(
+    Iterable<String> paths, {
+    PathSemantics? semantics,
+  }) : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform(),
+       paths = List.unmodifiable(
+         _normalize(paths, semantics ?? PathSemanticsFactory.forCurrentPlatform()),
+       );
 
-  PathExclusions.empty() : paths = const [];
+  PathExclusions.empty({PathSemantics? semantics})
+    : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform(),
+      paths = const [];
+
+  final PathSemantics semantics;
 
   @override
   final List<String> paths;
 
   @override
   bool excludes(String path) {
-    final key = _key(path);
-    return paths.any((excluded) => _isWithin(_key(excluded), key));
+    final key = semantics.key(path);
+    return paths.any(
+      (excluded) => semantics.isWithin(semantics.key(excluded), key),
+    );
   }
 
   bool intersects(String root) {
-    final rootKey = _key(root);
+    final rootKey = semantics.key(root);
     return paths.any((excluded) {
-      final excludedKey = _key(excluded);
-      return _isWithin(rootKey, excludedKey) || _isWithin(excludedKey, rootKey);
+      final excludedKey = semantics.key(excluded);
+      return semantics.isWithin(rootKey, excludedKey) ||
+          semantics.isWithin(excludedKey, rootKey);
     });
   }
 
-  static bool overlaps(String first, String second) {
-    final firstKey = _key(first);
-    final secondKey = _key(second);
-    return _isWithin(firstKey, secondKey) || _isWithin(secondKey, firstKey);
+  static bool overlaps(
+    String first,
+    String second, {
+    PathSemantics? semantics,
+  }) {
+    final paths = semantics ?? PathSemanticsFactory.forCurrentPlatform();
+    final firstKey = paths.key(first);
+    final secondKey = paths.key(second);
+    return paths.isWithin(firstKey, secondKey) ||
+        paths.isWithin(secondKey, firstKey);
   }
 
-  static String _key(String path) => PathGuard.normalize(path).toLowerCase();
-
-  static List<String> _normalize(Iterable<String> paths) {
+  static List<String> _normalize(
+    Iterable<String> paths,
+    PathSemantics semantics,
+  ) {
     final byKey = <String, String>{};
     for (final path in paths) {
       if (path.trim().isEmpty) continue;
-      final normalized = PathGuard.normalize(path);
-      byKey.putIfAbsent(normalized.toLowerCase(), () => normalized);
+      final normalized = semantics.normalize(semantics.absolute(path));
+      byKey.putIfAbsent(semantics.key(normalized), () => normalized);
     }
     return byKey.values.toList()..sort();
-  }
-
-  static bool _isWithin(String rootKey, String candidateKey) {
-    if (candidateKey == rootKey) return true;
-    final prefix = rootKey.endsWith(p.windows.separator)
-        ? rootKey
-        : '$rootKey${p.windows.separator}';
-    return candidateKey.startsWith(prefix);
   }
 }

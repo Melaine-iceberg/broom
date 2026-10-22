@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
+  group('WindowsRuleResolver', () {
   late Directory temp;
   late WindowsRuleResolver resolver;
 
@@ -96,4 +97,5 @@ void main() {
     );
     expect(roots, isEmpty);
   });
+  }, skip: !Platform.isWindows);
 }

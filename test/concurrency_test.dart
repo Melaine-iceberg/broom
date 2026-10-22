@@ -6,6 +6,7 @@ import 'package:broom/core/models/clean_models.dart';
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/platform/file_system.dart';
 import 'package:broom/core/platform/memory_file_system.dart';
+import 'package:broom/core/platform/path_semantics.dart';
 import 'package:broom/core/safety/path_guard.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -23,10 +24,13 @@ void main() {
   setUp(() {
     fs = MemoryFileSystem();
     fs.seedDirectory(sourceRoot);
-    fs.seedDirectory(p.windows.join(quarantineRoot, sessionId, 'files'));
+    fs.seedDirectory(p.join(quarantineRoot, sessionId, 'files'));
     service = QuarantineService(
       quarantineRoot: quarantineRoot,
-      guard: PathGuard(protectedRoots: const []),
+      guard: PathGuard(
+        protectedRoots: const [],
+        semantics: const WindowsPathSemantics(),
+      ),
       metadataAccess: FakeFileMetadataAccess(),
       fileSystem: fs,
       clock: () => DateTime.utc(2026, 10, 19, 13),
@@ -57,7 +61,7 @@ void main() {
 
   void seedSession() {
     fs.seedFile(
-      p.windows.join(quarantineRoot, sessionId, 'session.json'),
+      p.join(quarantineRoot, sessionId, 'session.json'),
       contents: jsonEncode({
         'schemaVersion': 2,
         'id': sessionId,
@@ -75,12 +79,12 @@ void main() {
       }),
     );
     fs.seedFile(
-      p.windows.join(quarantineRoot, sessionId, 'entries.jsonl'),
+      p.join(quarantineRoot, sessionId, 'entries.jsonl'),
       contents:
           '${jsonEncode({'originalPath': '$sourceRoot\\notes.txt', 'rootPath': sourceRoot, 'storedName': '000001_notes.txt', 'size': 5})}\n',
     );
     fs.seedFile(
-      p.windows.join(quarantineRoot, sessionId, 'files', '000001_notes.txt'),
+      p.join(quarantineRoot, sessionId, 'files', '000001_notes.txt'),
       contents: 'hello',
     );
   }

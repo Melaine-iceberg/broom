@@ -38,6 +38,8 @@ class _FakeInstalledApps implements InstalledApps {
   }
 }
 
+final _windowsOnly = !Platform.isWindows;
+
 void main() {
   late Directory tempRoot;
   late Map<String, String> environment;
@@ -46,12 +48,12 @@ void main() {
 
   setUp(() async {
     tempRoot = await Directory.systemTemp.createTemp('broom_leftover_test_');
-    final roaming = await Directory(p.windows.join(tempRoot.path, 'Roaming'))
+    final roaming = await Directory(p.join(tempRoot.path, 'Roaming'))
         .create(recursive: true);
-    final local = await Directory(p.windows.join(tempRoot.path, 'Local'))
+    final local = await Directory(p.join(tempRoot.path, 'Local'))
         .create(recursive: true);
     final programFiles = await Directory(
-      p.windows.join(tempRoot.path, 'ProgramFiles'),
+      p.join(tempRoot.path, 'ProgramFiles'),
     ).create(recursive: true);
     environment = {
       'APPDATA': roaming.path,
@@ -70,10 +72,10 @@ void main() {
     }
   });
 
-  String appDataPath() => p.windows.join(environment['APPDATA']!, 'Example');
+  String appDataPath() => p.join(environment['APPDATA']!, 'Example');
 
   String markerPath() =>
-      p.windows.join(environment['LOCALAPPDATA']!, 'Example', 'app.exe');
+      p.join(environment['LOCALAPPDATA']!, 'Example', 'app.exe');
 
   LeftoverService service({
     List<LeftoverCatalogEntry>? entries,
@@ -89,19 +91,23 @@ void main() {
     );
   }
 
-  test('detects data when the application is absent', () async {
-    await Directory(appDataPath()).create(recursive: true);
+  test(
+    'detects data when the application is absent',
+    () async {
+      await Directory(appDataPath()).create(recursive: true);
 
-    final detection = await service().detect();
+      final detection = await service().detect();
 
-    expect(detection.error, isNull);
-    expect(detection.candidates, hasLength(1));
-    final candidate = detection.candidates.single;
-    expect(candidate.entry.id, 'example');
-    expect(candidate.paths, [PathGuard.normalize(appDataPath())]);
-    expect(candidate.evidence, contains('Example'));
-    expect(candidate.evidenceEn, contains('Example'));
-  });
+      expect(detection.error, isNull);
+      expect(detection.candidates, hasLength(1));
+      final candidate = detection.candidates.single;
+      expect(candidate.entry.id, 'example');
+      expect(candidate.paths, [PathGuard.normalize(appDataPath())]);
+      expect(candidate.evidence, contains('Example'));
+      expect(candidate.evidenceEn, contains('Example'));
+    },
+    skip: _windowsOnly,
+  );
 
   test('skips applications present in the inventory by name prefix', () async {
     await Directory(appDataPath()).create(recursive: true);
@@ -125,7 +131,7 @@ void main() {
   test('skips applications with a matching wildcard install marker', () async {
     await Directory(appDataPath()).create(recursive: true);
     await Directory(
-      p.windows.join(environment['LOCALAPPDATA']!, 'Example', 'app-1.2.3'),
+      p.join(environment['LOCALAPPDATA']!, 'Example', 'app-1.2.3'),
     ).create(recursive: true);
 
     final detection = await service(
@@ -238,15 +244,19 @@ void main() {
     expect(validation.orphanedRuleIds, isEmpty);
   });
 
-  test('revalidate detects a new install marker', () async {
-    final marker = File(markerPath());
-    await marker.parent.create(recursive: true);
-    await marker.writeAsString('');
+  test(
+    'revalidate detects a new install marker',
+    () async {
+      final marker = File(markerPath());
+      await marker.parent.create(recursive: true);
+      await marker.writeAsString('');
 
-    final validation = await service().revalidate(['leftover.example']);
+      final validation = await service().revalidate(['leftover.example']);
 
-    expect(validation.orphanedRuleIds, isEmpty);
-  });
+      expect(validation.orphanedRuleIds, isEmpty);
+    },
+    skip: _windowsOnly,
+  );
 
   test('revalidate fails closed when the inventory is incomplete', () async {
     installedApps.inventory = const InstalledAppInventory(

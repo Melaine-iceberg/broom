@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:broom/core/platform/path_semantics.dart';
 import 'package:broom/core/safety/path_exclusions.dart';
 import 'package:broom/core/safety/path_guard.dart';
 import 'package:broom/core/settings/exclusion_store.dart';
@@ -21,14 +22,13 @@ void main() {
   });
 
   Future<Directory> createDirectory(String name) async {
-    final directory = Directory(p.windows.join(temp.path, name));
+    final directory = Directory(p.join(temp.path, name));
     await directory.create(recursive: true);
     return directory;
   }
 
-  ExclusionStore createStore() => ExclusionStore(
-    filePath: p.windows.join(temp.path, 'config', 'exclusions.json'),
-  );
+  ExclusionStore createStore() =>
+      ExclusionStore(filePath: p.join(temp.path, 'config', 'exclusions.json'));
 
   test('persists normalized paths across reloads', () async {
     final keep = await createDirectory('keep');
@@ -36,12 +36,9 @@ void main() {
     await store.ensureLoaded();
     expect(store.paths, isEmpty);
 
-    await store.add('${keep.path}${p.windows.separator}');
+    await store.add('${keep.path}${p.separator}');
     expect(store.paths, [PathGuard.normalize(keep.path)]);
-    expect(
-      store.excludes(p.windows.join(keep.path, 'nested', 'file.tmp')),
-      isTrue,
-    );
+    expect(store.excludes(p.join(keep.path, 'nested', 'file.tmp')), isTrue);
 
     final reloaded = createStore();
     await reloaded.ensureLoaded();
@@ -56,7 +53,9 @@ void main() {
   });
 
   test('matches descendants case-insensitively without prefix leaks', () {
-    final exclusions = PathExclusions([r'C:\Temp\Cache']);
+    final exclusions = PathExclusions([
+      r'C:\Temp\Cache',
+    ], semantics: const WindowsPathSemantics());
 
     expect(exclusions.excludes(r'C:\Temp\Cache'), isTrue);
     expect(exclusions.excludes(r'C:\Temp\Cache\file.tmp'), isTrue);
@@ -71,9 +70,9 @@ void main() {
 
   test('rejects invalid, duplicate, and overlapping paths', () async {
     final keep = await createDirectory('keep');
-    final child = await createDirectory(p.windows.join('keep', 'child'));
+    final child = await createDirectory(p.join('keep', 'child'));
     final other = await createDirectory('other');
-    final file = File(p.windows.join(temp.path, 'file.txt'));
+    final file = File(p.join(temp.path, 'file.txt'));
     await file.writeAsString('x');
 
     final store = createStore();
@@ -86,7 +85,7 @@ void main() {
     await expectLater(store.add(file.path), throwsA(isA<ExclusionException>()));
     await expectLater(store.add('C:\\'), throwsA(isA<ExclusionException>()));
     await expectLater(
-      store.add(p.windows.join(temp.path, 'missing')),
+      store.add(p.join(temp.path, 'missing')),
       throwsA(isA<ExclusionException>()),
     );
 
@@ -107,7 +106,7 @@ void main() {
 
   test('loads persisted paths even when the folder is gone', () async {
     final store = createStore();
-    final missing = p.windows.join(temp.path, 'already-deleted');
+    final missing = p.join(temp.path, 'already-deleted');
     await File(store.filePath).parent.create(recursive: true);
     await File(store.filePath).writeAsString(
       jsonEncode({
@@ -152,7 +151,7 @@ void main() {
 
   test('migrates v1 exclusions and writes the v2 envelope on reset', () async {
     final store = createStore();
-    final keep = p.windows.join(temp.path, 'keep');
+    final keep = p.join(temp.path, 'keep');
     await File(store.filePath).parent.create(recursive: true);
     await File(store.filePath).writeAsString(
       jsonEncode({
@@ -175,8 +174,8 @@ void main() {
   test('replaces exclusions without requiring folders to exist', () async {
     final store = createStore();
     await store.ensureLoaded();
-    final offline = p.windows.join(temp.path, 'external-drive', 'keep');
-    final other = p.windows.join(temp.path, 'other');
+    final offline = p.join(temp.path, 'external-drive', 'keep');
+    final other = p.join(temp.path, 'other');
 
     await store.replaceAll([offline, other, offline]);
 
@@ -200,8 +199,8 @@ void main() {
     () async {
       final store = createStore();
       await store.ensureLoaded();
-      final keep = p.windows.join(temp.path, 'keep');
-      final child = p.windows.join(keep, 'child');
+      final keep = p.join(temp.path, 'keep');
+      final child = p.join(keep, 'child');
       await store.replaceAll([keep]);
 
       await expectLater(
@@ -220,7 +219,7 @@ void main() {
     await expectLater(store.ensureLoaded(), throwsA(isA<FormatException>()));
     expect(store.loadError, isNotNull);
 
-    final keep = p.windows.join(temp.path, 'keep');
+    final keep = p.join(temp.path, 'keep');
     await store.replaceAll([keep]);
 
     expect(store.isLoaded, isTrue);

@@ -1,10 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path/path.dart' as p;
-
 import '../models/quarantine_policy_models.dart';
-import '../safety/path_guard.dart';
+import '../platform/path_semantics.dart';
 import 'config_schema.dart';
 
 class QuarantinePolicyException implements Exception {
@@ -17,18 +15,25 @@ class QuarantinePolicyException implements Exception {
 }
 
 class QuarantinePolicyStore {
-  QuarantinePolicyStore({required this.filePath}) {
-    if (!p.windows.isAbsolute(filePath)) {
+  QuarantinePolicyStore({required this.filePath, PathSemantics? semantics})
+    : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform() {
+    if (!this.semantics.isAbsolute(filePath)) {
       throw ArgumentError.value(filePath, 'filePath', '保留策略路径必须是绝对路径');
     }
   }
 
   static const fileName = 'quarantine_policy.json';
 
-  static String defaultFilePath(String quarantineRoot) =>
-      p.windows.join(p.windows.dirname(quarantineRoot), fileName);
+  static String defaultFilePath(
+    String quarantineRoot, {
+    PathSemantics? semantics,
+  }) {
+    final paths = semantics ?? PathSemanticsFactory.forCurrentPlatform();
+    return paths.join(paths.dirname(quarantineRoot), fileName);
+  }
 
   final String filePath;
+  final PathSemantics semantics;
 
   Future<QuarantineRetentionPolicy> load() async {
     try {
@@ -59,7 +64,7 @@ class QuarantinePolicyStore {
         jsonEncode(encodeRetentionDocument(policy)),
         flush: true,
       );
-      temp.renameSync(PathGuard.normalize(filePath));
+      temp.renameSync(semantics.normalize(semantics.absolute(filePath)));
     } on FileSystemException catch (error) {
       throw QuarantinePolicyException('无法保存保留策略：${error.message}');
     }

@@ -1,10 +1,16 @@
+import 'dart:io';
+
+import 'package:broom/core/platform/path_semantics.dart';
 import 'package:broom/core/safety/path_guard.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+final _windowsOnly = !Platform.isWindows;
 
 void main() {
   group('PathGuard', () {
     final guard = PathGuard(
       protectedRoots: [r'C:\Windows', r'C:\Program Files'],
+      semantics: const WindowsPathSemantics(),
     );
 
     test('accepts files inside the root and rejects the root itself', () {
@@ -69,23 +75,30 @@ void main() {
       expect(fromEnv.isProtected(r'C:\Users\Alice\cache'), isFalse);
     });
 
-    test('normalizes extended-length paths before comparing', () {
-      expect(
-        PathGuard.normalize(r'\\?\C:\Users\Alice\Temp\..\Temp\file.tmp'),
-        r'C:\Users\Alice\Temp\file.tmp',
-      );
-      expect(
-        guard.allows(
-          path: r'\\?\C:\Users\Alice\Temp\cache\file.tmp',
-          root: r'C:\Users\Alice\Temp',
-        ),
-        isTrue,
-      );
-      expect(guard.isProtected(r'\\?\C:\Windows\Temp\file.tmp'), isTrue);
-    });
+    test(
+      'normalizes extended-length paths before comparing',
+      () {
+        expect(
+          PathGuard.normalize(r'\\?\C:\Users\Alice\Temp\..\Temp\file.tmp'),
+          r'C:\Users\Alice\Temp\file.tmp',
+        );
+        expect(
+          guard.allows(
+            path: r'\\?\C:\Users\Alice\Temp\cache\file.tmp',
+            root: r'C:\Users\Alice\Temp',
+          ),
+          isTrue,
+        );
+        expect(guard.isProtected(r'\\?\C:\Windows\Temp\file.tmp'), isTrue);
+      },
+      skip: _windowsOnly,
+    );
 
     test('handles UNC roots without matching sibling shares', () {
-      final uncGuard = PathGuard(protectedRoots: [r'\\server\share\Windows']);
+      final uncGuard = PathGuard(
+        protectedRoots: [r'\\server\share\Windows'],
+        semantics: const WindowsPathSemantics(),
+      );
 
       expect(
         uncGuard.allows(

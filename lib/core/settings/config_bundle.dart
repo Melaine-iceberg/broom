@@ -1,10 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path/path.dart' as p;
-
 import '../models/app_settings.dart';
 import '../models/quarantine_policy_models.dart';
+import '../platform/path_semantics.dart';
 import 'config_schema.dart';
 
 /// A portable snapshot of Broom's user configuration.
@@ -64,7 +63,12 @@ class ConfigBundleCodec {
     return '${const JsonEncoder.withIndent('  ').convert(encoded)}\n';
   }
 
-  static ConfigBundle decode(String source) {
+  static ConfigBundle decode(
+    String source, {
+    PathSemantics? semantics,
+  }) {
+    final resolvedSemantics =
+        semantics ?? PathSemanticsFactory.forCurrentPlatform();
     final Object? decoded;
     try {
       decoded = jsonDecode(source);
@@ -107,7 +111,10 @@ class ConfigBundleCodec {
       );
       return ConfigBundle(
         settings: decodeSettingsDocument(rawSettings),
-        exclusions: decodeExclusionsDocument(rawExclusions),
+        exclusions: decodeExclusionsDocument(
+          rawExclusions,
+          semantics: resolvedSemantics,
+        ),
         retention: decodeRetentionDocument(rawRetention),
         exportedAt: exportedAt,
       );
@@ -118,7 +125,10 @@ class ConfigBundleCodec {
 }
 
 class ConfigTransferService {
-  const ConfigTransferService();
+  ConfigTransferService({PathSemantics? semantics})
+    : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform();
+
+  final PathSemantics semantics;
 
   /// A configuration file is small; this limit keeps a mistaken selection from
   /// being read into memory. It also bounds imported exclusion lists.
@@ -128,7 +138,7 @@ class ConfigTransferService {
     required String filePath,
     required ConfigBundle bundle,
   }) async {
-    if (!p.windows.isAbsolute(filePath)) {
+    if (!semantics.isAbsolute(filePath)) {
       throw const ConfigTransferException('导出路径必须是绝对路径。');
     }
     final content = ConfigBundleCodec.encode(bundle);
@@ -147,7 +157,7 @@ class ConfigTransferService {
   }
 
   Future<ConfigBundle> importFrom(String filePath) async {
-    if (!p.windows.isAbsolute(filePath)) {
+    if (!semantics.isAbsolute(filePath)) {
       throw const ConfigTransferException('导入路径必须是绝对路径。');
     }
     try {
@@ -158,7 +168,10 @@ class ConfigTransferService {
       if (file.lengthSync() > maxImportBytes) {
         throw const ConfigTransferException('配置文件超过 1 MiB，已拒绝导入。');
       }
-      return ConfigBundleCodec.decode(file.readAsStringSync());
+      return ConfigBundleCodec.decode(
+        file.readAsStringSync(),
+        semantics: semantics,
+      );
     } on FileSystemException catch (error) {
       throw ConfigTransferException('无法读取配置文件：${error.message}');
     } on FormatException {

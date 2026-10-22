@@ -10,6 +10,7 @@ import 'package:broom/core/models/clean_models.dart';
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/platform/file_system.dart';
 import 'package:broom/core/platform/memory_file_system.dart';
+import 'package:broom/core/platform/path_semantics.dart';
 import 'package:broom/core/safety/path_guard.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,7 +30,10 @@ void main() {
     fs.seedDirectory(sourceRoot);
     service = QuarantineService(
       quarantineRoot: quarantineRoot,
-      guard: PathGuard(protectedRoots: const []),
+      guard: PathGuard(
+        protectedRoots: const [],
+        semantics: const WindowsPathSemantics(),
+      ),
       metadataAccess: FakeFileMetadataAccess(),
       fileSystem: fs,
       clock: () => DateTime.utc(2026, 10, 20, 12),
@@ -38,7 +42,7 @@ void main() {
 
   JunkItem item(String name, {int size = 5}) => JunkItem(
     rootIndex: 0,
-    path: p.windows.join(sourceRoot, name),
+    path: p.join(sourceRoot, name),
     size: size,
     modifiedMicros: DateTime.utc(2026, 10, 20).microsecondsSinceEpoch,
   );
@@ -59,7 +63,7 @@ void main() {
   );
 
   String sessionFile(String sessionId, String child) =>
-      p.windows.join(quarantineRoot, sessionId, child);
+      p.join(quarantineRoot, sessionId, child);
 
   Future<List<Map<String, Object?>>> readJournal(String sessionId) async {
     final contents = utf8.decode(
@@ -74,10 +78,7 @@ void main() {
   group('finalize existence probe', () {
     test('a fully successful clean does not re-probe stored files', () async {
       for (var index = 0; index < 5; index++) {
-        fs.seedFile(
-          p.windows.join(sourceRoot, 'cache_$index.tmp'),
-          contents: 'hello',
-        );
+        fs.seedFile(p.join(sourceRoot, 'cache_$index.tmp'), contents: 'hello');
       }
       final items = [
         for (var index = 0; index < 5; index++) item('cache_$index.tmp'),
@@ -101,10 +102,7 @@ void main() {
 
     test('a failed move still probes every entry', () async {
       for (var index = 0; index < 3; index++) {
-        fs.seedFile(
-          p.windows.join(sourceRoot, 'cache_$index.tmp'),
-          contents: 'hello',
-        );
+        fs.seedFile(p.join(sourceRoot, 'cache_$index.tmp'), contents: 'hello');
       }
       final items = [
         for (var index = 0; index < 3; index++) item('cache_$index.tmp'),
@@ -139,7 +137,7 @@ void main() {
     test('a rolled back record leaves the journal byte exact', () async {
       const names = ['缓存 文件.tmp', '📦.tmp', 'plain.tmp'];
       for (final name in names) {
-        fs.seedFile(p.windows.join(sourceRoot, name), contents: 'hello');
+        fs.seedFile(p.join(sourceRoot, name), contents: 'hello');
       }
       fs.onOperation = (operation, path) async {
         if ((operation == 'rename' || operation == 'copy') &&
@@ -157,17 +155,14 @@ void main() {
       final journal = await readJournal(report.sessionId!);
       expect(journal, hasLength(2));
       expect(journal.map((entry) => entry['originalPath']), [
-        p.windows.join(sourceRoot, names[0]),
-        p.windows.join(sourceRoot, names[2]),
+        p.join(sourceRoot, names[0]),
+        p.join(sourceRoot, names[2]),
       ]);
     });
 
     test('resumed runs keep appending at the right offset', () async {
       for (var index = 0; index < 4; index++) {
-        fs.seedFile(
-          p.windows.join(sourceRoot, 'cache_$index.tmp'),
-          contents: 'hello',
-        );
+        fs.seedFile(p.join(sourceRoot, 'cache_$index.tmp'), contents: 'hello');
       }
       var renames = 0;
       fs.onOperation = (operation, path) async {
@@ -186,7 +181,7 @@ void main() {
       expect(journal, hasLength(4));
       expect(journal.map((entry) => entry['originalPath']).toSet(), {
         for (var index = 0; index < 4; index++)
-          p.windows.join(sourceRoot, 'cache_$index.tmp'),
+          p.join(sourceRoot, 'cache_$index.tmp'),
       });
     });
   });
@@ -195,10 +190,7 @@ void main() {
     test('writes every item exactly once across batch boundaries', () async {
       const count = 150;
       for (var index = 0; index < count; index++) {
-        fs.seedFile(
-          p.windows.join(sourceRoot, 'cache_$index.tmp'),
-          contents: 'hello',
-        );
+        fs.seedFile(p.join(sourceRoot, 'cache_$index.tmp'), contents: 'hello');
       }
       var renames = 0;
       fs.onOperation = (operation, path) async {
@@ -221,11 +213,11 @@ void main() {
       expect(plan, hasLength(count));
       expect(
         jsonDecode(plan.first)['originalPath'],
-        p.windows.join(sourceRoot, 'cache_0.tmp'),
+        p.join(sourceRoot, 'cache_0.tmp'),
       );
       expect(
         jsonDecode(plan.last)['originalPath'],
-        p.windows.join(sourceRoot, 'cache_${count - 1}.tmp'),
+        p.join(sourceRoot, 'cache_${count - 1}.tmp'),
       );
     });
   });
@@ -233,7 +225,7 @@ void main() {
   group('integrity hash read', () {
     test('hashes the whole file, not just the requested prefix', () async {
       final bytes = [for (var index = 0; index < 32; index++) index * 7 % 256];
-      final path = p.windows.join(sourceRoot, 'blob.bin');
+      final path = p.join(sourceRoot, 'blob.bin');
       fs.seedFile(path, bytes: bytes);
 
       final report = await clean([item('blob.bin', size: bytes.length)]);
@@ -247,7 +239,7 @@ void main() {
       'falls back to a full read when the file grew after the stat',
       () async {
         final bytes = [for (var index = 0; index < 64; index++) 255 - index];
-        final path = p.windows.join(sourceRoot, 'grew.bin');
+        final path = p.join(sourceRoot, 'grew.bin');
         // Reports five bytes while holding 64: the same shape a file that grew
         // between the stat and the hash has.
         fs.seedFile(path, bytes: bytes, size: 5);
@@ -260,7 +252,7 @@ void main() {
     );
 
     test('skips the hash above the size limit', () async {
-      final path = p.windows.join(sourceRoot, 'big.bin');
+      final path = p.join(sourceRoot, 'big.bin');
       fs.seedFile(path, size: 300 * 1024);
 
       final report = await clean([item('big.bin', size: 300 * 1024)]);
@@ -273,7 +265,7 @@ void main() {
   group('readBytesUpTo', () {
     test('returns the requested prefix from the in-memory backend', () async {
       final path = fs.seedFile(
-        p.windows.join(sourceRoot, 'prefix.bin'),
+        p.join(sourceRoot, 'prefix.bin'),
         contents: 'abcdef',
       );
 
@@ -286,7 +278,7 @@ void main() {
     test('matches readBytes on the real filesystem', () async {
       final directory = await Directory.systemTemp.createTemp('broom_prefix');
       addTearDown(() => directory.delete(recursive: true));
-      final file = File(p.windows.join(directory.path, 'prefix.bin'));
+      final file = File(p.join(directory.path, 'prefix.bin'));
       await file.writeAsBytes([0, 1, 2, 3, 250, 255]);
 
       const files = IoFileSystem();

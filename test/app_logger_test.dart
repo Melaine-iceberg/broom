@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:broom/core/diagnostics/app_logger.dart';
 import 'package:broom/core/platform/file_system.dart';
 import 'package:broom/core/platform/memory_file_system.dart';
+import 'package:broom/core/platform/path_semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -22,6 +23,7 @@ void main() {
       maxFileBytes: maxFileBytes,
       retainedFiles: retainedFiles,
       fileSystem: fs,
+      semantics: const WindowsPathSemantics(),
       clock: () => DateTime.utc(2026, 10, 19, 12, 0, 0),
     );
   }

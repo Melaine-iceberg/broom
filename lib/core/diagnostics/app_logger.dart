@@ -1,9 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:path/path.dart' as p;
-
 import '../platform/file_system.dart';
+import '../platform/path_semantics.dart';
 
 /// Severity of a diagnostic log entry.
 ///
@@ -45,9 +44,11 @@ class AppLogger {
     this.maxFileBytes = 512 * 1024,
     this.retainedFiles = 3,
     this.fileSystem = const IoFileSystem(),
+    PathSemantics? semantics,
     DateTime Function()? clock,
-  }) : _clock = clock ?? DateTime.now {
-    if (!p.windows.isAbsolute(directoryPath)) {
+  }) : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform(),
+       _clock = clock ?? DateTime.now {
+    if (!this.semantics.isAbsolute(directoryPath)) {
       throw ArgumentError.value(directoryPath, 'directoryPath', '日志目录必须是绝对路径');
     }
     if (maxFileBytes < 1024) {
@@ -71,6 +72,7 @@ class AppLogger {
   final int maxFileBytes;
   final int retainedFiles;
   final BroomFileSystem fileSystem;
+  final PathSemantics semantics;
   final DateTime Function() _clock;
 
   /// Current verbosity. Prefer [configureLevel] so enabling is itself logged.
@@ -84,13 +86,13 @@ class AppLogger {
   /// Last background write error, exposed for diagnostics UI and tests.
   String? get lastWriteError => _lastWriteError;
 
-  String get currentLogPath => p.windows.join(directoryPath, fileName);
+  String get currentLogPath => semantics.join(directoryPath, fileName);
 
   String archiveLogPath(int index) {
     if (index < 1) {
       throw ArgumentError.value(index, 'index', '归档序号从 1 开始');
     }
-    return p.windows.join(directoryPath, 'broom.$index.log');
+    return semantics.join(directoryPath, 'broom.$index.log');
   }
 
   void configureLevel(AppLogLevel level) {

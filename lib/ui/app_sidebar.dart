@@ -23,6 +23,7 @@ class AppSidebar extends StatelessWidget {
     required this.onSelected,
     this.quarantineCount = 0,
     this.showHistory = true,
+    this.showWindowsTools = true,
   });
 
   final AppSection section;
@@ -30,6 +31,7 @@ class AppSidebar extends StatelessWidget {
   final ValueChanged<AppSection> onSelected;
   final int quarantineCount;
   final bool showHistory;
+  final bool showWindowsTools;
 
   static const double expandedWidth = 224;
   static const double compactWidth = 64;
@@ -72,22 +74,24 @@ class AppSidebar extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
               child: Text(context.t('工具'), style: labelStyle),
             ),
-          _NavItem(
-            key: const ValueKey('sidebar-system-cache'),
-            icon: LucideIcons.database,
-            label: context.t('系统缓存'),
-            expanded: expanded,
-            selected: section == AppSection.systemCache,
-            onTap: () => onSelected(AppSection.systemCache),
-          ),
-          _NavItem(
-            key: const ValueKey('sidebar-recycle-bin'),
-            icon: LucideIcons.trash2,
-            label: context.t('回收站'),
-            expanded: expanded,
-            selected: section == AppSection.recycleBin,
-            onTap: () => onSelected(AppSection.recycleBin),
-          ),
+          if (showWindowsTools) ...[
+            _NavItem(
+              key: const ValueKey('sidebar-system-cache'),
+              icon: LucideIcons.database,
+              label: context.t('系统缓存'),
+              expanded: expanded,
+              selected: section == AppSection.systemCache,
+              onTap: () => onSelected(AppSection.systemCache),
+            ),
+            _NavItem(
+              key: const ValueKey('sidebar-recycle-bin'),
+              icon: LucideIcons.trash2,
+              label: context.t('回收站'),
+              expanded: expanded,
+              selected: section == AppSection.recycleBin,
+              onTap: () => onSelected(AppSection.recycleBin),
+            ),
+          ],
           _NavItem(
             key: const ValueKey('sidebar-duplicates'),
             icon: LucideIcons.copy,

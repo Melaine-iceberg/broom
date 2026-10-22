@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:broom/core/models/app_settings.dart';
 import 'package:broom/core/models/quarantine_policy_models.dart';
+import 'package:broom/core/platform/path_semantics.dart';
 import 'package:broom/core/settings/config_bundle.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -41,8 +42,10 @@ void main() {
   );
 
   test('round-trips a bundle through the file service', () async {
-    final path = p.windows.join(temp.path, 'broom-config.json');
-    const service = ConfigTransferService();
+    final path = p.join(temp.path, 'broom-config.json');
+    final service = ConfigTransferService(
+      semantics: const WindowsPathSemantics(),
+    );
 
     await service.exportTo(filePath: path, bundle: bundle);
     final imported = await service.importFrom(path);
@@ -91,7 +94,10 @@ void main() {
       },
     });
 
-    final decoded = ConfigBundleCodec.decode(source);
+    final decoded = ConfigBundleCodec.decode(
+      source,
+      semantics: const WindowsPathSemantics(),
+    );
     expect(decoded.settings.theme, AppThemePreference.light);
     expect(decoded.exclusions, [r'C:\Temp\Keep']);
     expect(decoded.retention.enabled, isFalse);
@@ -167,14 +173,16 @@ void main() {
   });
 
   test('refuses oversized or missing import files', () async {
-    const service = ConfigTransferService();
-    final missing = p.windows.join(temp.path, 'missing.json');
+    final service = ConfigTransferService(
+      semantics: const WindowsPathSemantics(),
+    );
+    final missing = p.join(temp.path, 'missing.json');
     await expectLater(
       service.importFrom(missing),
       throwsA(isA<ConfigTransferException>()),
     );
 
-    final oversized = File(p.windows.join(temp.path, 'oversized.json'));
+    final oversized = File(p.join(temp.path, 'oversized.json'));
     oversized.writeAsStringSync(
       'x' * (ConfigTransferService.maxImportBytes + 1),
     );
@@ -191,8 +199,10 @@ void main() {
   });
 
   test('overwrites an existing export atomically', () async {
-    const service = ConfigTransferService();
-    final path = p.windows.join(temp.path, 'broom-config.json');
+    final service = ConfigTransferService(
+      semantics: const WindowsPathSemantics(),
+    );
+    final path = p.join(temp.path, 'broom-config.json');
 
     await service.exportTo(filePath: path, bundle: bundle);
     await service.exportTo(
@@ -211,8 +221,10 @@ void main() {
   });
 
   test('refuses to export a bundle larger than the import limit', () async {
-    const service = ConfigTransferService();
-    final path = p.windows.join(temp.path, 'too-large.json');
+    final service = ConfigTransferService(
+      semantics: const WindowsPathSemantics(),
+    );
+    final path = p.join(temp.path, 'too-large.json');
     final oversized = ConfigBundle(
       settings: AppSettings.defaults,
       exclusions: List.generate(
@@ -236,7 +248,9 @@ void main() {
   });
 
   test('refuses a relative export path', () async {
-    const service = ConfigTransferService();
+    final service = ConfigTransferService(
+      semantics: const WindowsPathSemantics(),
+    );
     await expectLater(
       service.exportTo(filePath: 'broom-config.json', bundle: bundle),
       throwsA(isA<ConfigTransferException>()),

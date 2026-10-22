@@ -35,7 +35,7 @@ const _rounds = 3;
 void main() {
   test('clean loop attribution', () async {
     final base = Directory(
-      p.windows.join(
+      p.join(
         Directory.systemTemp.path,
         'broom_attr_${DateTime.now().microsecondsSinceEpoch}',
       ),
@@ -89,9 +89,9 @@ class _Round {
 }
 
 Future<_Round> _runCleanRound(Directory base, String label) async {
-  final dataDir = p.windows.join(base.path, label, 'data');
+  final dataDir = p.join(base.path, label, 'data');
   await Directory(dataDir).create(recursive: true);
-  final quarantineRoot = p.windows.join(base.path, label, 'quarantine');
+  final quarantineRoot = p.join(base.path, label, 'quarantine');
 
   final random = Random(7);
   final payload = List<int>.generate(_fileSize, (_) => random.nextInt(256));
@@ -100,7 +100,7 @@ Future<_Round> _runCleanRound(Directory base, String label) async {
   ]);
   final items = <JunkItem>[];
   for (var index = 0; index < _fileCount; index++) {
-    final path = p.windows.join(dataDir, 'cache_entry_$index.tmp');
+    final path = p.join(dataDir, 'cache_entry_$index.tmp');
     final file = File(path);
     await file.writeAsBytes(payload, flush: false);
     final stat = await file.stat();
@@ -236,12 +236,12 @@ void _printOps(List<_Round> rounds) {
 
 /// Replays the loop's non-filesystem work to split the residual.
 void _measureCpuWork(String base) {
-  final root = p.windows.join(base, 'cpu', 'data');
-  final path = p.windows.join(root, 'cache_entry_0.tmp');
+  final root = p.join(base, 'cpu', 'data');
+  final path = p.join(root, 'cache_entry_0.tmp');
   final rootKey = PathGuard.normalize(root);
   final guard = PathGuard.forWindows();
-  final quarantineRoot = p.windows.join(base, 'cpu', 'quarantine');
-  final filesDir = p.windows.join(quarantineRoot, 'session', 'files');
+  final quarantineRoot = p.join(base, 'cpu', 'quarantine');
+  final filesDir = p.join(quarantineRoot, 'session', 'files');
   final bytes = List<int>.generate(_fileSize, (i) => i & 0xff);
   final modified = DateTime.now();
 
@@ -265,8 +265,8 @@ void _measureCpuWork(String base) {
     if (name.length > 80) name = name.substring(0, 80);
     _sink = '${'123456'.padLeft(6, '0')}_$name'.length;
   });
-  _bench('p.windows.join(dest)', 20000, () {
-    _sink = p.windows.join(filesDir, '123456_cache_entry_0.tmp').length;
+  _bench('p.join(dest)', 20000, () {
+    _sink = p.join(filesDir, '123456_cache_entry_0.tmp').length;
   });
   _bench('DateTime ISO x3', 20000, () {
     _sink =
@@ -330,9 +330,9 @@ void _measureCpuWork(String base) {
 /// Decomposes the two dominant file operations the loop performs.
 Future<void> _measureIoPrimitives(String base) async {
   stdout.writeln('=== 文件操作拆解（真实 I/O，$_fileSize B 文件）===');
-  final probeDir = Directory(p.windows.join(base, 'probe'));
+  final probeDir = Directory(p.join(base, 'probe'));
   await probeDir.create(recursive: true);
-  final probe = File(p.windows.join(probeDir.path, 'probe.bin'));
+  final probe = File(p.join(probeDir.path, 'probe.bin'));
   await probe.writeAsBytes(
     List<int>.generate(_fileSize, (i) => i & 0xff),
     flush: false,
@@ -403,7 +403,7 @@ Future<void> _measureIoPrimitives(String base) async {
   });
 
   // Journal writer primitives: is position() an extra system call?
-  final journalPath = p.windows.join(probeDir.path, 'journal.jsonl');
+  final journalPath = p.join(probeDir.path, 'journal.jsonl');
   final journalHandle = await File(journalPath).open(mode: FileMode.append);
   await _measureAsync('journal position()', 300, () async {
     _sink = await journalHandle.position();
@@ -419,15 +419,15 @@ Future<void> _measureIoPrimitives(String base) async {
   await journalHandle.close();
 
   // Same-volume rename of a real payload file.
-  final renameDir = Directory(p.windows.join(base, 'rename'));
+  final renameDir = Directory(p.join(base, 'rename'));
   await renameDir.create(recursive: true);
   final payload = List<int>.generate(_fileSize, (i) => i & 0xff);
   const total = 200;
   final pending = <(String, String)>[];
   for (var index = 0; index < total; index++) {
-    final source = p.windows.join(renameDir.path, 'src_$index.tmp');
+    final source = p.join(renameDir.path, 'src_$index.tmp');
     File(source).writeAsBytesSync(payload);
-    pending.add((source, p.windows.join(renameDir.path, 'dst_$index.tmp')));
+    pending.add((source, p.join(renameDir.path, 'dst_$index.tmp')));
   }
   final renameWatch = Stopwatch()..start();
   for (final pair in pending) {

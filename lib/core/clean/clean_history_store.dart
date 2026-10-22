@@ -1,9 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path/path.dart' as p;
-
 import '../models/clean_history_models.dart';
+import '../platform/path_semantics.dart';
 
 const _schemaVersion = 1;
 
@@ -23,8 +22,9 @@ class CleanHistoryException implements Exception {
 /// [upsert] replaces the previous record for the same session so a resumed
 /// cleanup updates its entry instead of appending duplicates.
 class CleanHistoryStore {
-  CleanHistoryStore({required this.filePath}) {
-    if (!p.windows.isAbsolute(filePath)) {
+  CleanHistoryStore({required this.filePath, PathSemantics? semantics})
+    : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform() {
+    if (!this.semantics.isAbsolute(filePath)) {
       throw ArgumentError.value(filePath, 'filePath', '清理历史路径必须是绝对路径');
     }
   }
@@ -32,10 +32,16 @@ class CleanHistoryStore {
   static const fileName = 'clean_history.json';
   static const int maxRecords = 200;
 
-  static String defaultFilePath(String quarantineRoot) =>
-      p.windows.join(p.windows.dirname(quarantineRoot), fileName);
+  static String defaultFilePath(
+    String quarantineRoot, {
+    PathSemantics? semantics,
+  }) {
+    final paths = semantics ?? PathSemanticsFactory.forCurrentPlatform();
+    return paths.join(paths.dirname(quarantineRoot), fileName);
+  }
 
   final String filePath;
+  final PathSemantics semantics;
 
   Future<List<CleanHistoryRecord>> load() async {
     try {

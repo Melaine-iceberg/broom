@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:broom/core/shell/system_shell.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -42,7 +44,11 @@ void main() {
       shell.queryRecycleBin(),
       throwsA(
         isA<SystemShellException>()
-            .having((error) => error.message, 'message', contains('0x00000005'))
+            .having(
+              (error) => error.message,
+              'message',
+              contains(Platform.isWindows ? '0x00000005' : 'errno 5'),
+            )
             .having((error) => error.code, 'code', 'queryRecycleBin'),
       ),
     );
@@ -118,7 +124,11 @@ void main() {
       shell.queryDiskSpace(r'C:\'),
       throwsA(
         isA<SystemShellException>()
-            .having((error) => error.message, 'message', contains('0x00000005'))
+            .having(
+              (error) => error.message,
+              'message',
+              contains(Platform.isWindows ? '0x00000005' : 'errno 5'),
+            )
             .having((error) => error.code, 'code', 'disk_space_failed'),
       ),
     );

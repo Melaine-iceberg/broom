@@ -80,7 +80,9 @@ class CleanController extends ChangeNotifier {
     ScanService Function()? scanServiceFactory,
     FileLockProbe? lockProbe,
     this.logger,
-  }) : _scanServiceFactory = scanServiceFactory ?? ScanService.new,
+  }) : _scanServiceFactory =
+           scanServiceFactory ??
+           (() => ScanService(semantics: guard.semantics)),
        _lockProbe = lockProbe ?? const NoopFileLockProbe();
 
   final CleanerPlatform platform;
@@ -569,7 +571,7 @@ class CleanController extends ChangeNotifier {
           _notify();
           return;
         }
-        _scanRoots = ScanRoots.fromJobs(jobs);
+        _scanRoots = ScanRoots.fromJobs(jobs, semantics: guard.semantics);
         logger?.info(
           'scan',
           '开始扫描：${jobs.length} 个任务，'
@@ -1201,7 +1203,7 @@ class CleanController extends ChangeNotifier {
     final seen = <String>{};
     final inspections = <RuleRootInspection>[];
     for (final root in roots) {
-      final key = PathGuard.normalize(root).toLowerCase();
+      final key = guard.semantics.key(root);
       if (!seen.add(key)) continue;
       final state = guard.isProtected(root)
           ? RuleRootState.protected
@@ -1254,7 +1256,7 @@ class CleanController extends ChangeNotifier {
       for (final root in resolvedRoots) {
         if (guard.isProtected(root)) continue;
         if (exclusions.excludes(root)) continue;
-        final key = PathGuard.normalize(root).toLowerCase();
+        final key = guard.semantics.key(root);
         if (!seenRoots.add(key)) continue;
         scanRoots.add(root);
       }

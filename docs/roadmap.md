@@ -232,11 +232,15 @@
 - [ ] 权限：App Sandbox 与 Full Disk Access 的取舍；未授权路径必须安全跳过。
 - [ ] 撤销：仍使用应用自管隔离区；若接入废纸篓，需要处理与 Finder 的交互。
 
-### Linux
+### Linux（核心可用版已完成）
 
-- [ ] 规则根：`$XDG_CACHE_HOME`（默认 `~/.cache`）及常见开发工具缓存。
-- [ ] 路径与权限：大小写敏感、符号链接、Flatpak / Snap 沙箱隔离。
-- [ ] 打包：AppImage / deb / snap 的隔离区与配置目录规范。
+- [x] 规则根：`$XDG_CACHE_HOME`（默认 `~/.cache`）、`$XDG_CONFIG_HOME` 下的应用缓存、`$HOME` 下的开发工具缓存；24 条内置规则，含正 / 反审计样例。
+- [x] 路径与权限：`PosixPathSemantics`、大小写敏感、`$VAR` / `${VAR}` / `~` 规则展开、`PathGuard.forPosix` 保护 `/usr`、`/etc`、`/boot` 等系统目录。
+- [x] 隔离区：`$XDG_DATA_HOME/Broom/quarantine`；跨卷通过 `st_dev` 探测，不可探测时保守复制。
+- [x] 原生桥接：`statvfs` 磁盘空间、`GtkFileChooserNative` 选择器、Gio 定位文件、`getpriority` / `setpriority` 扫描优先级、`chmod` / `utimensat` 元数据恢复。
+- [x] UI 平台裁剪：隐藏系统缓存、回收站、规则在线更新、软件更新、NTFS 索引与卸载残留。
+- [x] 打包与 CI：tar.gz + `.desktop` + 图标，`tool/package_linux.sh`，Ubuntu 22.04 CI。
+- [ ] 后续：Flatpak / Snap / AppImage 分发、Wayland 下的定位行为验证、Snap 沙箱内的隔离区路径约定。
 
 ### 移动端
 
@@ -260,7 +264,7 @@
 1. **v1.1 安全与可管理性**：设置页、国际化、单文件选择。（三项均已完成；排除列表、撤销冲突处理与隔离区保留/容量策略已完成；隔离区管理页、按范围恢复与永久释放已在 v4 完成）
 2. **v1.2 扫描与类别扩展**：按类别扫描、流式结果、常见应用缓存与 Review 级规则、清理历史。（按类别扫描、流式结果、结果持久化、并行 / 低优先级、NTFS 索引、错误细分、规则更新与路径语义已完成；隔离区清理历史已完成）
 3. **v1.3 自动化与分发**：定时任务、托盘、CLI、安装包与签名、Windows CI 与性能基准。（Windows CI 与性能基准已完成；定时任务、托盘、CLI、安装包与签名待做）
-4. **v2.0 平台扩展**：路径语义抽象、macOS / Linux；管理员系统清理已在 v3 实现，但仍需补充服务占用检测与 UAC 兼容性矩阵；移动端作为独立阶段，基于 SAF / MediaStore 重新设计。
+4. **v2.0 平台扩展**：路径语义抽象、macOS / Linux（Linux 核心可用版已完成）；管理员系统清理已在 v3 实现，但仍需补充服务占用检测与 UAC 兼容性矩阵；移动端作为独立阶段，基于 SAF / MediaStore 重新设计。
 
 ## 非目标
 

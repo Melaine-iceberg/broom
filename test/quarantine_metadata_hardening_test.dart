@@ -5,6 +5,7 @@ import 'package:broom/core/models/clean_models.dart';
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/platform/file_system.dart';
 import 'package:broom/core/platform/memory_file_system.dart';
+import 'package:broom/core/platform/path_semantics.dart';
 import 'package:broom/core/safety/path_guard.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -35,8 +36,8 @@ void main() {
   );
 
   String sessionPath([String child = '']) => child.isEmpty
-      ? p.windows.join(quarantineRoot, sessionId)
-      : p.windows.join(quarantineRoot, sessionId, child);
+      ? p.join(quarantineRoot, sessionId)
+      : p.join(quarantineRoot, sessionId, child);
 
   Map<String, Object?> validEntry({
     String originalPath = '$sourceRoot\\notes.txt',
@@ -87,10 +88,13 @@ void main() {
   setUp(() {
     fs = MemoryFileSystem();
     fs.seedDirectory(sourceRoot);
-    fs.seedDirectory(p.windows.join(quarantineRoot, sessionId, 'files'));
+    fs.seedDirectory(p.join(quarantineRoot, sessionId, 'files'));
     service = QuarantineService(
       quarantineRoot: quarantineRoot,
-      guard: PathGuard(protectedRoots: const []),
+      guard: PathGuard(
+        protectedRoots: const [],
+        semantics: const WindowsPathSemantics(),
+      ),
       metadataAccess: FakeFileMetadataAccess(),
       fileSystem: fs,
       clock: () => DateTime.utc(2026, 10, 19, 12),
@@ -172,10 +176,7 @@ void main() {
     );
     fs.seedFile('$sourceRoot\\notes.txt', contents: 'hello');
     seedJournal([validEntry(storedName: r'..\escape.txt')]);
-    fs.seedFile(
-      p.windows.join(sessionPath(), 'escape.txt'),
-      contents: 'left-behind',
-    );
+    fs.seedFile(p.join(sessionPath(), 'escape.txt'), contents: 'left-behind');
 
     await expectLater(
       service.resumeClean(sessionId),

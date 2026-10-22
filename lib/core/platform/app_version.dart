@@ -43,7 +43,7 @@ class StaticAppVersion implements AppVersionSource {
 
 AppVersionSource createAppVersionSource() {
   if (Platform.isWindows) return const MethodChannelAppVersion();
-  // Non-Windows platforms only see this build for development and tests; the
-  // constant in app_info.dart is the documented mirror of pubspec.yaml.
+  // Linux and non-desktop platforms use the constant in app_info.dart, which
+  // mirrors pubspec.yaml; Windows reads the version stamped into the runner.
   return const StaticAppVersion(broomAppVersion);
 }

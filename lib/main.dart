@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p;
 
 import 'app.dart';
 import 'core/clean/clean_history_store.dart';
@@ -18,6 +17,7 @@ import 'core/platform/app_version.dart';
 import 'core/platform/cleaner_platform.dart';
 import 'core/platform/file_lock_probe.dart';
 import 'core/platform/installed_apps.dart';
+import 'core/platform/path_semantics.dart';
 import 'core/platform/system_access.dart';
 import 'core/platform/system_cache_platform.dart';
 import 'core/rules/rule_catalog_store.dart';
@@ -57,12 +57,15 @@ void main(List<String> args) {
     return;
   }
 
-  final guard = PathGuard.forWindows(
-    environment: platform.environment,
-    additionalProtectedRoots: [quarantineRoot],
+  final semantics = platform.pathSemantics;
+  final appDataRoot = semantics.dirname(quarantineRoot);
+  final guard = PathGuard(
+    protectedRoots: [...platform.protectedRoots, quarantineRoot],
+    semantics: semantics,
   );
   final logger = AppLogger(
-    directoryPath: p.windows.join(p.windows.dirname(quarantineRoot), 'logs'),
+    directoryPath: semantics.join(appDataRoot, 'logs'),
+    semantics: semantics,
   );
   AppLogger.instance = logger;
   _installErrorLogging(logger);
@@ -71,7 +74,11 @@ void main(List<String> args) {
     'Broom 启动：平台 ${platform.displayName}，参数 ${args.isEmpty ? '无' : args.join(' ')}',
   );
   final exclusions = ExclusionStore(
-    filePath: ExclusionStore.defaultFilePath(quarantineRoot),
+    filePath: ExclusionStore.defaultFilePath(
+      quarantineRoot,
+      semantics: semantics,
+    ),
+    semantics: semantics,
   );
   final systemShell = createSystemShell();
   final quarantine = QuarantineService(
@@ -87,19 +94,34 @@ void main(List<String> args) {
         return null;
       }
     },
+    deviceIdProbe: Platform.isLinux
+        ? PosixFileMetadataAccess.deviceIds
+        : null,
     historyStore: CleanHistoryStore(
-      filePath: CleanHistoryStore.defaultFilePath(quarantineRoot),
+      filePath: CleanHistoryStore.defaultFilePath(
+        quarantineRoot,
+        semantics: semantics,
+      ),
+      semantics: semantics,
     ),
   );
   final retention = QuarantineRetentionService(
     quarantine: quarantine,
     store: QuarantinePolicyStore(
-      filePath: QuarantinePolicyStore.defaultFilePath(quarantineRoot),
+      filePath: QuarantinePolicyStore.defaultFilePath(
+        quarantineRoot,
+        semantics: semantics,
+      ),
+      semantics: semantics,
     ),
   );
   final settings = SettingsController(
     store: SettingsStore(
-      filePath: SettingsStore.defaultFilePath(quarantineRoot),
+      filePath: SettingsStore.defaultFilePath(
+        quarantineRoot,
+        semantics: semantics,
+      ),
+      semantics: semantics,
     ),
     logger: logger,
   );
@@ -111,16 +133,23 @@ void main(List<String> args) {
   );
 
   final catalogStore = RuleCatalogStore(
-    directoryPath: RuleCatalogStore.defaultDirectory(quarantineRoot),
+    directoryPath: RuleCatalogStore.defaultDirectory(
+      quarantineRoot,
+      semantics: semantics,
+    ),
+    builtinRules: platform.rules,
+    semantics: semantics,
   );
   final ntfsIndex = Platform.isWindows
       ? NtfsIndexClient()
       : const UnavailableNtfsIndex();
-  final leftoverService = LeftoverService(
-    installedApps: createInstalledApps(),
-    guard: guard,
-    exclusions: exclusions,
-  );
+  final leftoverService = Platform.isWindows
+      ? LeftoverService(
+          installedApps: createInstalledApps(),
+          guard: guard,
+          exclusions: exclusions,
+        )
+      : null;
   final controller = CleanController(
     platform: platform,
     guard: guard,
@@ -130,50 +159,57 @@ void main(List<String> args) {
     isRuleEnabled: settings.isRuleEnabled,
     scanSettings: () => settings.scanSettings,
     scanResultStore: ScanResultStore(
-      rootDirectory: p.windows.join(p.windows.dirname(quarantineRoot), 'scans'),
+      rootDirectory: semantics.join(appDataRoot, 'scans'),
+      semantics: semantics,
     ),
     ntfsIndex: ntfsIndex,
     lockProbe: createFileLockProbe(),
     logger: logger,
   );
-  final ruleUpdates = RuleUpdateController(
-    service: RuleUpdateService(
-      store: catalogStore,
-      signingKey: RuleUpdateService.compiledSigningKey,
-    ),
-    settings: settings,
-    onCatalogChanged: (catalog) {
-      if (platform is WindowsCleanerPlatform) {
-        platform.applyRuleCatalog(catalog.rules, catalog.version);
-      }
-      unawaited(controller.refreshRuleExclusionScopes());
-    },
-  );
+  final ruleUpdates = Platform.isWindows
+      ? RuleUpdateController(
+          service: RuleUpdateService(
+            store: catalogStore,
+            signingKey: RuleUpdateService.compiledSigningKey,
+          ),
+          settings: settings,
+          onCatalogChanged: (catalog) {
+            if (platform is WindowsCleanerPlatform) {
+              platform.applyRuleCatalog(catalog.rules, catalog.version);
+            }
+            unawaited(controller.refreshRuleExclusionScopes());
+          },
+        )
+      : null;
   unawaited(
     _initializeBroom(controller, retention).catchError((Object error) {
       logger.error('app', '启动初始化失败', error: error);
     }),
   );
 
-  final appUpdates = AppUpdateController(
-    versionSource: createAppVersionSource(),
-  );
-  unawaited(appUpdates.loadVersion());
+  final appUpdates = Platform.isWindows
+      ? AppUpdateController(versionSource: createAppVersionSource())
+      : null;
+  if (appUpdates != null) {
+    unawaited(appUpdates.loadVersion());
+  }
 
-  final systemAccess = createSystemAccess();
-  final systemCacheController = SystemCacheController(
-    platform: createSystemCachePlatform(access: systemAccess),
-    access: systemAccess,
-    cleaner: FileSystemCacheCleaner(services: WindowsServiceManager()),
-    quarantineRoot: quarantineRoot,
-    lockProbe: createFileLockProbe(),
-  );
-
-  _applyRuleCatalogAfterStartup(
-    catalogStore: catalogStore,
-    platform: platform,
-    onApplied: controller.refreshLastScanSummary,
-  );
+  SystemCacheController? systemCacheController;
+  if (Platform.isWindows) {
+    final systemAccess = createSystemAccess();
+    systemCacheController = SystemCacheController(
+      platform: createSystemCachePlatform(access: systemAccess),
+      access: systemAccess,
+      cleaner: FileSystemCacheCleaner(services: WindowsServiceManager()),
+      quarantineRoot: quarantineRoot,
+      lockProbe: createFileLockProbe(),
+    );
+    _applyRuleCatalogAfterStartup(
+      catalogStore: catalogStore,
+      platform: platform,
+      onApplied: controller.refreshLastScanSummary,
+    );
+  }
 
   _runBroom(
     BroomApp(
@@ -182,9 +218,13 @@ void main(List<String> args) {
       systemShell: systemShell,
       systemCacheController: systemCacheController,
       quarantineRetention: retention,
-      analysisInitialDirectory: _downloadsDirectory(platform.environment),
+      analysisInitialDirectory: _downloadsDirectory(
+        platform.environment,
+        semantics,
+      ),
       analysisExcludedPaths: [quarantineRoot],
-      startInSystemCache: args.contains('--system-cache'),
+      startInSystemCache:
+          Platform.isWindows && args.contains('--system-cache'),
       ruleUpdates: ruleUpdates,
       appUpdates: appUpdates,
       logger: logger,
@@ -260,7 +300,10 @@ Future<void> _initializeBroom(
   await controller.initialize();
 }
 
-String? _downloadsDirectory(Map<String, String> environment) {
+String? _downloadsDirectory(
+  Map<String, String> environment,
+  PathSemantics semantics,
+) {
   String? lookup(String name) {
     return environment[name] ??
         environment.entries
@@ -269,9 +312,50 @@ String? _downloadsDirectory(Map<String, String> environment) {
             .firstOrNull;
   }
 
-  final profile = lookup('USERPROFILE');
-  if (profile == null || profile.trim().isEmpty) return null;
-  return p.windows.join(profile, 'Downloads');
+  if (Platform.isWindows) {
+    final profile = lookup('USERPROFILE');
+    if (profile == null || profile.trim().isEmpty) return null;
+    return semantics.join(profile, 'Downloads');
+  }
+
+  final home = lookup('HOME');
+  if (home == null || home.trim().isEmpty) return null;
+
+  final configured = lookup('XDG_DOWNLOAD_DIR');
+  if (configured != null && semantics.isAbsolute(configured)) {
+    return semantics.normalize(semantics.absolute(configured));
+  }
+
+  final configHome =
+      lookup('XDG_CONFIG_HOME') ?? semantics.join(home, '.config');
+  final userDirs = File(
+    semantics.forIo(semantics.join(configHome, 'user-dirs.dirs')),
+  );
+  try {
+    if (userDirs.existsSync()) {
+      for (final line in userDirs.readAsLinesSync()) {
+        final trimmed = line.trim();
+        if (trimmed.startsWith('#')) continue;
+        final separator = trimmed.indexOf('=');
+        if (separator <= 0) continue;
+        if (trimmed.substring(0, separator).trim() != 'XDG_DOWNLOAD_DIR') {
+          continue;
+        }
+        final value = trimmed
+            .substring(separator + 1)
+            .trim()
+            .replaceAll('"', '')
+            .replaceAll(r'$HOME', home);
+        if (semantics.isAbsolute(value)) {
+          return semantics.normalize(semantics.absolute(value));
+        }
+      }
+    }
+  } catch (_) {
+    // A malformed user-dirs.dirs must not prevent the analysis page from
+    // opening; fall back to the conventional directory below.
+  }
+  return semantics.join(home, 'Downloads');
 }
 
 // The native runner registers the window channels while creating the view, so

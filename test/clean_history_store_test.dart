@@ -42,7 +42,7 @@ void main() {
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('broom_history_');
     store = CleanHistoryStore(
-      filePath: p.windows.join(temp.path, 'clean_history.json'),
+      filePath: p.join(temp.path, 'clean_history.json'),
     );
   });
 

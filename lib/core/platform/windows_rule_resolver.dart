@@ -3,11 +3,17 @@ import 'dart:io';
 import '../models/cleaner_rule.dart';
 import 'path_semantics.dart';
 
-class WindowsRuleResolver {
-  WindowsRuleResolver({
+/// Resolves declarative rule patterns into existing cache directories.
+///
+/// Windows patterns use `%VAR%` placeholders. POSIX patterns additionally use
+/// `$VAR`, `${VAR}` and a leading `~`. Wildcard expansion and containment use
+/// the injected [PathSemantics], so the same resolver works on both platforms.
+class RuleResolver {
+  RuleResolver({
     Map<String, String>? environment,
     this.maxWildcardMatches = 512,
     this.semantics = const WindowsPathSemantics(),
+    this.expandPosixVariables = false,
   }) : _environment = {
          for (final entry in (environment ?? Platform.environment).entries)
            entry.key.toLowerCase(): entry.value,
@@ -16,6 +22,7 @@ class WindowsRuleResolver {
   final Map<String, String> _environment;
   final int maxWildcardMatches;
   final PathSemantics semantics;
+  final bool expandPosixVariables;
 
   Future<List<String>> resolve(CleanerRule rule) async {
     final roots = <String>{};
@@ -38,6 +45,42 @@ class WindowsRuleResolver {
   }
 
   String? _expandEnvironment(String pattern) {
+    if (!expandPosixVariables) return _expandPercentVariables(pattern);
+
+    var expanded = pattern;
+    final home = _environment['home'];
+    if (expanded == '~') {
+      if (home == null || home.isEmpty) return null;
+      expanded = home;
+    } else if (expanded.startsWith('~/')) {
+      if (home == null || home.isEmpty) return null;
+      expanded = '$home/${expanded.substring(2)}';
+    }
+
+    var missing = false;
+    expanded = expanded.replaceAllMapped(RegExp(r'\$\{([^}]+)\}'), (match) {
+      final value = _environment[match.group(1)!.toLowerCase()];
+      if (value == null || value.isEmpty) {
+        missing = true;
+        return '';
+      }
+      return value;
+    });
+    expanded = expanded.replaceAllMapped(
+      RegExp(r'\$([A-Za-z_][A-Za-z0-9_]*)'),
+      (match) {
+        final value = _environment[match.group(1)!.toLowerCase()];
+        if (value == null || value.isEmpty) {
+          missing = true;
+          return '';
+        }
+        return value;
+      },
+    );
+    return missing ? null : expanded;
+  }
+
+  String? _expandPercentVariables(String pattern) {
     var missing = false;
     final expanded = pattern.replaceAllMapped(RegExp(r'%([^%]+)%'), (match) {
       final value = _environment[match.group(1)!.toLowerCase()];
@@ -118,4 +161,24 @@ class WindowsRuleResolver {
     buffer.write(r'$');
     return RegExp(buffer.toString(), caseSensitive: semantics.caseSensitive);
   }
+}
+
+/// Windows catalog resolver. Kept as a named entry for existing callers.
+class WindowsRuleResolver extends RuleResolver {
+  WindowsRuleResolver({
+    super.environment,
+    super.maxWildcardMatches,
+    super.semantics = const WindowsPathSemantics(),
+  }) : super(expandPosixVariables: false);
+}
+
+/// Resolves Linux/XDG rule patterns into existing directories.
+class PosixRuleResolver extends RuleResolver {
+  PosixRuleResolver({
+    super.environment,
+    super.maxWildcardMatches = 512,
+  }) : super(
+         semantics: const PosixPathSemantics(),
+         expandPosixVariables: true,
+       );
 }

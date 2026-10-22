@@ -92,7 +92,7 @@ void main() {
   });
 
   QuarantinePolicyStore createStore() => QuarantinePolicyStore(
-    filePath: p.windows.join(temp.path, 'quarantine_policy.json'),
+    filePath: p.join(temp.path, 'quarantine_policy.json'),
   );
 
   QuarantineRetentionService createRetention(

@@ -49,6 +49,7 @@ class HomePage extends StatefulWidget {
     this.ruleUpdates,
     this.appUpdates,
     this.logger,
+    this.showWindowsTools = true,
   });
 
   final CleanController controller;
@@ -63,6 +64,10 @@ class HomePage extends StatefulWidget {
   final RuleUpdateController? ruleUpdates;
   final AppUpdateController? appUpdates;
   final AppLogger? logger;
+
+  /// Hides features that only exist on Windows (system cache, recycle bin,
+  /// app/rule updates and NTFS indexing).
+  final bool showWindowsTools;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -243,6 +248,7 @@ class _HomePageState extends State<HomePage> {
                           quarantineCount: controller.pendingSessions.length,
                           showHistory:
                               controller.quarantine.historyStore != null,
+                          showWindowsTools: widget.showWindowsTools,
                           onSelected: _navigateTo,
                         ),
                       ),
@@ -310,7 +316,7 @@ class _HomePageState extends State<HomePage> {
           onOpenSystemCache: widget.systemCacheController == null
               ? null
               : _openSystemCache,
-          onOpenRecycleBin: _openRecycleBin,
+          onOpenRecycleBin: widget.showWindowsTools ? _openRecycleBin : null,
           onOpenDuplicateFinder: _openDuplicateFinder,
           onOpenLargeFiles: _openLargeFiles,
           onOpenExclusions: _openExclusions,
@@ -535,6 +541,7 @@ class _HomePageState extends State<HomePage> {
         if (cacheController == null) return null;
         return SystemCachePage(controller: cacheController);
       case AppSection.recycleBin:
+        if (!widget.showWindowsTools) return null;
         return RecycleBinPage(shell: widget.shell);
       case AppSection.duplicates:
         return DuplicateFinderPage(
@@ -571,6 +578,7 @@ class _HomePageState extends State<HomePage> {
           appUpdates: widget.appUpdates,
           onShowOnboarding: _showOnboarding,
           logger: widget.logger,
+          showWindowsOptions: widget.showWindowsTools,
         );
     }
   }
@@ -610,7 +618,7 @@ class _IdleView extends StatelessWidget {
 
   final CleanController controller;
   final VoidCallback onOpenQuarantine;
-  final VoidCallback onOpenRecycleBin;
+  final VoidCallback? onOpenRecycleBin;
   final VoidCallback onOpenDuplicateFinder;
   final VoidCallback onOpenLargeFiles;
   final VoidCallback onOpenExclusions;

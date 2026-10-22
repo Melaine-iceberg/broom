@@ -117,14 +117,14 @@ Future<_Sample> _write({
   required int batchSize,
 }) async {
   final store = ScanResultStore(
-    rootDirectory: p.windows.join(base.path, runName),
+    rootDirectory: p.join(base.path, runName),
     semantics: const WindowsPathSemantics(),
   );
   final roots = ScanRoots([
     for (final ruleId in _ruleIds)
       ScanRoot(
         ruleId: ruleId,
-        rootPath: p.windows.join(
+        rootPath: p.join(
           r'C:\Users\Bench\AppData\Local\Temp\cache',
           ruleId.replaceAll('.', '_'),
         ),
@@ -146,7 +146,7 @@ Future<_Sample> _write({
     batch.add(
       JunkItem(
         rootIndex: rootIndex,
-        path: p.windows.join(
+        path: p.join(
           roots.at(rootIndex).rootPath,
           'd${(index ~/ 4096) % 64}',
           'file${index.toString().padLeft(10, '0')}.tmp',
@@ -172,7 +172,7 @@ Future<_Sample> _write({
   );
   stopwatch.stop();
   final file = File(
-    p.windows.join(store.rootDirectory, summary.id, 'items.jsonl'),
+    p.join(store.rootDirectory, summary.id, 'items.jsonl'),
   );
   final sample = _Sample(
     elapsed: stopwatch.elapsed,
@@ -272,7 +272,7 @@ Future<_RawSample> _writeRaw({
   required String line,
 }) async {
   final file = File(
-    p.windows.join(
+    p.join(
       base.path,
       'raw_${round}_${config.label.replaceAll(RegExp(r'[^a-z0-9]+'), '_')}.dat',
     ),
@@ -337,14 +337,14 @@ Duration _measureEncode(int lineCount) {
 String _encodedLine(int index) {
   final rootIndex = index % _ruleIds.length;
   final ruleId = _ruleIds[rootIndex];
-  final rootPath = p.windows.join(
+  final rootPath = p.join(
     r'C:\Users\Bench\AppData\Local\Temp\cache',
     ruleId.replaceAll('.', '_'),
   );
   final line = jsonEncode({
     'ruleId': ruleId,
     'rootPath': rootPath,
-    'path': p.windows.join(
+    'path': p.join(
       rootPath,
       'd${(index ~/ 4096) % 64}',
       'file${index.toString().padLeft(10, '0')}.tmp',

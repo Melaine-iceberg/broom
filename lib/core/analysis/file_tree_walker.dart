@@ -1,11 +1,8 @@
 import 'dart:collection';
 import 'dart:io';
 
-import 'package:path/path.dart' as p;
-
 import '../platform/file_system.dart';
-import '../platform/windows_path.dart';
-import '../safety/path_guard.dart';
+import '../platform/path_semantics.dart';
 
 const defaultAnalysisMaxFiles = 200000;
 
@@ -50,7 +47,12 @@ class FileTreeWalker {
     this.maxFiles = defaultAnalysisMaxFiles,
     this.fileSystem = const IoFileSystem(),
     this.useDetailedListing = true,
-  }) : root = _normalize(root) {
+    PathSemantics? semantics,
+  }) : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform(),
+       root = _normalizeWith(
+         semantics ?? PathSemanticsFactory.forCurrentPlatform(),
+         root,
+       ) {
     for (final path in excludedPaths) {
       _excludedKeys.add(_key(path));
     }
@@ -61,11 +63,13 @@ class FileTreeWalker {
   final int maxFiles;
   final BroomFileSystem fileSystem;
   final bool useDetailedListing;
+  final PathSemantics semantics;
   final Set<String> _excludedKeys = {};
 
-  static String _normalize(String path) => PathGuard.normalize(path);
+  static String _normalizeWith(PathSemantics semantics, String path) =>
+      semantics.normalize(semantics.absolute(path));
 
-  static String _key(String path) => _normalize(path).toLowerCase();
+  String _key(String path) => semantics.key(path);
 
   Future<FileWalkResult> walk({
     required FileWalkVisitor onFile,
@@ -125,7 +129,7 @@ class FileTreeWalker {
               entry.type == FsEntityType.notFound) {
             continue;
           }
-          final path = WindowsPath.canonical(_join(directory, entry.name));
+          final path = semantics.canonical(_join(directory, entry.name));
           if (_isExcludedKey(_key(path))) continue;
           yield (
             path: path,
@@ -142,7 +146,7 @@ class FileTreeWalker {
             entry.type == FsEntityType.notFound) {
           continue;
         }
-        final path = WindowsPath.canonical(entry.path);
+        final path = semantics.canonical(entry.path);
         if (_isExcludedKey(_key(path))) continue;
         if (entry.type == FsEntityType.directory) {
           yield (
@@ -224,21 +228,17 @@ class FileTreeWalker {
 
   static final DateTime _epoch = DateTime.fromMillisecondsSinceEpoch(0);
 
-  static String _join(String directory, String name) {
-    final separator = p.windows.separator;
-    return directory.endsWith(separator) || directory.endsWith('/')
-        ? '$directory$name'
-        : '$directory$separator$name';
-  }
+  String _join(String directory, String name) =>
+      semantics.join(directory, name);
 
   bool _isExcludedKey(String key) =>
       _excludedKeys.any((excluded) => _isWithin(excluded, key));
 
-  static bool _isWithin(String rootKey, String candidateKey) {
+  bool _isWithin(String rootKey, String candidateKey) {
     if (candidateKey == rootKey) return true;
-    final prefix = rootKey.endsWith(p.windows.separator)
+    final prefix = rootKey.endsWith(semantics.separator)
         ? rootKey
-        : '$rootKey${p.windows.separator}';
+        : '$rootKey${semantics.separator}';
     return candidateKey.startsWith(prefix);
   }
 }

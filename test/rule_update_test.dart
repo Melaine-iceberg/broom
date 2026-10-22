@@ -44,7 +44,7 @@ void main() {
 
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('broom_rule_update_');
-    store = RuleCatalogStore(directoryPath: p.windows.join(temp.path, 'rules'));
+    store = RuleCatalogStore(directoryPath: p.join(temp.path, 'rules'));
     service = RuleUpdateService(
       store: store,
       signingKey: _key,
@@ -188,9 +188,9 @@ void main() {
   });
 
   test('corrupt active catalogs fall back to built-in rules', () async {
-    final directory = Directory(p.windows.join(temp.path, 'rules'));
+    final directory = Directory(p.join(temp.path, 'rules'));
     await directory.create(recursive: true);
-    await File(p.windows.join(directory.path, RuleCatalogStore.activeFileName))
+    await File(p.join(directory.path, RuleCatalogStore.activeFileName))
         .writeAsString('{not-json');
 
     final reloaded = RuleCatalogStore(directoryPath: directory.path);

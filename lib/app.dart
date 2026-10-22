@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart';
@@ -112,6 +114,7 @@ class _BroomAppState extends State<BroomApp> {
             ruleUpdates: widget.ruleUpdates,
             appUpdates: widget.appUpdates,
             logger: widget.logger,
+            showWindowsTools: Platform.isWindows,
           ),
         );
       },

@@ -7,6 +7,7 @@ import 'package:broom/core/models/leftover_models.dart';
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/platform/cleaner_platform.dart';
 import 'package:broom/core/platform/installed_apps.dart';
+import 'package:broom/core/platform/path_semantics.dart';
 import 'package:broom/core/safety/path_guard.dart';
 import 'package:broom/core/scan/ntfs_index.dart';
 import 'package:broom/core/scan/scan_result_store.dart';
@@ -38,6 +39,12 @@ class _TestPlatform implements CleanerPlatform {
 
   @override
   List<CleanerRule> get rules => definedRules;
+
+  @override
+  PathSemantics get pathSemantics => const WindowsPathSemantics();
+
+  @override
+  List<String> get protectedRoots => const [];
 
   @override
   String get rulesVersion => 'builtin';
@@ -149,14 +156,14 @@ void main() {
 
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('broom_leftover_controller_');
-    cacheDir = await Directory(p.windows.join(temp.path, 'cache'))
+    cacheDir = await Directory(p.join(temp.path, 'cache'))
         .create(recursive: true);
-    leftoverDir = await Directory(p.windows.join(temp.path, 'leftover'))
+    leftoverDir = await Directory(p.join(temp.path, 'leftover'))
         .create(recursive: true);
-    await File(p.windows.join(cacheDir.path, 'a.tmp')).writeAsString('1234');
-    await File(p.windows.join(leftoverDir.path, 'b.dat')).writeAsString('5678');
+    await File(p.join(cacheDir.path, 'a.tmp')).writeAsString('1234');
+    await File(p.join(leftoverDir.path, 'b.dat')).writeAsString('5678');
     exclusions = ExclusionStore(
-      filePath: p.windows.join(temp.path, 'exclusions.json'),
+      filePath: p.join(temp.path, 'exclusions.json'),
     );
     baseRule = const CleanerRule(
       id: 'test.cache',
@@ -185,13 +192,13 @@ void main() {
     final modified = DateTime(2026, 10, 21).microsecondsSinceEpoch;
     baseItem = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(cacheDir.path, 'a.tmp'),
+      path: p.join(cacheDir.path, 'a.tmp'),
       size: 4,
       modifiedMicros: modified,
     );
     leftoverItem = JunkItem(
       rootIndex: 1,
-      path: p.windows.join(leftoverDir.path, 'b.dat'),
+      path: p.join(leftoverDir.path, 'b.dat'),
       size: 4,
       modifiedMicros: modified,
     );
@@ -241,7 +248,7 @@ void main() {
 
   test('scans leftover rules but keeps them out of persistence', () async {
     final store = ScanResultStore(
-      rootDirectory: p.windows.join(temp.path, 'scan-results'),
+      rootDirectory: p.join(temp.path, 'scan-results'),
     );
     final first = createController(store: store);
 

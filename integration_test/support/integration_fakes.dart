@@ -1,6 +1,7 @@
 import 'package:broom/core/models/cleaner_rule.dart';
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/platform/cleaner_platform.dart';
+import 'package:broom/core/platform/path_semantics.dart';
 import 'package:broom/core/scan/ntfs_index.dart';
 import 'package:broom/core/scan/scan_service.dart';
 import 'package:broom/core/shell/system_shell.dart';
@@ -21,7 +22,7 @@ List<JunkItem> buildIntegrationItems(int count) {
     for (var index = 0; index < count; index++)
       JunkItem(
         rootIndex: 0,
-        path: p.windows.join(integrationRoot, 'item-$index.tmp'),
+        path: p.join(integrationRoot, 'item-$index.tmp'),
         size: 1024 + index,
         modifiedMicros: DateTime(2026, 10, 19).microsecondsSinceEpoch,
       ),
@@ -37,6 +38,12 @@ class IntegrationPlatform implements CleanerPlatform {
 
   @override
   bool get isSupported => true;
+
+  @override
+  PathSemantics get pathSemantics => PathSemanticsFactory.forCurrentPlatform();
+
+  @override
+  List<String> get protectedRoots => const [];
 
   @override
   String? get quarantineRoot => null;

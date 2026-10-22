@@ -1,9 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path/path.dart' as p;
-
 import '../models/cleaner_rule.dart';
+import '../platform/path_semantics.dart';
 import 'rule_catalog.dart';
 import 'windows_rules.dart';
 
@@ -16,12 +15,14 @@ class RuleCatalogStore {
   RuleCatalogStore({
     required this.directoryPath,
     List<CleanerRule>? builtinRules,
-  }) : builtin = RuleCatalog(
+    PathSemantics? semantics,
+  }) : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform(),
+       builtin = RuleCatalog(
          version: 'builtin',
          source: 'builtin',
          rules: builtinRules ?? windowsCleanupRules,
        ) {
-    if (!p.windows.isAbsolute(directoryPath)) {
+    if (!this.semantics.isAbsolute(directoryPath)) {
       throw ArgumentError.value(directoryPath, 'directoryPath', '规则目录必须是绝对路径');
     }
     _current = builtin;
@@ -30,10 +31,16 @@ class RuleCatalogStore {
   static const activeFileName = 'active.json';
   static const previousFileName = 'previous.json';
 
-  static String defaultDirectory(String quarantineRoot) =>
-      p.windows.join(p.windows.dirname(quarantineRoot), 'rules');
+  static String defaultDirectory(
+    String quarantineRoot, {
+    PathSemantics? semantics,
+  }) {
+    final paths = semantics ?? PathSemanticsFactory.forCurrentPlatform();
+    return paths.join(paths.dirname(quarantineRoot), 'rules');
+  }
 
   final String directoryPath;
+  final PathSemantics semantics;
   final RuleCatalog builtin;
 
   late RuleCatalog _current;
@@ -42,8 +49,8 @@ class RuleCatalogStore {
   RuleCatalog get current => _current;
   String? get loadError => _loadError;
 
-  String get activePath => p.windows.join(directoryPath, activeFileName);
-  String get previousPath => p.windows.join(directoryPath, previousFileName);
+  String get activePath => semantics.join(directoryPath, activeFileName);
+  String get previousPath => semantics.join(directoryPath, previousFileName);
 
   bool get hasPrevious => File(previousPath).existsSync();
 

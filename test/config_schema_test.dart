@@ -1,5 +1,6 @@
 import 'package:broom/core/models/app_settings.dart';
 import 'package:broom/core/models/quarantine_policy_models.dart';
+import 'package:broom/core/platform/path_semantics.dart';
 import 'package:broom/core/settings/config_schema.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -141,7 +142,7 @@ void main() {
         final paths = decodeExclusionsDocument({
           'schemaVersion': 1,
           'paths': [r'C:\Temp\Keep\', r'C:\Offline\Cache', r'c:\temp\keep'],
-        });
+        }, semantics: const WindowsPathSemantics());
 
         expect(paths, [r'C:\Offline\Cache', r'C:\Temp\Keep']);
       },
@@ -154,7 +155,7 @@ void main() {
             'schemaVersion': 2,
             'kind': exclusionsDocumentKind,
             'paths': [path],
-          }),
+          }, semantics: const WindowsPathSemantics()),
           throwsA(isA<FormatException>()),
           reason: path,
         );

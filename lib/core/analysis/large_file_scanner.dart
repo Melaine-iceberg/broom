@@ -1,5 +1,6 @@
 import '../models/analysis_models.dart';
 import '../platform/file_system.dart';
+import '../platform/path_semantics.dart';
 import 'file_tree_walker.dart';
 
 const defaultLargeFileMinSize = 100 * 1024 * 1024;
@@ -15,7 +16,8 @@ class LargeFileScanner {
     this.excludedPaths = const [],
     this.fileSystem = const IoFileSystem(),
     this.useDetailedListing = true,
-  });
+    PathSemantics? semantics,
+  }) : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform();
 
   final String root;
   final int minFileSize;
@@ -24,6 +26,7 @@ class LargeFileScanner {
   final List<String> excludedPaths;
   final BroomFileSystem fileSystem;
   final bool useDetailedListing;
+  final PathSemantics semantics;
 
   Future<LargeFileScanReport> scan({
     void Function(LargeFileProgress progress)? onProgress,
@@ -38,6 +41,7 @@ class LargeFileScanner {
           maxFiles: maxFiles,
           fileSystem: fileSystem,
           useDetailedListing: useDetailedListing,
+          semantics: semantics,
         ).walk(
           onFile: (path, stat) {
             if (stat.size < minFileSize) return;

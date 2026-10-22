@@ -1,18 +1,22 @@
 import 'dart:io';
 
-import 'package:path/path.dart' as p;
-
 import '../platform/path_semantics.dart';
-import '../platform/windows_path.dart';
 
 class PathGuard {
-  PathGuard({
-    required List<String> protectedRoots,
-    this.semantics = const WindowsPathSemantics(),
-  }) : _protectedRoots = protectedRoots
-           .where((root) => root.trim().isNotEmpty)
-           .map(semantics.key)
-           .toList();
+  PathGuard({required List<String> protectedRoots, PathSemantics? semantics})
+    : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform(),
+      _protectedRoots = _normalizeRoots(
+        protectedRoots,
+        semantics ?? PathSemanticsFactory.forCurrentPlatform(),
+      );
+
+  static List<String> _normalizeRoots(
+    List<String> protectedRoots,
+    PathSemantics semantics,
+  ) => protectedRoots
+      .where((root) => root.trim().isNotEmpty)
+      .map(semantics.key)
+      .toList();
 
   factory PathGuard.forWindows({
     Map<String, String>? environment,
@@ -38,6 +42,33 @@ class PathGuard {
           ?lookup(name),
         ...additionalProtectedRoots,
       ],
+      semantics: const WindowsPathSemantics(),
+    );
+  }
+
+  factory PathGuard.forPosix({
+    List<String> additionalProtectedRoots = const [],
+  }) {
+    return PathGuard(
+      protectedRoots: [
+        '/usr',
+        '/etc',
+        '/boot',
+        '/dev',
+        '/proc',
+        '/sys',
+        '/run',
+        '/bin',
+        '/sbin',
+        '/lib',
+        '/lib64',
+        '/opt',
+        '/var',
+        '/snap',
+        '/nix',
+        ...additionalProtectedRoots,
+      ],
+      semantics: const PosixPathSemantics(),
     );
   }
 
@@ -50,8 +81,10 @@ class PathGuard {
 
   /// Retained for persisted records created before path semantics were
   /// injectable. Prefer [PathSemantics.key] in new code.
-  static String normalize(String path) =>
-      p.windows.normalize(p.windows.absolute(WindowsPath.canonical(path)));
+  static String normalize(String path) {
+    final semantics = PathSemanticsFactory.forCurrentPlatform();
+    return semantics.normalize(semantics.absolute(semantics.canonical(path)));
+  }
 
   bool isWithin(String root, String candidate) =>
       semantics.isWithin(root, candidate);

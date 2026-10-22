@@ -20,7 +20,7 @@ void main() {
   });
 
   QuarantinePolicyStore createStore() => QuarantinePolicyStore(
-    filePath: p.windows.join(temp.path, 'config', 'quarantine_policy.json'),
+    filePath: p.join(temp.path, 'config', 'quarantine_policy.json'),
   );
 
   test('returns defaults when no policy file exists', () async {

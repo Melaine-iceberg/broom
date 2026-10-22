@@ -6,6 +6,7 @@ import 'package:broom/core/models/cleaner_rule.dart';
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/platform/cleaner_platform.dart';
 import 'package:broom/core/platform/file_lock_probe.dart';
+import 'package:broom/core/platform/path_semantics.dart';
 import 'package:broom/core/safety/path_guard.dart';
 import 'package:broom/core/scan/ntfs_index.dart';
 import 'package:broom/core/scan/scan_result_store.dart';
@@ -37,6 +38,12 @@ class _TestPlatform implements CleanerPlatform {
 
   @override
   List<CleanerRule> get rules => definedRules;
+
+  @override
+  PathSemantics get pathSemantics => const WindowsPathSemantics();
+
+  @override
+  List<String> get protectedRoots => const [];
 
   @override
   String get rulesVersion => 'builtin';
@@ -167,9 +174,9 @@ void main() {
 
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('broom_clean_controller_');
-    rulesRoot = Directory(p.windows.join(temp.path, 'rules'));
-    rootA = Directory(p.windows.join(rulesRoot.path, 'a'));
-    rootB = Directory(p.windows.join(rulesRoot.path, 'b'));
+    rulesRoot = Directory(p.join(temp.path, 'rules'));
+    rootA = Directory(p.join(rulesRoot.path, 'a'));
+    rootB = Directory(p.join(rulesRoot.path, 'b'));
     await rootA.create(recursive: true);
     await rootB.create(recursive: true);
   });
@@ -181,7 +188,7 @@ void main() {
   });
 
   ExclusionStore createStore() => ExclusionStore(
-    filePath: p.windows.join(temp.path, 'settings', 'exclusions.json'),
+    filePath: p.join(temp.path, 'settings', 'exclusions.json'),
   );
 
   CleanerRule createRule({
@@ -238,7 +245,7 @@ void main() {
       );
     final item = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(rootA.path, 'a.tmp'),
+      path: p.join(rootA.path, 'a.tmp'),
       size: 2048,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
@@ -435,13 +442,13 @@ void main() {
     final exclusions = createStore();
     final first = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(rootA.path, 'first.tmp'),
+      path: p.join(rootA.path, 'first.tmp'),
       size: 10,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     final second = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(rootA.path, 'second.tmp'),
+      path: p.join(rootA.path, 'second.tmp'),
       size: 25,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
@@ -511,7 +518,7 @@ void main() {
       bool locked = false,
     }) => JunkItem(
       rootIndex: rule.id == safeRule.id ? 0 : 1,
-      path: p.windows.join(rootA.path, name),
+      path: p.join(rootA.path, name),
       size: size,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
       possiblyLocked: locked,
@@ -620,13 +627,13 @@ void main() {
     final rule = createRule();
     final first = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(rootA.path, 'first.tmp'),
+      path: p.join(rootA.path, 'first.tmp'),
       size: 10,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     final second = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(rootA.path, 'second.tmp'),
+      path: p.join(rootA.path, 'second.tmp'),
       size: 25,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
@@ -658,13 +665,13 @@ void main() {
     final reviewRule = createRule(id: 'test.review', risk: CleanRisk.review);
     final safeItem = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(rootA.path, 'safe.tmp'),
+      path: p.join(rootA.path, 'safe.tmp'),
       size: 10,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     final reviewItem = JunkItem(
       rootIndex: 1,
-      path: p.windows.join(rootB.path, 'review.tmp'),
+      path: p.join(rootB.path, 'review.tmp'),
       size: 25,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
@@ -733,13 +740,13 @@ void main() {
     () async {
       final first = JunkItem(
         rootIndex: 0,
-        path: p.windows.join(rootA.path, 'first.tmp'),
+        path: p.join(rootA.path, 'first.tmp'),
         size: 10,
         modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
       );
       final second = JunkItem(
         rootIndex: 0,
-        path: p.windows.join(rootA.path, 'second.tmp'),
+        path: p.join(rootA.path, 'second.tmp'),
         size: 25,
         modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
       );
@@ -785,7 +792,7 @@ void main() {
   test('keeps preview usable when lock probing is unavailable', () async {
     final item = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(rootA.path, 'file.tmp'),
+      path: p.join(rootA.path, 'file.tmp'),
       size: 10,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
@@ -845,14 +852,14 @@ void main() {
   test('persists results and restores them after restart', () async {
     final item = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(rootA.path, 'saved.tmp'),
+      path: p.join(rootA.path, 'saved.tmp'),
       size: 42,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     final scanner = _RecordingScanService(items: [item]);
     final rule = createRule();
     final store = ScanResultStore(
-      rootDirectory: p.windows.join(temp.path, 'scan-results'),
+      rootDirectory: p.join(temp.path, 'scan-results'),
     );
     final exclusions = createStore();
     final first = createController(
@@ -930,7 +937,7 @@ void main() {
     await exclusions.ensureLoaded();
     final item = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(rootA.path, 'cache.tmp'),
+      path: p.join(rootA.path, 'cache.tmp'),
       size: 42,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
@@ -963,25 +970,25 @@ void main() {
     final items = [
       JunkItem(
         rootIndex: 0,
-        path: p.windows.join(rootA.path, 'b.LOG'),
+        path: p.join(rootA.path, 'b.LOG'),
         size: 10,
         modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
       ),
       JunkItem(
         rootIndex: 0,
-        path: p.windows.join(rootA.path, 'a.tmp'),
+        path: p.join(rootA.path, 'a.tmp'),
         size: 20,
         modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
       ),
       JunkItem(
         rootIndex: 0,
-        path: p.windows.join(rootA.path, 'c.tmp'),
+        path: p.join(rootA.path, 'c.tmp'),
         size: 30,
         modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
       ),
       JunkItem(
         rootIndex: 0,
-        path: p.windows.join(rootA.path, 'no-extension'),
+        path: p.join(rootA.path, 'no-extension'),
         size: 40,
         modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
       ),
@@ -1006,7 +1013,7 @@ void main() {
     final exclusions = createStore();
     final item = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(rootA.path, 'busy.tmp'),
+      path: p.join(rootA.path, 'busy.tmp'),
       size: 10,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
@@ -1055,7 +1062,7 @@ void main() {
     final exclusions = createStore();
     final item = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(rootA.path, 'scanning.tmp'),
+      path: p.join(rootA.path, 'scanning.tmp'),
       size: 10,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:broom/core/models/cleaner_rule.dart';
 import 'package:broom/core/platform/cleaner_platform.dart';
+import 'package:broom/core/platform/path_semantics.dart';
 import 'package:broom/core/safety/path_guard.dart';
 import 'package:broom/core/settings/exclusion_store.dart';
 import 'package:broom/core/shell/system_shell.dart';
@@ -28,6 +29,12 @@ class _PagePlatform implements CleanerPlatform {
 
   @override
   List<CleanerRule> get rules => const [];
+
+  @override
+  PathSemantics get pathSemantics => const WindowsPathSemantics();
+
+  @override
+  List<String> get protectedRoots => const [];
 
   @override
   String get rulesVersion => 'builtin';
@@ -86,7 +93,7 @@ void main() {
   });
 
   ExclusionStore createStore() => ExclusionStore(
-    filePath: p.windows.join(temp.path, 'settings', 'exclusions.json'),
+    filePath: p.join(temp.path, 'settings', 'exclusions.json'),
   );
 
   CleanController createController(ExclusionStore exclusions) {
@@ -101,7 +108,7 @@ void main() {
   testWidgets('adds and removes an exclusion through the folder picker', (
     tester,
   ) async {
-    final keep = Directory(p.windows.join(temp.path, 'keep'));
+    final keep = Directory(p.join(temp.path, 'keep'));
     keep.createSync(recursive: true);
     final controller = createController(createStore());
     addTearDown(controller.dispose);

@@ -29,12 +29,12 @@ void main() {
 
   setUp(() async {
     tempRoot = await Directory.systemTemp.createTemp('broom_catalog_test_');
-    final roaming = await Directory(p.windows.join(tempRoot.path, 'Roaming'))
+    final roaming = await Directory(p.join(tempRoot.path, 'Roaming'))
         .create(recursive: true);
-    final local = await Directory(p.windows.join(tempRoot.path, 'Local'))
+    final local = await Directory(p.join(tempRoot.path, 'Local'))
         .create(recursive: true);
     final programFiles = await Directory(
-      p.windows.join(tempRoot.path, 'ProgramFiles'),
+      p.join(tempRoot.path, 'ProgramFiles'),
     ).create(recursive: true);
     environment = {
       'appdata': roaming.path,
@@ -72,7 +72,7 @@ void main() {
           .split(RegExp(r'[\\/]'))
           .last
           .replaceAll(RegExp(r'[*?]'), '1');
-      final dir = Directory(p.windows.join(p.windows.dirname(path), leaf));
+      final dir = Directory(p.join(p.windows.dirname(path), leaf));
       await dir.create(recursive: true);
       return dir.path;
     }

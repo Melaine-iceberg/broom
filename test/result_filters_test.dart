@@ -14,7 +14,7 @@ JunkItem _item(
 }) {
   return JunkItem(
     rootIndex: 0,
-    path: p.windows.join(root, name),
+    path: p.join(root, name),
     size: size,
     modifiedMicros: (modified ?? DateTime(2026, 1, 1)).microsecondsSinceEpoch,
     possiblyLocked: locked,

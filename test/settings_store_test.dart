@@ -22,7 +22,7 @@ void main() {
   });
 
   SettingsStore createStore() =>
-      SettingsStore(filePath: p.windows.join(temp.path, 'settings.json'));
+      SettingsStore(filePath: p.join(temp.path, 'settings.json'));
 
   test('returns defaults and marks a fresh profile when no file exists', () {
     final settings = createStore().load();
@@ -45,7 +45,7 @@ void main() {
   });
 
   test('treats older settings files without the guide flag as returning', () {
-    final file = File(p.windows.join(temp.path, 'settings.json'));
+    final file = File(p.join(temp.path, 'settings.json'));
     file.parent.createSync(recursive: true);
     file.writeAsStringSync(
       jsonEncode({'schemaVersion': 1, 'theme': 'system', 'language': 'zh'}),
@@ -55,7 +55,7 @@ void main() {
   });
 
   test('migrates v1 settings and writes the v2 envelope on save', () async {
-    final file = File(p.windows.join(temp.path, 'settings.json'));
+    final file = File(p.join(temp.path, 'settings.json'));
     file.parent.createSync(recursive: true);
     file.writeAsStringSync(
       jsonEncode({
@@ -144,7 +144,7 @@ void main() {
   test(
     'restore clears a previous load error after rewriting the file',
     () async {
-      final file = File(p.windows.join(temp.path, 'settings.json'));
+      final file = File(p.join(temp.path, 'settings.json'));
       file.parent.createSync(recursive: true);
       file.writeAsStringSync('{broken');
       final controller = SettingsController(store: createStore());
@@ -178,7 +178,7 @@ void main() {
   });
 
   test('rejects unknown schema and invalid values', () async {
-    final file = File(p.windows.join(temp.path, 'settings.json'));
+    final file = File(p.join(temp.path, 'settings.json'));
     file.parent.createSync(recursive: true);
     file.writeAsStringSync('{"schemaVersion": 99}');
 
@@ -192,7 +192,7 @@ void main() {
   });
 
   test('controller falls back to defaults when loading fails', () {
-    final file = File(p.windows.join(temp.path, 'settings.json'));
+    final file = File(p.join(temp.path, 'settings.json'));
     file.parent.createSync(recursive: true);
     file.writeAsStringSync('{broken');
     final controller = SettingsController(store: createStore());
@@ -206,7 +206,7 @@ void main() {
   });
 
   test('controller rolls back changes when saving fails', () async {
-    final filePath = p.windows.join(temp.path, 'settings.json');
+    final filePath = p.join(temp.path, 'settings.json');
     Directory(filePath).createSync(recursive: true);
     final controller = SettingsController(
       store: SettingsStore(filePath: filePath),

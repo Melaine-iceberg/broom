@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:broom/core/analysis/large_file_scanner.dart';
 import 'package:broom/core/models/analysis_models.dart';
 import 'package:broom/core/platform/memory_file_system.dart';
+import 'package:broom/core/platform/path_semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -139,6 +140,7 @@ void main() {
       root: r'C:\large',
       minFileSize: 100,
       fileSystem: fs,
+      semantics: const WindowsPathSemantics(),
     ).scan();
 
     expect(report.files.single.path, r'C:\large\huge.bin');

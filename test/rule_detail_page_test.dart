@@ -6,6 +6,7 @@ import 'package:broom/core/models/cleaner_rule.dart';
 import 'package:broom/core/models/scan_models.dart';
 import 'package:broom/core/platform/cleaner_platform.dart';
 import 'package:broom/core/platform/file_lock_probe.dart';
+import 'package:broom/core/platform/path_semantics.dart';
 import 'package:broom/core/safety/path_guard.dart';
 import 'package:broom/core/scan/ntfs_index.dart';
 import 'package:broom/core/scan/scan_service.dart';
@@ -39,6 +40,12 @@ class _Platform implements CleanerPlatform {
 
   @override
   String? get quarantineRoot => null;
+
+  @override
+  PathSemantics get pathSemantics => const WindowsPathSemantics();
+
+  @override
+  List<String> get protectedRoots => const [];
 
   @override
   String get rulesVersion => 'builtin';
@@ -142,17 +149,17 @@ void main() {
     addTearDown(() {
       if (temp.existsSync()) temp.deleteSync(recursive: true);
     });
-    final root = Directory(p.windows.join(temp.path, 'cache'))
+    final root = Directory(p.join(temp.path, 'cache'))
       ..createSync(recursive: true);
     final first = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(root.path, 'first.tmp'),
+      path: p.join(root.path, 'first.tmp'),
       size: 10,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     final second = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(root.path, 'second.tmp'),
+      path: p.join(root.path, 'second.tmp'),
       size: 25,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
@@ -164,7 +171,7 @@ void main() {
       pathPatterns: [],
     );
     final exclusions = ExclusionStore(
-      filePath: p.windows.join(temp.path, 'exclusions.json'),
+      filePath: p.join(temp.path, 'exclusions.json'),
     );
     await exclusions.ensureLoaded();
     final controller = CleanController(
@@ -240,17 +247,17 @@ void main() {
     addTearDown(() {
       if (temp.existsSync()) temp.deleteSync(recursive: true);
     });
-    final root = Directory(p.windows.join(temp.path, 'cache'))
+    final root = Directory(p.join(temp.path, 'cache'))
       ..createSync(recursive: true);
     final small = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(root.path, 'small.tmp'),
+      path: p.join(root.path, 'small.tmp'),
       size: 10,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
     final large = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(root.path, 'large.tmp'),
+      path: p.join(root.path, 'large.tmp'),
       size: 25,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
@@ -262,7 +269,7 @@ void main() {
       pathPatterns: [],
     );
     final exclusions = ExclusionStore(
-      filePath: p.windows.join(temp.path, 'exclusions.json'),
+      filePath: p.join(temp.path, 'exclusions.json'),
     );
     await exclusions.ensureLoaded();
     final probe = _DeferredLockProbe();
@@ -320,11 +327,11 @@ void main() {
     addTearDown(() {
       if (temp.existsSync()) temp.deleteSync(recursive: true);
     });
-    final root = Directory(p.windows.join(temp.path, 'cache'))
+    final root = Directory(p.join(temp.path, 'cache'))
       ..createSync(recursive: true);
     final locked = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(root.path, 'locked.tmp'),
+      path: p.join(root.path, 'locked.tmp'),
       size: 10,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
       possiblyLocked: true,
@@ -337,7 +344,7 @@ void main() {
       pathPatterns: [],
     );
     final exclusions = ExclusionStore(
-      filePath: p.windows.join(temp.path, 'exclusions.json'),
+      filePath: p.join(temp.path, 'exclusions.json'),
     );
     await exclusions.ensureLoaded();
     final controller = CleanController(
@@ -378,11 +385,11 @@ void main() {
     addTearDown(() {
       if (temp.existsSync()) temp.deleteSync(recursive: true);
     });
-    final root = Directory(p.windows.join(temp.path, 'cache'))
+    final root = Directory(p.join(temp.path, 'cache'))
       ..createSync(recursive: true);
     final item = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(root.path, 'cache.tmp'),
+      path: p.join(root.path, 'cache.tmp'),
       size: 10,
       modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
     );
@@ -413,7 +420,7 @@ void main() {
       audit: audit,
     );
     final exclusions = ExclusionStore(
-      filePath: p.windows.join(temp.path, 'exclusions.json'),
+      filePath: p.join(temp.path, 'exclusions.json'),
     );
     await exclusions.ensureLoaded();
     final controller = CleanController(
@@ -462,23 +469,23 @@ void main() {
     addTearDown(() {
       if (temp.existsSync()) temp.deleteSync(recursive: true);
     });
-    final root = Directory(p.windows.join(temp.path, 'cache'))
+    final root = Directory(p.join(temp.path, 'cache'))
       ..createSync(recursive: true);
     final first = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(root.path, 'first.tmp'),
+      path: p.join(root.path, 'first.tmp'),
       size: 10,
       modifiedMicros: DateTime(2026, 1, 1).microsecondsSinceEpoch,
     );
     final second = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(root.path, 'second.bin'),
+      path: p.join(root.path, 'second.bin'),
       size: 25,
       modifiedMicros: DateTime(2026, 6, 1).microsecondsSinceEpoch,
     );
     final third = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(root.path, 'third.tmp'),
+      path: p.join(root.path, 'third.tmp'),
       size: 40,
       modifiedMicros: DateTime(2026, 3, 1).microsecondsSinceEpoch,
     );
@@ -492,7 +499,7 @@ void main() {
       extensions: {'tmp', 'bin'},
     );
     final exclusions = ExclusionStore(
-      filePath: p.windows.join(temp.path, 'exclusions.json'),
+      filePath: p.join(temp.path, 'exclusions.json'),
     );
     await exclusions.ensureLoaded();
     final controller = CleanController(
@@ -536,7 +543,7 @@ void main() {
 
     await tester.enterText(
       find.byKey(const ValueKey('rule-file-search')),
-      'tmp',
+      '.tmp',
     );
     await tester.pumpAndSettle();
     expect(rowOf(first), findsOneWidget);
@@ -604,11 +611,11 @@ void main() {
     addTearDown(() {
       if (temp.existsSync()) temp.deleteSync(recursive: true);
     });
-    final root = Directory(p.windows.join(temp.path, 'cache'))
+    final root = Directory(p.join(temp.path, 'cache'))
       ..createSync(recursive: true);
     final item = JunkItem(
       rootIndex: 0,
-      path: p.windows.join(root.path, 'gone.tmp'),
+      path: p.join(root.path, 'gone.tmp'),
       size: 10,
       modifiedMicros: DateTime(2026, 1, 1).microsecondsSinceEpoch,
     );
@@ -620,7 +627,7 @@ void main() {
       pathPatterns: [],
     );
     final exclusions = ExclusionStore(
-      filePath: p.windows.join(temp.path, 'exclusions.json'),
+      filePath: p.join(temp.path, 'exclusions.json'),
     );
     await exclusions.ensureLoaded();
     final controller = CleanController(

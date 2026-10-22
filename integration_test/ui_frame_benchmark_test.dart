@@ -35,7 +35,7 @@ void main() {
       guard: PathGuard(protectedRoots: const []),
       quarantine: FakeQuarantineService(),
       exclusions: ExclusionStore(
-        filePath: p.windows.join(r'C:\Integration', 'frame-exclusions.json'),
+        filePath: p.join(r'C:\Integration', 'frame-exclusions.json'),
       ),
       scanServiceFactory: () => IntegrationScanService(items: items),
     );

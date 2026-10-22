@@ -64,10 +64,12 @@ const leftoverCategoryLabelEn = 'Uninstall leftovers';
 /// persisted settings. Localized labels remain on [CleanerRule.category].
 String ruleCategoryKey(CleanerRule rule) {
   if (rule.id == 'windows.thumbnail_icon_cache') return 'thumbnails';
+  if (rule.id == 'system.linux_thumbnails') return 'thumbnails';
   if (rule.id == 'browser.extension_scripts') return 'browser_extension';
   if (rule.id.startsWith(leftoverRuleIdPrefix)) return leftoverCategoryKey;
   return switch (rule.id.split('.').first) {
     'windows' => 'system',
+    'system' => 'system',
     'browser' => 'browser',
     'dev' => 'dev',
     'app' => 'app',

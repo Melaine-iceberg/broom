@@ -1,10 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path/path.dart' as p;
-
+import '../platform/path_semantics.dart';
 import '../safety/path_exclusions.dart';
-import '../safety/path_guard.dart';
 import 'config_schema.dart';
 
 class ExclusionException implements Exception {
@@ -17,20 +15,27 @@ class ExclusionException implements Exception {
 }
 
 class ExclusionStore implements PathExclusionSource {
-  ExclusionStore({required this.filePath}) {
-    if (!p.windows.isAbsolute(filePath)) {
+  ExclusionStore({
+    required this.filePath,
+    PathSemantics? semantics,
+  }) : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform() {
+    if (!this.semantics.isAbsolute(filePath)) {
       throw ArgumentError.value(filePath, 'filePath', '排除列表路径必须是绝对路径');
     }
+    _exclusions = PathExclusions.empty(semantics: this.semantics);
   }
 
   static const fileName = 'exclusions.json';
 
-  static String defaultFilePath(String quarantineRoot) =>
-      p.windows.join(p.windows.dirname(quarantineRoot), fileName);
+  static String defaultFilePath(String quarantineRoot, {PathSemantics? semantics}) {
+    final paths = semantics ?? PathSemanticsFactory.forCurrentPlatform();
+    return paths.join(paths.dirname(quarantineRoot), fileName);
+  }
 
   final String filePath;
+  final PathSemantics semantics;
 
-  PathExclusions _exclusions = PathExclusions.empty();
+  late PathExclusions _exclusions;
   Future<void>? _loading;
   bool _loaded = false;
   String? _loadError;
@@ -63,12 +68,13 @@ class ExclusionStore implements PathExclusionSource {
       throw ExclusionException('只能排除文件夹：$normalized');
     }
     if (_exclusions.paths.any(
-      (existing) => PathExclusions.overlaps(existing, normalized),
+      (existing) =>
+          PathExclusions.overlaps(existing, normalized, semantics: semantics),
     )) {
       throw const ExclusionException('该文件夹与已有排除项重叠，请先移除已有排除项。');
     }
 
-    final next = PathExclusions([...paths, normalized]);
+    final next = PathExclusions([...paths, normalized], semantics: semantics);
     await _save(next);
     _exclusions = next;
     _loadError = null;
@@ -80,14 +86,14 @@ class ExclusionStore implements PathExclusionSource {
     final remaining = paths.where((existing) => _key(existing) != key).toList();
     if (remaining.length == paths.length) return;
 
-    final next = PathExclusions(remaining);
+    final next = PathExclusions(remaining, semantics: semantics);
     await _save(next);
     _exclusions = next;
     _loadError = null;
   }
 
   Future<void> reset() async {
-    final next = PathExclusions.empty();
+    final next = PathExclusions.empty(semantics: semantics);
     await _save(next);
     _exclusions = next;
     _loaded = true;
@@ -107,14 +113,15 @@ class ExclusionStore implements PathExclusionSource {
       final path = _normalizeAbsolute(rawPath);
       if (!keys.add(_key(path))) continue;
       if (normalized.any(
-        (existing) => PathExclusions.overlaps(existing, path),
+        (existing) =>
+            PathExclusions.overlaps(existing, path, semantics: semantics),
       )) {
         throw ExclusionException('导入的排除项互相重叠，请先整理后重试：$path');
       }
       normalized.add(path);
     }
 
-    final next = PathExclusions(normalized);
+    final next = PathExclusions(normalized, semantics: semantics);
     await _save(next);
     _exclusions = next;
     _loaded = true;
@@ -125,7 +132,7 @@ class ExclusionStore implements PathExclusionSource {
     try {
       final file = File(filePath);
       if (!file.existsSync()) {
-        _exclusions = PathExclusions.empty();
+        _exclusions = PathExclusions.empty(semantics: semantics);
         _loaded = true;
         _loadError = null;
         return;
@@ -135,7 +142,10 @@ class ExclusionStore implements PathExclusionSource {
       if (value is! Map<String, dynamic>) {
         throw const FormatException('排除列表格式无效');
       }
-      _exclusions = PathExclusions(decodeExclusionsDocument(value));
+      _exclusions = PathExclusions(
+        decodeExclusionsDocument(value, semantics: semantics),
+        semantics: semantics,
+      );
       _loaded = true;
       _loadError = null;
     } on FormatException catch (error) {
@@ -171,20 +181,20 @@ class ExclusionStore implements PathExclusionSource {
     }
   }
 
-  static String _normalizeAbsolute(String rawPath) {
+  String _normalizeAbsolute(String rawPath) {
     final trimmed = rawPath.trim();
     if (trimmed.isEmpty) {
       throw const ExclusionException('排除路径不能为空。');
     }
-    if (!p.windows.isAbsolute(trimmed)) {
+    if (!semantics.isAbsolute(trimmed)) {
       throw const ExclusionException('排除路径必须是绝对路径。');
     }
-    final normalized = PathGuard.normalize(trimmed);
-    if (p.windows.rootPrefix(normalized) == normalized) {
-      throw const ExclusionException('不能排除整个磁盘或共享根目录。');
+    final normalized = semantics.normalize(semantics.absolute(trimmed));
+    if (semantics.rootPrefix(normalized) == normalized) {
+      throw const ExclusionException('不能排除整个磁盘、文件系统或共享根目录。');
     }
     return normalized;
   }
 
-  static String _key(String path) => PathGuard.normalize(path).toLowerCase();
+  String _key(String path) => semantics.key(path);
 }
