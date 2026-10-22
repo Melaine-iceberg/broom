@@ -113,10 +113,6 @@ void main(List<String> args) {
   final catalogStore = RuleCatalogStore(
     directoryPath: RuleCatalogStore.defaultDirectory(quarantineRoot),
   );
-  final activeCatalog = catalogStore.loadSync();
-  if (platform is WindowsCleanerPlatform) {
-    platform.applyRuleCatalog(activeCatalog.rules, activeCatalog.version);
-  }
   final ntfsIndex = Platform.isWindows
       ? NtfsIndexClient()
       : const UnavailableNtfsIndex();
@@ -173,6 +169,12 @@ void main(List<String> args) {
     lockProbe: createFileLockProbe(),
   );
 
+  _applyRuleCatalogAfterStartup(
+    catalogStore: catalogStore,
+    platform: platform,
+    onApplied: controller.refreshLastScanSummary,
+  );
+
   _runBroom(
     BroomApp(
       controller: controller,
@@ -189,6 +191,47 @@ void main(List<String> args) {
     ),
   );
   logger.info('app', '主窗口已创建');
+}
+
+/// Applies the on-disk rule catalog once the first frame is on screen.
+///
+/// The catalog is not needed to paint the home page, so reading and decoding it
+/// before [runApp] would put file I/O on the startup critical path. Until the
+/// deferred load lands, the platform keeps its built-in catalog. [onApplied]
+/// re-reads the persisted scan summary, because whether that summary is stale
+/// depends on [CleanerPlatform.rulesVersion].
+void _applyRuleCatalogAfterStartup({
+  required RuleCatalogStore catalogStore,
+  required CleanerPlatform platform,
+  required Future<void> Function() onApplied,
+}) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(_applyRuleCatalog(catalogStore, platform, onApplied));
+  });
+}
+
+Future<void> _applyRuleCatalog(
+  RuleCatalogStore catalogStore,
+  CleanerPlatform platform,
+  Future<void> Function() onApplied,
+) async {
+  // Yield first so the read and decode never run inside the frame callback.
+  await Future<void>.delayed(Duration.zero);
+  try {
+    final catalog = catalogStore.loadSync();
+    if (platform is WindowsCleanerPlatform) {
+      platform.applyRuleCatalog(catalog.rules, catalog.version);
+    }
+    await onApplied();
+    AppLogger.instance?.info(
+      'app',
+      '规则目录加载完成：${catalog.rules.length} 条，版本 ${catalog.version}',
+    );
+  } catch (error) {
+    // A broken catalog must not take down a running app: the built-in rules stay
+    // in effect and the failure only lands in diagnostics.
+    AppLogger.instance?.error('app', '启动阶段规则目录加载失败', error: error);
+  }
 }
 
 void _installErrorLogging(AppLogger logger) {

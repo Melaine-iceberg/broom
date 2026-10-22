@@ -90,8 +90,8 @@ class _BroomAppState extends State<BroomApp> {
             GlobalCupertinoLocalizations.delegate,
           ],
           localeListResolutionCallback: _resolveLocale,
-          theme: buildBroomTheme(Brightness.light),
-          darkTheme: buildBroomTheme(Brightness.dark),
+          theme: broomLightTheme,
+          darkTheme: broomDarkTheme,
           builder: (context, child) {
             final strings = BroomStrings.of(context);
             BroomStrings.instance = strings;
@@ -154,8 +154,8 @@ class UnsupportedApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      theme: buildBroomTheme(Brightness.light),
-      darkTheme: buildBroomTheme(Brightness.dark),
+      theme: broomLightTheme,
+      darkTheme: broomDarkTheme,
       builder: (context, child) =>
           BroomWindowFrame(child: child ?? const SizedBox.shrink()),
       home: _UnsupportedView(platformName: platformName, reason: reason),
@@ -638,3 +638,13 @@ ThemeData buildBroomTheme(Brightness brightness) {
     ),
   );
 }
+
+/// Cached application themes.
+///
+/// [buildBroomTheme] assembles roughly thirty component themes, and
+/// `BroomApp` rebuilds on every settings notification. Building both
+/// brightnesses inside `build` therefore repeated that work on each rebuild —
+/// including the first frame. Top-level finals initialise lazily, so the light
+/// theme is only constructed when it is first referenced.
+final ThemeData broomLightTheme = buildBroomTheme(Brightness.light);
+final ThemeData broomDarkTheme = buildBroomTheme(Brightness.dark);
