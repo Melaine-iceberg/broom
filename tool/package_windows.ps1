@@ -6,12 +6,13 @@
     Reproducible packaging pipeline built on the Windows App CLI (winapp).
 
         1. flutter build windows --release
-        2. stage the Release output together with the MSIX manifest and tile assets
-        3. derive the MSIX version from pubspec.yaml (x.y.z+build -> x.y.z.build)
-        4. sign with signing\broom-release.pfx, creating that certificate only once
-        5. optional broom.appinstaller feed for OS-managed automatic updates
-        6. optional portable ZIP for users who cannot trust a certificate
-        7. export the public .cer and write SHA-256 checksums
+        2. prune font families the app never references (tool/prune_unused_fonts.dart)
+        3. stage the Release output together with the MSIX manifest and tile assets
+        4. derive the MSIX version from pubspec.yaml (x.y.z+build -> x.y.z.build)
+        5. sign with signing\broom-release.pfx, creating that certificate only once
+        6. optional broom.appinstaller feed for OS-managed automatic updates
+        7. optional portable ZIP for users who cannot trust a certificate
+        8. export the public .cer and write SHA-256 checksums
 
     The MSIX identity (Name / Publisher) is defined in windows/packaging/Package.appxmanifest.
     Changes to either value produce a different package identity: existing installs will not
@@ -86,6 +87,27 @@ if (-not $SkipBuild) {
 if (-not (Test-Path (Join-Path $releaseDir 'broom.exe'))) {
     throw "Release output not found: $releaseDir\broom.exe"
 }
+
+# --- Prune font families the app never uses -------------------------------------
+# lucide_icons_flutter declares six variable-font weight variants that this app
+# never imports; the engine still registers every FontManifest family at startup,
+# so they cost ~2.9 MB of asset reads on each cold start. The tool refuses to drop
+# a family that still appears under lib/. Runs before staging and the portable ZIP
+# so both artifacts ship the pruned bundle.
+Write-Host '-> pruning unused font families' -ForegroundColor Cyan
+$fontBundle = Join-Path $releaseDir 'data\flutter_assets'
+$dartExe = (Get-Command dart -ErrorAction SilentlyContinue).Source
+if (-not $dartExe) {
+    $flutterExe = (Get-Command flutter -ErrorAction SilentlyContinue).Source
+    if ($flutterExe) {
+        $dartExe = Join-Path (Split-Path -Parent (Split-Path -Parent $flutterExe)) 'bin\cache\dart-sdk\bin\dart.exe'
+    }
+}
+if (-not $dartExe) {
+    throw 'Neither dart nor flutter is on PATH; cannot prune unused font families.'
+}
+& $dartExe (Join-Path $root 'tool\prune_unused_fonts.dart') --bundle $fontBundle
+if ($LASTEXITCODE -ne 0) { throw "font pruning failed (exit $LASTEXITCODE)" }
 
 New-Item -ItemType Directory -Path $distDir -Force | Out-Null
 
