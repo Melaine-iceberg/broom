@@ -5,8 +5,6 @@ import 'package:broom/core/platform/linux_system_maintenance.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
-import 'support/linux_system_maintenance_fakes.dart';
-
 class _RunnerCall {
   const _RunnerCall(this.executable, this.arguments, this.timeout);
 
@@ -160,6 +158,75 @@ void main() {
       throw StateError('the process runner must not be called');
     });
   }
+
+  group('models', () {
+    test('maps stable wire ids to operations', () {
+      expect(LinuxSystemOperation.dnfPackages.id, 'dnf-packages');
+      expect(LinuxSystemOperation.journal7d.id, 'journal-7d');
+      expect(
+        LinuxSystemOperation.fromId('dnf-packages'),
+        LinuxSystemOperation.dnfPackages,
+      );
+      expect(
+        LinuxSystemOperation.fromId('journal-7d'),
+        LinuxSystemOperation.journal7d,
+      );
+      expect(LinuxSystemOperation.fromId('apt-cache'), isNull);
+      expect(LinuxSystemOperation.fromId(''), isNull);
+    });
+
+    test('capabilityFor finds only reported operations', () {
+      const capabilities = LinuxSystemCapabilities(
+        helperVersion: '0.1.0',
+        operations: [
+          LinuxSystemOperationCapability(
+            operation: LinuxSystemOperation.dnfPackages,
+            available: false,
+            reason: 'tool_missing',
+          ),
+        ],
+      );
+
+      expect(
+        capabilities.capabilityFor(LinuxSystemOperation.dnfPackages)!.reason,
+        'tool_missing',
+      );
+      expect(
+        capabilities.capabilityFor(LinuxSystemOperation.journal7d),
+        isNull,
+      );
+    });
+
+    test('hasIssues is false only when every operation succeeded', () {
+      for (final status in LinuxSystemOperationStatus.values) {
+        final report = LinuxSystemCleanupReport(
+          operations: [
+            LinuxSystemOperationResult(
+              operation: LinuxSystemOperation.dnfPackages,
+              status: status,
+              message: status.name,
+            ),
+          ],
+        );
+
+        expect(
+          report.hasIssues,
+          status != LinuxSystemOperationStatus.ok,
+          reason: 'status ${status.name}',
+        );
+      }
+    });
+
+    test('exception renders its message and defaults to not cancelled', () {
+      const exception = LinuxSystemMaintenanceException(
+        'helper failed',
+        code: 'helper_failed',
+      );
+
+      expect(exception.toString(), 'helper failed');
+      expect(exception.cancelled, isFalse);
+    });
+  });
 
   group('probe', () {
     test('reports a missing helper without starting a process', () async {
@@ -359,6 +426,20 @@ void main() {
       expect(report.checks, hasLength(2));
       expect(report.checks.first.status, LinuxSystemSelfTestCheckStatus.pass);
       expect(report.checks.last.status, LinuxSystemSelfTestCheckStatus.warn);
+      expect(runner.calls.single.executable, helperPath);
+      expect(runner.calls.single.arguments, const ['--self-test', '--json']);
+    });
+
+    test('does not require the policy or pkexec', () async {
+      await File(policyPath).delete();
+      await File(pkexecPath).delete();
+      final runner = _FakeRunner(
+        (executable, arguments) async => _result(_selfTestJson()),
+      );
+
+      final report = await clientFor(runner).selfTest();
+
+      expect(report.status, LinuxSystemSelfTestStatus.ok);
       expect(runner.calls.single.executable, helperPath);
       expect(runner.calls.single.arguments, const ['--self-test', '--json']);
     });
@@ -702,6 +783,32 @@ void main() {
       );
     });
 
+    test('maps every run status and accepts nullable fields', () async {
+      const statuses = {
+        'ok': LinuxSystemOperationStatus.ok,
+        'failed': LinuxSystemOperationStatus.failed,
+        'busy': LinuxSystemOperationStatus.busy,
+        'skipped': LinuxSystemOperationStatus.skipped,
+        'unavailable': LinuxSystemOperationStatus.unavailable,
+      };
+      for (final entry in statuses.entries) {
+        final runner = _FakeRunner(
+          (executable, arguments) async => _result(
+            _reportJson([_operationResult('dnf-packages', entry.key)]),
+          ),
+        );
+
+        final report = await clientFor(runner)
+            .clean({LinuxSystemOperation.dnfPackages});
+
+        final result = report.operations.single;
+        expect(result.status, entry.value, reason: entry.key);
+        expect(result.exitCode, isNull);
+        expect(result.freedBytes, isNull);
+        expect(result.message, 'done');
+      }
+    });
+
     test('rejects malformed success output', () async {
       final runner = _FakeRunner(
         (executable, arguments) async => _result('not json'),
@@ -744,42 +851,27 @@ void main() {
         expect(client, isNull);
       }
     });
-  });
 
-  group('FakeLinuxSystemMaintenance', () {
-    test('starts ready and records the last selection', () async {
-      final fake = FakeLinuxSystemMaintenance();
+    test('checks each prerequisite independently', () {
+      final clients = [
+        createLinuxSystemMaintenance(
+          helperPath: p.join(temp.path, 'missing-helper'),
+          policyPath: policyPath,
+          pkexecPath: pkexecPath,
+        ),
+        createLinuxSystemMaintenance(
+          helperPath: helperPath,
+          policyPath: p.join(temp.path, 'missing-policy'),
+          pkexecPath: pkexecPath,
+        ),
+        createLinuxSystemMaintenance(
+          helperPath: helperPath,
+          policyPath: policyPath,
+          pkexecPath: p.join(temp.path, 'missing-pkexec'),
+        ),
+      ];
 
-      final availability = await fake.probe();
-      final report = await fake.clean({LinuxSystemOperation.journal7d});
-
-      expect(availability.isAvailable, isTrue);
-      expect(fake.probeCalls, 1);
-      expect(fake.lastOperations, {LinuxSystemOperation.journal7d});
-      expect(fake.cleanCalls, 1);
-      expect(report.operations, isEmpty);
-    });
-
-    test('propagates injected errors', () async {
-      final fake = FakeLinuxSystemMaintenance()
-        ..probeError = const LinuxSystemMaintenanceException('probe failed')
-        ..selfTestError = const LinuxSystemMaintenanceException(
-          'self-test failed',
-        )
-        ..cleanError = const LinuxSystemMaintenanceException('clean failed');
-
-      await expectLater(
-        fake.probe(),
-        throwsA(isA<LinuxSystemMaintenanceException>()),
-      );
-      await expectLater(
-        fake.selfTest(),
-        throwsA(isA<LinuxSystemMaintenanceException>()),
-      );
-      await expectLater(
-        fake.clean({LinuxSystemOperation.dnfPackages}),
-        throwsA(isA<LinuxSystemMaintenanceException>()),
-      );
-    });
+      expect(clients, everyElement(isNull));
+    }, skip: Platform.isLinux ? false : 'Linux only');
   });
 }

@@ -64,11 +64,11 @@ class FakeLinuxSystemMaintenance implements LinuxSystemMaintenance {
   Future<LinuxSystemCleanupReport> clean(
     Set<LinuxSystemOperation> operations,
   ) async {
-    cleanCalls++;
-    lastOperations = Set<LinuxSystemOperation>.unmodifiable(operations);
     if (operations.isEmpty) {
       throw ArgumentError.value(operations, 'operations', '至少选择一个系统清理操作。');
     }
+    cleanCalls++;
+    lastOperations = Set<LinuxSystemOperation>.unmodifiable(operations);
     if (cleanError case final error?) throw error;
     return cleanupReport;
   }
