@@ -240,7 +240,7 @@
 - [x] 原生桥接：`statvfs` 磁盘空间、`GtkFileChooserNative` 选择器、Gio 定位文件、`getpriority` / `setpriority` 扫描优先级、`chmod` / `utimensat` 元数据恢复。
 - [x] UI 平台裁剪：隐藏系统缓存、回收站、规则在线更新、软件更新、NTFS 索引与卸载残留。
 - [x] 打包与 CI：tar.gz + `.desktop` + 图标，`tool/package_linux.sh`，Ubuntu 22.04 CI。
-- [ ] 后续：Flatpak / Snap / AppImage 分发、Wayland 下的定位行为验证、Snap 沙箱内的隔离区路径约定。
+- [ ] 后续：Flatpak / Snap / AppImage 分发、Wayland 下的定位行为验证、Snap 沙箱内的隔离区路径约定；系统级缓存的提权模型、保护根策略与 RPM 交付见 [linux-system-cache.md](linux-system-cache.md)。
 
 ### 移动端
 

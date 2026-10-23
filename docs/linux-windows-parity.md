@@ -230,7 +230,7 @@ Linux：
 
 1. **规则目录扩容与在线更新**：第一批用户级规则已补齐（24 → 39，含 12 条 Review）；下一步补系统级目标，并复用现有签名目录与回滚机制，让 Linux 也能更新规则。
 2. **文件占用预检与原生目录枚举**：前者提升预览可预期性，后者降低大目录扫描的系统调用次数。
-3. **回收站与系统级缓存**：需要先确定 Linux 的提权模型、保护根调整与 freedesktop Trash 语义，再接入 UI。
+3. **回收站与系统级缓存**：需要先确定 Linux 的提权模型、保护根调整与 freedesktop Trash 语义，再接入 UI。系统缓存的 Polkit / `pkexec` 助手方案与 RPM 交付见 [linux-system-cache.md](linux-system-cache.md)。
 4. **安装包、自动更新与 Linux 集成测试**：决定 Flatpak / Snap / AppImage 路线，并补真实窗口冒烟与帧率测试。
 
 ## 8. 代码索引

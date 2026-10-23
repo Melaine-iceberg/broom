@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/software/polkit/policyconfig-1.dtd">
+<policyconfig>
+  <vendor>Broom</vendor>
+  <icon_name>broom</icon_name>
+
+  <action id="com.broom.Broom.clean-system-cache">
+    <description>Clean system package and journal caches</description>
+    <message>Authentication is required to clean system caches</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">@BROOM_HELPER_INSTALL_PATH@</annotate>
+  </action>
+</policyconfig>
