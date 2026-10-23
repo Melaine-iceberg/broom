@@ -128,7 +128,7 @@ class LinuxCleanerPlatform implements CleanerPlatform {
   factory LinuxCleanerPlatform({
     Map<String, String>? environment,
     List<CleanerRule>? rules,
-    String rulesVersion = 'builtin-linux',
+    String rulesVersion = 'builtin-linux-2',
   }) {
     final env = {
       for (final entry in (environment ?? Platform.environment).entries)

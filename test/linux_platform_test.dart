@@ -19,17 +19,14 @@ void main() {
 
       expect(platform.pathSemantics, isA<PosixPathSemantics>());
       expect(platform.displayName, 'Linux');
-      expect(platform.rulesVersion, 'builtin-linux');
+      expect(platform.rulesVersion, 'builtin-linux-2');
       expect(
         platform.quarantineRoot,
         '/home/broom/.local/share/Broom/quarantine',
       );
       expect(platform.environment['XDG_CACHE_HOME'], '/home/broom/.cache');
       expect(platform.environment['XDG_CONFIG_HOME'], '/home/broom/.config');
-      expect(
-        platform.environment['XDG_DATA_HOME'],
-        '/home/broom/.local/share',
-      );
+      expect(platform.environment['XDG_DATA_HOME'], '/home/broom/.local/share');
       expect(platform.protectedRoots, contains('/usr'));
       expect(platform.protectedRoots, contains('/etc'));
       expect(
@@ -76,10 +73,7 @@ void main() {
       await thumbnails.create(recursive: true);
 
       final platform = LinuxCleanerPlatform(
-        environment: {
-          'HOME': base.path,
-          'XDG_CACHE_HOME': cache.path,
-        },
+        environment: {'HOME': base.path, 'XDG_CACHE_HOME': cache.path},
       );
       final rule = linuxSafeRules.firstWhere(
         (candidate) => candidate.id == 'system.linux_thumbnails',
@@ -100,10 +94,7 @@ void main() {
       expect(guard.isProtected('/etc/passwd'), isTrue);
       expect(guard.isProtected('/usr/lib/libc.so'), isTrue);
       expect(guard.isProtected('/var/log/syslog'), isTrue);
-      expect(
-        guard.isProtected('/home/broom/.cache/thumbnails/a.png'),
-        isFalse,
-      );
+      expect(guard.isProtected('/home/broom/.cache/thumbnails/a.png'), isFalse);
       expect(
         guard.allows(
           path: '/home/broom/.cache/thumbnails/a.png',
@@ -112,10 +103,7 @@ void main() {
         isTrue,
       );
       expect(
-        guard.allows(
-          path: '/home/broom/.cache',
-          root: '/home/broom/.cache',
-        ),
+        guard.allows(path: '/home/broom/.cache', root: '/home/broom/.cache'),
         isFalse,
       );
       expect(
@@ -130,14 +118,9 @@ void main() {
 
   group('rule categories', () {
     test('Linux rule ids map to user-facing categories', () {
-      final byId = {
-        for (final rule in linuxCleanupRules) rule.id: rule,
-      };
+      final byId = {for (final rule in linuxCleanupRules) rule.id: rule};
 
-      expect(
-        ruleCategoryKey(byId['system.linux_thumbnails']!),
-        'thumbnails',
-      );
+      expect(ruleCategoryKey(byId['system.linux_thumbnails']!), 'thumbnails');
       expect(ruleCategoryKey(byId['system.linux_fontconfig']!), 'system');
       expect(ruleCategoryKey(byId['browser.linux_firefox']!), 'browser');
       expect(ruleCategoryKey(byId['app.linux_vscode']!), 'app');

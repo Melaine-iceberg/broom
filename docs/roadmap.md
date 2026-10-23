@@ -234,7 +234,7 @@
 
 ### Linux（核心可用版已完成）
 
-- [x] 规则根：`$XDG_CACHE_HOME`（默认 `~/.cache`）、`$XDG_CONFIG_HOME` 下的应用缓存、`$HOME` 下的开发工具缓存；24 条内置规则，含正 / 反审计样例。
+- [x] 规则根：`$XDG_CACHE_HOME`（默认 `~/.cache`）、`$XDG_CONFIG_HOME` 下的应用缓存、`$XDG_DATA_HOME` 下的 Broom 诊断日志、`$HOME` 下的开发工具缓存；39 条内置规则（27 条 Safe、12 条 Review），含正 / 反审计样例，覆盖 Composer、Electron、Poetry、node-gyp、Deno、Corepack、NuGet、JetBrains、Hugging Face、conda、Coursier、Kotlin/Native 与 Spotify。
 - [x] 路径与权限：`PosixPathSemantics`、大小写敏感、`$VAR` / `${VAR}` / `~` 规则展开、`PathGuard.forPosix` 保护 `/usr`、`/etc`、`/boot` 等系统目录。
 - [x] 隔离区：`$XDG_DATA_HOME/Broom/quarantine`；跨卷通过 `st_dev` 探测，不可探测时保守复制。
 - [x] 原生桥接：`statvfs` 磁盘空间、`GtkFileChooserNative` 选择器、Gio 定位文件、`getpriority` / `setpriority` 扫描优先级、`chmod` / `utimensat` 元数据恢复。

@@ -242,6 +242,7 @@ lib/
     models/                        # 规则、设置、扫描、清理、撤销、系统缓存与分析数据模型
     rules/windows_rules.dart       # Windows Safe / Review 规则
     rules/windows_system_rules.dart # Windows 系统级缓存规则
+    rules/linux_rules.dart         # Linux/XDG Safe / Review 规则
     rules/rule_update_service.dart # 签名在线更新、规则目录编解码与回滚
     platform/                      # CleanerPlatform、PathSemantics、可注入文件系统、系统访问、长路径、扫描优先级与错误辅助
     diagnostics/app_logger.dart    # 默认关闭的滚动诊断日志与 JSON 诊断包
@@ -338,7 +339,7 @@ bash tool/package_linux.sh
 # 产物：dist/broom-<版本>-linux-x64.tar.gz 与同名 .sha256
 ```
 
-- **核心可用范围**：规则扫描、预览、隔离区撤销 / 永久释放、设置与配置导入导出、重复文件与大文件分析可用；系统级缓存、回收站、规则在线更新、软件更新与卸载残留仅在 Windows 显示。
+- **核心可用范围**：规则扫描、预览、隔离区撤销 / 永久释放、设置与配置导入导出、重复文件与大文件分析可用；内置 39 条 Linux 规则（27 条 Safe、12 条 Review），覆盖日志、浏览器脚本、应用与常用开发工具缓存；系统级缓存、回收站、规则在线更新、软件更新与卸载残留仅在 Windows 显示。
 - **数据位置**：隔离区在 `$XDG_DATA_HOME/Broom/quarantine`（默认 `~/.local/share/Broom/quarantine`），配置、历史与日志同样位于该目录；规则使用 `$XDG_CACHE_HOME`、`$XDG_CONFIG_HOME`、`$XDG_DATA_HOME` 与 `$HOME`。
 - **原生能力**：文件选择器、磁盘空间（`statvfs`）、定位文件与进程优先级（`getpriority` / `setpriority`）、POSIX 权限与时间戳恢复（`chmod` / `utimensat`）都由 `linux/runner/native_channels.cc` 提供，不依赖 zenity 或外部命令。
 - **跨卷判断**：隔离区通过 `st_dev` 批量探测判断是否跨卷；无法探测时保守按跨卷复制处理，避免空间预检低估。
