@@ -30,32 +30,12 @@ static void my_application_activate(GApplication* application) {
   // panels that read WM_HINTS do not fall back to a generic icon.
   gtk_window_set_icon_name(window, "broom");
 
-  // Use a header bar when running in GNOME as this is the common style used
-  // by applications and is the setup most users will be using (e.g. Ubuntu
-  // desktop).
-  // If running on X and not using GNOME then just use a traditional title bar
-  // in case the window manager does more exotic layout, e.g. tiling.
-  // If running on Wayland assume the header bar will work (may need changing
-  // if future cases occur).
-  gboolean use_header_bar = TRUE;
-#ifdef GDK_WINDOWING_X11
-  GdkScreen* screen = gtk_window_get_screen(window);
-  if (GDK_IS_X11_SCREEN(screen)) {
-    const gchar* wm_name = gdk_x11_screen_get_window_manager_name(screen);
-    if (g_strcmp0(wm_name, "GNOME Shell") != 0) {
-      use_header_bar = FALSE;
-    }
-  }
-#endif
-  if (use_header_bar) {
-    GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
-    gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "Broom");
-    gtk_header_bar_set_show_close_button(header_bar, TRUE);
-    gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
-  } else {
-    gtk_window_set_title(window, "Broom");
-  }
+  // The title bar is drawn by Flutter on every desktop platform. Broom sets
+  // the window title as well so panels, task switchers and accessibility
+  // tools still have a name even though there is no native title bar.
+  gtk_window_set_title(window, "Broom");
+  gtk_window_set_decorated(window, FALSE);
+  gtk_window_set_resizable(window, TRUE);
 
   gtk_window_set_default_size(window, 1280, 720);
 
@@ -70,7 +50,14 @@ static void my_application_activate(GApplication* application) {
   gdk_rgba_parse(&background_color, "#000000");
   fl_view_set_background_color(view, &background_color);
   gtk_widget_show(GTK_WIDGET(view));
-  gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
+
+  // An undecorated window has no resize borders from the window manager. The
+  // overlay carries transparent edge widgets that start a resize drag.
+  GtkWidget* overlay = gtk_overlay_new();
+  gtk_widget_show(overlay);
+  gtk_container_add(GTK_CONTAINER(overlay), GTK_WIDGET(view));
+  gtk_container_add(GTK_CONTAINER(window), overlay);
+  broom_install_window_handles(window, overlay);
 
   // Show the window when Flutter renders.
   // Requires the view to be realized so we can start rendering.

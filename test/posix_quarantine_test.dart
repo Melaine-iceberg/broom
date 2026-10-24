@@ -32,10 +32,7 @@ void main() {
     metadata = FakeFileMetadataAccess();
     quarantine = QuarantineService(
       quarantineRoot: p.posix.join(temp.path, 'quarantine'),
-      guard: PathGuard(
-        protectedRoots: const [],
-        semantics: _semantics,
-      ),
+      guard: PathGuard(protectedRoots: const [], semantics: _semantics),
       metadataAccess: metadata,
     );
   });
@@ -65,10 +62,9 @@ void main() {
 
   test('moves and restores files using POSIX paths', () async {
     final file = await createFile('nested/cache.txt', 'alpha');
-    final report = await quarantine.clean(
-      [await itemFor(file)],
-      roots: testRoots,
-    );
+    final report = await quarantine.clean([
+      await itemFor(file),
+    ], roots: testRoots);
 
     expect(report.movedCount, 1);
     expect(report.failureCount, 0);
@@ -77,8 +73,7 @@ void main() {
 
     final sessions = await quarantine.listSessions();
     expect(sessions, hasLength(1));
-    final entry =
-        (await quarantine.listEntries(sessions.single.id)).single;
+    final entry = (await quarantine.listEntries(sessions.single.id)).single;
     expect(entry.originalPath, file.path);
     expect(entry.originalPath.contains('\\'), isFalse);
 
@@ -124,6 +119,53 @@ void main() {
     expect(assessment.crossVolumeCount, 1);
     expect(assessment.requiredBytes, 5);
   }, skip: _linuxOnly);
+
+  test('captures extended metadata for cross-device moves', () async {
+    final file = await createFile('cache.txt', 'alpha');
+    final service = _serviceWithDevice(
+      p.posix.join(temp.path, 'quarantine'),
+      metadata,
+      sourcePrefix: source.path,
+      sourceDevice: 8,
+    );
+
+    final report = await service.clean([await itemFor(file)], roots: testRoots);
+
+    expect(report.movedCount, 1);
+    expect(metadata.reads.single.captureAcl, isTrue);
+  }, skip: _linuxOnly);
+
+  test('skips extended metadata capture for same-device moves', () async {
+    final file = await createFile('cache.txt', 'alpha');
+    final service = _serviceWithDevice(
+      p.posix.join(temp.path, 'quarantine'),
+      metadata,
+      sourcePrefix: source.path,
+      sourceDevice: 7,
+    );
+
+    final report = await service.clean([await itemFor(file)], roots: testRoots);
+
+    expect(report.movedCount, 1);
+    expect(metadata.reads.single.captureAcl, isFalse);
+  }, skip: _linuxOnly);
+}
+
+QuarantineService _serviceWithDevice(
+  String root,
+  FileMetadataAccess metadata, {
+  required String sourcePrefix,
+  required int sourceDevice,
+}) {
+  return QuarantineService(
+    quarantineRoot: root,
+    guard: PathGuard(protectedRoots: const [], semantics: _semantics),
+    metadataAccess: metadata,
+    deviceIdProbe: (paths) async => [
+      for (final path in paths)
+        path.startsWith(sourcePrefix) ? sourceDevice : 7,
+    ],
+  );
 }
 
 class _ProbeQuarantineService {
@@ -133,10 +175,7 @@ class _ProbeQuarantineService {
     required this.deviceIds,
   }) : _service = QuarantineService(
          quarantineRoot: root,
-         guard: PathGuard(
-           protectedRoots: const [],
-           semantics: _semantics,
-         ),
+         guard: PathGuard(protectedRoots: const [], semantics: _semantics),
          metadataAccess: metadata,
          freeSpaceProbe: (_) async => 1024 * 1024,
          deviceIdProbe: (_) async => deviceIds,

@@ -9,6 +9,17 @@ set(BINARY_NAME "broom")
 # https://wiki.gnome.org/HowDoI/ChooseApplicationID
 set(APPLICATION_ID "com.broom.Broom")
 
+# Keep the runtime version in lockstep with pubspec.yaml. The Windows runner
+# stamps its own version at build time, so Linux must not rely on a hand-edited
+# Dart constant.
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/../pubspec.yaml"
+     BROOM_PUBSPEC_VERSION_LINE REGEX "^version:")
+string(REGEX MATCH "[0-9]+\\.[0-9]+\\.[0-9]+([+][0-9]+)?" BROOM_VERSION
+       "${BROOM_PUBSPEC_VERSION_LINE}")
+if(BROOM_VERSION STREQUAL "")
+  message(FATAL_ERROR "Unable to read the version from pubspec.yaml")
+endif()
+
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
 cmake_policy(SET CMP0063 NEW)

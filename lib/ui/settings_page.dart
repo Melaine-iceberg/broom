@@ -25,7 +25,7 @@ import 'quarantine_policy_dialog.dart';
 import 'rule_update_controller.dart';
 import 'settings_controller.dart';
 
-const _appVersion = broomAppVersion;
+const _fallbackAppVersion = broomAppVersion;
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
@@ -500,6 +500,8 @@ class SettingsPage extends StatelessWidget {
                       settings: settings,
                       logger: logger,
                       shell: shell,
+                      appVersion:
+                          appUpdates?.currentVersion ?? _fallbackAppVersion,
                     ),
                   ],
                   const SizedBox(height: 18),
@@ -510,7 +512,11 @@ class SettingsPage extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          strings.tf('版本 {version}', {'version': _appVersion}),
+                          strings.tf('版本 {version}', {
+                            'version':
+                                appUpdates?.currentVersion ??
+                                _fallbackAppVersion,
+                          }),
                           style: theme.textTheme.bodyMedium,
                         ),
                         const SizedBox(height: 6),
@@ -1675,11 +1681,13 @@ class _DiagnosticsSection extends StatefulWidget {
     required this.settings,
     required this.logger,
     required this.shell,
+    required this.appVersion,
   });
 
   final SettingsController settings;
   final AppLogger logger;
   final SystemShell shell;
+  final String appVersion;
 
   @override
   State<_DiagnosticsSection> createState() => _DiagnosticsSectionState();
@@ -1714,7 +1722,7 @@ class _DiagnosticsSectionState extends State<_DiagnosticsSection> {
       );
       if (path == null || path.isEmpty) return;
       final bundle = await widget.logger.buildBundle(
-        appVersion: _appVersion,
+        appVersion: widget.appVersion,
         environment: {
           'os': Platform.operatingSystem,
           'osVersion': Platform.operatingSystemVersion,

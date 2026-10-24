@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -7,6 +8,12 @@ import '../platform/file_system.dart';
 import '../platform/windows_path.dart';
 import '../safety/path_guard.dart';
 
+/// POSIX metadata that dart:io's [FileStat] cannot report.
+///
+/// [xattrs] maps extended-attribute names to base64-encoded values so the
+/// record survives the JSON session journal unchanged. POSIX ACLs are carried
+/// as `system.posix_acl_access` / `system.posix_acl_default`, file capabilities
+/// as `security.capability`, and SELinux labels as `security.selinux`.
 class FileMetadata {
   const FileMetadata({
     this.created,
@@ -16,6 +23,10 @@ class FileMetadata {
     this.mode,
     this.acl,
     this.aclUnavailable = false,
+    this.uid,
+    this.gid,
+    this.xattrs = const {},
+    this.extendedUnavailable = false,
   });
 
   final DateTime? created;
@@ -29,22 +40,34 @@ class FileMetadata {
   final String? acl;
   final bool aclUnavailable;
 
+  final int? uid;
+  final int? gid;
+  final Map<String, String> xattrs;
+
+  /// True when Linux extended metadata (owner, ACLs or xattrs) could not be
+  /// read before a cross-volume move.
+  final bool extendedUnavailable;
+
   bool get hasRestorableValues =>
       created != null ||
       modified != null ||
       accessed != null ||
       readOnly != null ||
       mode != null ||
-      acl != null;
+      acl != null ||
+      uid != null ||
+      gid != null ||
+      xattrs.isNotEmpty;
 }
 
 abstract interface class FileMetadataAccess {
   /// Returns the values an undo needs that [stat] does not already carry.
   ///
   /// [stat] is the query the clean loop has already performed for the same
-  /// file, so implementations must not stat again: one file, one metadata
-  /// query. On Windows the only thing left to fetch is the DACL, and only when
-  /// a cross-volume copy will replace it.
+  /// file. The basic values come from that query; when [captureAcl] is set,
+  /// native implementations additionally read what a stat cannot report (a
+  /// Windows DACL, or POSIX ownership, birth time and extended attributes) for
+  /// a cross-volume copy.
   Future<FileMetadata?> read(
     String path, {
     required FsStat stat,
@@ -99,8 +122,10 @@ class LocalFileMetadataAccess implements FileMetadataAccess {
 
 /// POSIX metadata adapter backed by the Linux runner.
 ///
-/// dart:io can restore timestamps but has no chmod API, so permission bits are
-/// applied through the native channel.
+/// dart:io can restore timestamps but has no chmod/chown/xattr API, so
+/// permission bits, ownership and extended attributes are read and applied
+/// through the native channel. Only a cross-volume copy needs them: a rename
+/// keeps them in place.
 class PosixFileMetadataAccess implements FileMetadataAccess {
   const PosixFileMetadataAccess();
 
@@ -114,9 +139,7 @@ class PosixFileMetadataAccess implements FileMetadataAccess {
       'paths': paths,
     });
     if (result == null) return List<int?>.filled(paths.length, null);
-    return [
-      for (final value in result) value is int ? value : null,
-    ];
+    return [for (final value in result) value is int ? value : null];
   }
 
   @override
@@ -125,31 +148,104 @@ class PosixFileMetadataAccess implements FileMetadataAccess {
     required FsStat stat,
     required bool captureAcl,
   }) async {
-    return FileMetadata(
+    final base = FileMetadata(
       modified: stat.modified,
       accessed: stat.accessed,
       readOnly: isReadOnlyMode(stat.mode),
       mode: stat.mode,
-      aclUnavailable: captureAcl,
     );
+    if (!captureAcl) return base;
+
+    try {
+      final value = await channel.invokeMethod<Map<Object?, Object?>>(
+        'readPosixMetadata',
+        {'path': path},
+      );
+      if (value == null) {
+        return _copyWithExtended(base, extendedUnavailable: true);
+      }
+      final rawXattrs = value['xattrs'];
+      final xattrs = <String, String>{};
+      if (rawXattrs is Map) {
+        for (final entry in rawXattrs.entries) {
+          final name = entry.key;
+          final bytes = entry.value;
+          if (name is! String || name.isEmpty) continue;
+          if (bytes is Uint8List) {
+            xattrs[name] = base64Encode(bytes);
+          } else if (bytes is List<int>) {
+            xattrs[name] = base64Encode(bytes);
+          } else if (bytes is List) {
+            try {
+              xattrs[name] = base64Encode(bytes.cast<int>());
+            } on TypeError {
+              continue;
+            }
+          }
+        }
+      }
+      final createdMicros = value['createdMicros'];
+      return FileMetadata(
+        created: createdMicros is int && createdMicros > 0
+            ? DateTime.fromMicrosecondsSinceEpoch(createdMicros, isUtc: true)
+            : null,
+        modified: stat.modified,
+        accessed: stat.accessed,
+        readOnly: isReadOnlyMode(stat.mode),
+        mode: stat.mode,
+        uid: value['uid'] is int ? value['uid'] as int : null,
+        gid: value['gid'] is int ? value['gid'] as int : null,
+        xattrs: xattrs,
+        extendedUnavailable: value['xattrsUnavailable'] == true,
+      );
+    } on PlatformException {
+      return _copyWithExtended(base, extendedUnavailable: true);
+    } on MissingPluginException {
+      return _copyWithExtended(base, extendedUnavailable: true);
+    }
   }
 
   @override
   Future<void> apply(String path, FileMetadata metadata) async {
+    final xattrs = <String, Uint8List>{};
+    for (final entry in metadata.xattrs.entries) {
+      try {
+        xattrs[entry.key] = base64Decode(entry.value);
+      } on FormatException {
+        // A corrupt journal entry must not block restoring the other values.
+        continue;
+      }
+    }
     try {
       await channel.invokeMethod<void>('applyPosixMetadata', {
         'path': path,
         if (metadata.mode != null) 'mode': metadata.mode,
+        if (metadata.uid != null) 'uid': metadata.uid,
+        if (metadata.gid != null) 'gid': metadata.gid,
         if (metadata.modified != null)
           'modifiedMicros': metadata.modified!.microsecondsSinceEpoch,
         if (metadata.accessed != null)
           'accessedMicros': metadata.accessed!.microsecondsSinceEpoch,
+        if (xattrs.isNotEmpty) 'xattrs': xattrs,
       });
     } on PlatformException catch (error) {
       throw FileMetadataException(_posixErrorMessage(error));
     } on MissingPluginException {
       throw const FileMetadataException('当前系统不支持恢复文件元数据。');
     }
+  }
+
+  static FileMetadata _copyWithExtended(
+    FileMetadata base, {
+    required bool extendedUnavailable,
+  }) {
+    return FileMetadata(
+      modified: base.modified,
+      accessed: base.accessed,
+      readOnly: base.readOnly,
+      mode: base.mode,
+      extendedUnavailable: extendedUnavailable,
+    );
   }
 }
 

@@ -7,6 +7,9 @@ import 'package:flutter/services.dart';
 /// Best-effort preview signal for files that another process is using in a way
 /// that blocks a move or delete. A positive result is advisory: it can change
 /// between preview and cleanup, and cleanup always reports the real outcome.
+///
+/// Windows probes sharing/delete access; Linux has no equivalent guarantee and
+/// only reports advisory write locks from `/proc/locks`. Both are best effort.
 abstract interface class FileLockProbe {
   Future<List<bool>> probePossiblyLocked(List<String> paths);
 }
@@ -52,7 +55,7 @@ class MethodChannelFileLockProbe implements FileLockProbe {
   }
 }
 
-FileLockProbe createFileLockProbe() => Platform.isWindows
+FileLockProbe createFileLockProbe() => Platform.isWindows || Platform.isLinux
     ? const MethodChannelFileLockProbe()
     : const NoopFileLockProbe();
 

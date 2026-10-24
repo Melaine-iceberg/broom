@@ -152,7 +152,9 @@ class QuarantineService {
     // Check space before creating the session or touching any file. A
     // cross-volume move is a copy followed by a delete, so running out of
     // space midway would leave a partial file in the quarantine.
-    await _ensureSpaceAvailable(items);
+    final deviceIds = await _probeDeviceIds(items);
+    await _ensureSpaceAvailable(items, deviceIds: deviceIds);
+    final crossVolumePaths = _crossVolumePaths(items, deviceIds);
 
     final baseDir = Directory(quarantineRoot);
     await _files.createDirectory(baseDir.path);
@@ -195,6 +197,7 @@ class QuarantineService {
       plannedCount: items.length,
       previousFailureCount: 0,
       previousSkippedCount: 0,
+      crossVolumePaths: crossVolumePaths,
       onProgress: onProgress,
       isCancelled: isCancelled,
     );
@@ -293,7 +296,9 @@ class QuarantineService {
       );
     }
 
-    await _ensureSpaceAvailable(remaining);
+    final deviceIds = await _probeDeviceIds(remaining);
+    await _ensureSpaceAvailable(remaining, deviceIds: deviceIds);
+    final crossVolumePaths = _crossVolumePaths(remaining, deviceIds);
 
     final restoredNames = await _readRestoredNames(sessionDir);
     final pending = await _pendingEntries(sessionDir, entries, restoredNames);
@@ -326,6 +331,7 @@ class QuarantineService {
       plannedCount: plannedCount,
       previousFailureCount: previousFailureCount,
       previousSkippedCount: previousSkippedCount,
+      crossVolumePaths: crossVolumePaths,
       onProgress: onProgress,
       isCancelled: isCancelled,
     );
@@ -335,22 +341,14 @@ class QuarantineService {
   /// this batch would require. Same-volume moves are renames and need no
   /// additional data space. When no probe is configured the assessment is
   /// unknown and [QuarantineSpaceAssessment.sufficient] stays true.
-  Future<QuarantineSpaceAssessment> assessSpace(List<JunkItem> items) async {
+  Future<QuarantineSpaceAssessment> assessSpace(
+    List<JunkItem> items, {
+    List<int?>? deviceIds,
+  }) async {
     var requiredBytes = 0;
     var crossVolumeCount = 0;
 
-    List<int?>? deviceIds;
-    final deviceProbe = _deviceIdProbe;
-    if (deviceProbe != null && _paths.caseSensitive && items.isNotEmpty) {
-      try {
-        deviceIds = await deviceProbe([
-          quarantineRoot,
-          for (final item in items) item.path,
-        ]);
-      } catch (_) {
-        deviceIds = null;
-      }
-    }
+    deviceIds ??= await _probeDeviceIds(items);
 
     for (var index = 0; index < items.length; index++) {
       final item = items[index];
@@ -380,11 +378,70 @@ class QuarantineService {
     );
   }
 
-  Future<void> _ensureSpaceAvailable(List<JunkItem> items) async {
-    final assessment = await assessSpace(items);
+  Future<void> _ensureSpaceAvailable(
+    List<JunkItem> items, {
+    List<int?>? deviceIds,
+  }) async {
+    final assessment = await assessSpace(items, deviceIds: deviceIds);
     if (!assessment.sufficient) {
       throw QuarantineSpaceException(assessment: assessment);
     }
+  }
+
+  /// Probes `st_dev` for the quarantine volume and every source path.
+  ///
+  /// Returns `[quarantineDevice, ...sourceDevices]`, or null when the platform
+  /// has no device probe or a batch could not be resolved. POSIX paths are
+  /// split into chunks so a million-item plan does not become one platform
+  /// message.
+  Future<List<int?>?> _probeDeviceIds(List<JunkItem> items) async {
+    final probe = _deviceIdProbe;
+    if (probe == null || !_paths.caseSensitive || items.isEmpty) return null;
+    try {
+      // The quarantine directory is created after this preflight, so probe the
+      // nearest existing ancestor to learn which filesystem it will live on.
+      var rootPath = quarantineRoot;
+      while (await _files.type(rootPath) == FsEntityType.notFound) {
+        final parent = _paths.dirname(rootPath);
+        if (parent == rootPath) break;
+        rootPath = parent;
+      }
+      final result = <int?>[];
+      const chunkSize = 256;
+      for (var start = 0; start < items.length; start += chunkSize) {
+        final end = (start + chunkSize).clamp(0, items.length);
+        final paths = [
+          if (start == 0) rootPath,
+          for (var index = start; index < end; index++) items[index].path,
+        ];
+        final batch = await probe(paths);
+        if (batch.length != paths.length) return null;
+        result.addAll(batch);
+      }
+      return result;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Paths that reach the quarantine through a cross-volume copy. Null means
+  /// the device layout is unknown; POSIX callers then capture metadata
+  /// conservatively for every file.
+  Set<String>? _crossVolumePaths(List<JunkItem> items, List<int?>? deviceIds) {
+    if (!_paths.caseSensitive || deviceIds == null) return null;
+    final quarantineDevice = deviceIds.first;
+    final paths = <String>{};
+    for (var index = 0; index < items.length; index++) {
+      final sourceDevice = index + 1 < deviceIds.length
+          ? deviceIds[index + 1]
+          : null;
+      if (quarantineDevice == null ||
+          sourceDevice == null ||
+          quarantineDevice != sourceDevice) {
+        paths.add(items[index].path);
+      }
+    }
+    return paths;
   }
 
   bool _differentDevice(List<int?> deviceIds, int itemIndex) {
@@ -428,6 +485,7 @@ class QuarantineService {
     required int plannedCount,
     required int previousFailureCount,
     required int previousSkippedCount,
+    Set<String>? crossVolumePaths,
     void Function(CleanProgress progress)? onProgress,
     bool Function()? isCancelled,
   }) async {
@@ -568,7 +626,7 @@ class QuarantineService {
             continue;
           }
           size = stat.size;
-          metadata = await _captureMetadata(item.path, stat);
+          metadata = await _captureMetadata(item.path, stat, crossVolumePaths);
         } on FileSystemException catch (error) {
           if (_isMissingError(error)) {
             recordSkip(item.path, '文件已不存在或不是普通文件');
@@ -601,6 +659,20 @@ class QuarantineService {
         }
         if (metadata?.readOnly case final readOnly?) {
           entry['readOnly'] = readOnly;
+        }
+        if (metadata?.uid case final uid?) {
+          entry['uid'] = uid;
+        }
+        if (metadata?.gid case final gid?) {
+          entry['gid'] = gid;
+        }
+        if (metadata case final metadata?) {
+          if (metadata.xattrs.isNotEmpty) {
+            entry['xattrs'] = metadata.xattrs;
+          }
+          if (metadata.extendedUnavailable) {
+            entry['extendedUnavailable'] = true;
+          }
         }
         final acl = metadata?.acl;
         final aclTooLarge = acl != null && acl.length > _maxAclLength;
@@ -1016,7 +1088,9 @@ class QuarantineService {
           return;
         }
       }
-      if (metadata.aclUnavailable) {
+      if (metadata.extendedUnavailable) {
+        recordMetadataWarning(path, '文件所有者、ACL 或扩展属性未能在清理时保存');
+      } else if (metadata.aclUnavailable) {
         recordMetadataWarning(path, 'ACL 未能在清理时保存');
       }
     }
@@ -1635,9 +1709,7 @@ class QuarantineService {
         continue;
       }
       try {
-        final type = await _files.type(
-          _paths.join(filesDir, entry.storedName),
-        );
+        final type = await _files.type(_paths.join(filesDir, entry.storedName));
         if (type == FsEntityType.file) {
           pending.add(entry);
         }
@@ -1760,13 +1832,21 @@ class QuarantineService {
   ///
   /// Metadata is best effort: a failure here degrades the undo record (it
   /// falls back to the scanned modification time) but must not stop the clean.
-  Future<FileMetadata?> _captureMetadata(String path, FsStat stat) async {
+  Future<FileMetadata?> _captureMetadata(
+    String path,
+    FsStat stat,
+    Set<String>? crossVolumePaths,
+  ) async {
     try {
       return await _metadata.read(
         path,
         stat: stat,
-        captureAcl: !_paths.caseSensitive &&
-            shouldCaptureAcl(path, quarantineRoot),
+        // Windows only needs the DACL when a copy would replace it. POSIX needs
+        // owner, ACLs and xattrs for the same reason; null means the device
+        // layout could not be probed, so capture conservatively.
+        captureAcl: !_paths.caseSensitive
+            ? shouldCaptureAcl(path, quarantineRoot)
+            : crossVolumePaths == null || crossVolumePaths.contains(path),
       );
     } catch (_) {
       return null;
@@ -2185,12 +2265,20 @@ class QuarantineService {
     final aclUnavailable =
         map['aclUnavailable'] == true ||
         (rawAcl is String && rawAcl.isNotEmpty && !aclValid);
+    final uid = _parseId(map['uid']);
+    final gid = _parseId(map['gid']);
+    final xattrs = _parseXattrs(map['xattrs']);
+    final extendedUnavailable = map['extendedUnavailable'] == true;
     if (modified == null &&
         created == null &&
         accessed == null &&
         readOnly == null &&
         acl == null &&
-        !aclUnavailable) {
+        !aclUnavailable &&
+        uid == null &&
+        gid == null &&
+        xattrs.isEmpty &&
+        !extendedUnavailable) {
       return null;
     }
     return FileMetadata(
@@ -2200,7 +2288,52 @@ class QuarantineService {
       readOnly: readOnly,
       acl: acl,
       aclUnavailable: aclUnavailable,
+      uid: uid,
+      gid: gid,
+      xattrs: xattrs,
+      extendedUnavailable: extendedUnavailable,
     );
+  }
+
+  static const int _maxXattrCount = 64;
+  static const int _maxXattrValueLength = 96 * 1024;
+  static final RegExp _xattrNamePattern = RegExp(
+    r'^(?:user|trusted|security)\.[A-Za-z0-9._:@-]+$|'
+    r'^system\.posix_acl_(?:access|default)$',
+  );
+
+  static int? _parseId(Object? raw) {
+    if (raw is! int || raw < 0 || raw > 0xFFFFFFFF) return null;
+    return raw;
+  }
+
+  /// Session metadata is untrusted: bound the count, validate names and value
+  /// sizes, and reject values that are not base64.
+  static Map<String, String> _parseXattrs(Object? raw) {
+    if (raw is! Map) return const {};
+    final parsed = <String, String>{};
+    for (final entry in raw.entries) {
+      if (parsed.length >= _maxXattrCount) break;
+      final name = entry.key;
+      final value = entry.value;
+      if (name is! String || !_xattrNamePattern.hasMatch(name)) continue;
+      if (value is! String ||
+          value.length > _maxXattrValueLength ||
+          !_isBase64(value)) {
+        continue;
+      }
+      parsed[name] = value;
+    }
+    return parsed;
+  }
+
+  static bool _isBase64(String value) {
+    try {
+      base64Decode(value);
+      return true;
+    } on FormatException {
+      return false;
+    }
   }
 
   Future<Set<String>> _readRestoredNames(Directory sessionDir) async {
@@ -2346,8 +2479,7 @@ class QuarantineService {
     required num size,
   }) {
     if (!_isSafeStoredName(storedName)) return false;
-    if (!_paths.isAbsolute(originalPath) ||
-        !_paths.isAbsolute(rootPath)) {
+    if (!_paths.isAbsolute(originalPath) || !_paths.isAbsolute(rootPath)) {
       return false;
     }
     if (size < 0 || !size.isFinite || size > 9007199254740991) return false;

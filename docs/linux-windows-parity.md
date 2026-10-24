@@ -2,7 +2,7 @@
 
 > 评估对象：Broom 0.4.0（`pubspec.yaml`，0.4.0+4）
 > 评估日期：2026-10-24
-> 结论：Linux 已具备“规则扫描 → 预览 → 隔离区 → 撤销 / 永久释放”的完整核心闭环，并补齐回收站、卸载残留、规则在线更新与软件更新检查入口。剩余差距集中在同名功能的能力降级、系统缓存实机验证，以及分发与真实窗口测试。
+> 结论：Linux 已具备“规则扫描 → 预览 → 隔离区 → 撤销 / 永久释放”的完整核心闭环，并补齐回收站、卸载残留、规则在线更新与软件更新检查入口。文件占用预检、原生目录枚举、POSIX 元数据、低优先级扫描与自绘标题栏已按平台语义实现；剩余差距集中在 NTFS 索引（无等价实现）、分发与自动更新，以及真实窗口 / 实机回归。
 
 ## 1. 总览
 
@@ -18,11 +18,11 @@
 | 规则在线更新、签名校验、回滚 | 支持 | 支持，需构建时签名密钥与 HTTPS 清单 | 已对齐，发布配置需提供 |
 | 应用软件更新检查 | 支持，MSIX / App Installer | 支持 HTTPS JSON 清单，只读检查 | 已对齐，升级仍由用户完成 |
 | NTFS 索引加速 | 支持，USN / MFT | 无等价实现 | 功能缺失 |
-| 文件占用预检 | 原生通道 | 空实现 | 能力降级 |
-| 原生目录枚举 | `FindFirstFileW` | `dart:io` + 逐文件 `stat` | 性能差距 |
-| 元数据恢复 | 时间 / 只读 / DACL 尽力恢复 | 权限位 + 时间 | 能力降级 |
-| 扫描低优先级 | 后台模式 + 低 CPU 优先级 | `nice 10` | 能力降级 |
-| 自定义窗口标题栏 | 支持 | GTK 原生标题栏 | 表现差异 |
+| 文件占用预检 | 原生通道（共享冲突） | 原生通道（advisory 写锁） | 平台语义不同 |
+| 原生目录枚举 | `FindFirstFileW` | `readdir` + `statx` | 已对齐，系统调用模型不同 |
+| 元数据恢复 | 时间 / 只读 / DACL 尽力恢复 | 权限位 / 时间 / 所有者 / btime / xattr 尽力恢复 | 已对齐，创建时间只读 |
+| 扫描低优先级 | 后台模式 + 低 CPU 优先级 | `nice 10` + I/O idle | 已对齐，实现手段不同 |
+| 自定义窗口标题栏 | 支持 | 支持（无边框 + GTK 原生缩放边缘） | 已对齐 |
 | 安装器与自动更新 | MSIX + App Installer | tar.gz | 分发差距 |
 | 真实窗口集成测试 | 支持，手动触发 | 无 | 验证差距 |
 
@@ -101,72 +101,66 @@ Linux 没有等价的文件系统快速索引，始终走目录遍历；这不�
 
 ### 3.1 文件占用预检
 
-Windows 通过 `broom/file_lock` 批量探测可能被占用的文件，预览会显示“可能被占用”提示；Linux 使用空实现：
+两个平台都通过 `broom/file_lock` 批量探测：
 
-- [file_lock_probe.dart](../lib/core/platform/file_lock_probe.dart#L55-L57)
+- 探测与降级：[file_lock_probe.dart](../lib/core/platform/file_lock_probe.dart)
+- Linux 原生实现：[linux/runner/native_channels.cc](../linux/runner/native_channels.cc)
 
-结果是 Linux 预览不会提前标记被占用文件，清理时才会暴露真实失败。功能仍可用，但可预期性低于 Windows。
+Windows 以 `DELETE` 访问再次打开文件，共享 / 锁冲突（32 / 33）即报告“可能被占用”。Linux 没有等价的独占打开语义，因此读取 `/proc/locks`，只把写类型的 POSIX / OFD / flock 锁视为占用信号；普通“已打开”或只读共享不会报告。探测仍是只读、best effort，桌面程序不使用 advisory 锁时可能漏报，清理阶段仍以真实结果为准。
 
 ### 3.2 目录枚举
 
-Windows 的 `broom/directory_enum` 通过 `FindFirstFileW` 一次返回名称、大小、修改时间与属性：
+Windows 的 `broom/directory_enum` 通过 `FindFirstFileW` 一次返回名称、大小、修改时间与属性；Linux 在 runner 的线程池中执行 `readdir`：
 
-- 通道与探测：[directory_enum.dart](../lib/core/platform/directory_enum.dart#L44-L63)
-- 仅 Windows 启用：[directory_enum.dart](../lib/core/platform/directory_enum.dart#L146-L157)
+- 通道与探测：[directory_enum.dart](../lib/core/platform/directory_enum.dart)
+- Linux 原生实现：[linux/runner/native_channels.cc](../linux/runner/native_channels.cc)
 
-Linux 回退到 `Directory.list` 加逐项 `stat`：
-
-- [file_system.dart](../lib/core/platform/file_system.dart#L176-L198)
-
-同样的扫描逻辑在 Linux 上会产生更多系统调用，目录树越大差距越明显。扫描结果与选择行为不受影响。
+Linux 使用 `readdir` 的 `d_type` 避免为目录额外 `stat`，只为普通文件调用一次 `statx(AT_STATX_DONT_SYNC)` 取得大小与修改时间，并通过 `types` 列返回文件 / 目录 / 符号链接。枚举在 GTask 工作线程中执行，不阻塞 UI。通道探测失败（旧 runner、单元测试）时仍自动回落到 `Directory.list` + 逐文件 `stat`，过滤与上限逻辑不变。
 
 ### 3.3 元数据恢复
 
 Windows 记录并尽力恢复创建时间、修改时间、访问时间、只读属性，跨卷复制时额外抓取并恢复 DACL：
 
-- [file_metadata.dart](../lib/core/clean/file_metadata.dart#L156-L214)
+- [file_metadata.dart](../lib/core/clean/file_metadata.dart)
 
-Linux 只能恢复权限位与访问 / 修改时间：
+Linux 在同卷重命名时依赖文件系统保留全部属性；仅在探测到跨卷复制（`st_dev` 不同或无法判定）时，通过原生通道额外抓取并恢复：
 
-- [file_metadata.dart](../lib/core/clean/file_metadata.dart#L100-L154)
+- 所有者 / 所属组（`lchown`）
+- 权限位与访问 / 修改时间
+- POSIX ACL（`system.posix_acl_access` / `system.posix_acl_default`）、capability（`security.capability`）、SELinux 标签（`security.selinux`）及其他扩展属性
+- `statx` 的 birth time 会记录到会话，但 Linux 没有可写创建时间的 API，因此无法恢复
 
-具体差异：
-
-- POSIX 没有通过 `dart:io` 暴露创建时间，`FileMetadata.created` 在 Linux 上为空
-- 所有者、所属组、POSIX ACL、扩展属性（xattr / capability / SELinux 标签）不记录也不恢复
-- 同卷重命名会保留这些属性；跨卷复制会丢失，只能恢复 mode 与时间
-- 只读属性由权限位的写位推导，不单独保存
+元数据以 base64 写入 `entries.jsonl`，读取时限制条目数、名称、长度并校验 base64。`lchown` / `lsetxattr` 需要权限的属性在普通用户下可能失败：可预期的权限错误（`EPERM`、`ENOTSUP` 等）不会让撤销失败，但抓取失败会以“扩展属性未能在清理时保存”预警。只读属性仍由权限位的写位推导。
 
 ### 3.4 扫描低优先级
 
-Windows 尝试进入后台模式，失败后回退到低于正常的 CPU 优先级；Linux 只把进程 `nice` 调整到 10：
+Windows 尝试进入后台模式，失败后回退到低于正常的 CPU 优先级；Linux 同时调整 CPU 与 I/O 优先级：
 
-- [linux/runner/native_channels.cc](../linux/runner/native_channels.cc#L281-L321)
-- [scan_priority.dart](../lib/core/platform/scan_priority.dart#L21-L50)
+- [linux/runner/native_channels.cc](../linux/runner/native_channels.cc)
+- [scan_priority.dart](../lib/core/platform/scan_priority.dart)
 
-Linux 没有 I/O 优先级调整，磁盘密集扫描对前台程序的影响可能比 Windows 更明显。
+Linux 将 `nice` 降到 10（只降不升），并通过 `ioprio_set` 请求 idle I/O 类；扫描结束恢复原始值。两者都是 best effort：内核或容器拒绝 I/O 优先级时仍保留 CPU 降级，扫描不会因此失败。
 
 ### 3.5 窗口与外壳
 
-Windows 使用 Flutter 自绘标题栏，支持拖动、双击最大化、最大化悬停状态与系统菜单：
+Windows 与 Linux 都使用 Flutter 自绘标题栏，支持拖动、双击最大化、最大化状态与系统菜单：
 
-- [window_chrome.dart](../lib/platform/window_chrome.dart#L27-L29)
-- [window_title_bar.dart](../lib/ui/window_title_bar.dart#L16-L30)
+- [window_chrome.dart](../lib/platform/window_chrome.dart)
+- [window_title_bar.dart](../lib/ui/window_title_bar.dart)
+- [linux/runner/my_application.cc](../linux/runner/my_application.cc)
+- Linux 原生实现：[linux/runner/native_channels.cc](../linux/runner/native_channels.cc)
 
-Linux 使用 GTK 原生标题栏（GNOME 下为 header bar，其他窗口管理器为传统标题栏）：
-
-- [linux/runner/my_application.cc](../linux/runner/my_application.cc#L29-L54)
-
-这是符合平台习惯的差异，但视觉与交互不完全一致，Linux 不提供自绘标题栏与最大化悬停状态。
+Linux 窗口改为无边框；runner 提供 `broom/window`（拖动、最小化、最大化 / 还原、关闭、系统菜单）与 `broom/window_state`（最大化状态）通道。为了防止无边框窗口失去缩放能力，应用在 Flutter 视图上方放置透明边缘控件，按下时调用 `gtk_window_begin_resize_drag`。最大化悬停高亮仍是 Windows 专属：Linux 的按钮由 Flutter 直接接收鼠标事件，不需要原生命中测试。
 
 ### 3.6 版本号来源
 
-Windows 从 runner 写入的版本读取；Linux 使用 `lib/core/app_info.dart` 中的常量：
+两个桌面 runner 都在构建时从 `pubspec.yaml` 读取版本：
 
-- [app_version.dart](../lib/core/platform/app_version.dart#L44-L49)
+- [linux/CMakeLists.txt](../linux/CMakeLists.txt)
+- [app_version.dart](../lib/core/platform/app_version.dart)
 - [app_info.dart](../lib/core/app_info.dart)
 
-发布 Linux 版本时必须同步修改 `pubspec.yaml` 与 `broomAppVersion`，否则关于页与诊断信息中的版本会不一致。
+Linux 的 CMake 在配置阶段提取 `version:` 并注入 `BROOM_VERSION`，Dart 通过 `broom/system` 的 `appVersion` 读取；关于页与诊断包优先使用该运行时版本，`broomAppVersion` 只作为无原生通道时的回退值，不再需要发布时手工同步。
 
 ## 4. 规则覆盖
 
@@ -242,7 +236,11 @@ Linux：
 - 磁盘空间查询（`statvfs`）
 - 文件夹 / JSON 文件选择器（GTK）
 - 定位文件（Gio 打开默认文件管理器）
-- 扫描低优先级（`nice`）
+- 扫描低优先级（`nice` + I/O idle）
+- 文件占用预检（advisory 写锁 best effort）
+- 原生目录枚举（`readdir` + `statx`）
+- POSIX 元数据尽力恢复（权限位、时间、所有者、xattr / ACL / capability / SELinux 标签）
+- Flutter 自绘标题栏与无边框窗口缩放
 - Windows / POSIX 路径语义、大小写敏感性、跨卷 `st_dev` 探测
 - 中英文界面、主题、无障碍与键盘快捷键
 
@@ -251,7 +249,7 @@ Linux：
 按投入产出排序：
 
 1. **系统缓存实机验证**：Fedora VM 已覆盖安装、授权、DNF 与 journal；剩余 Debian / Ubuntu 的 APT、SELinux enforcing、卸载回滚与负向认证场景。见 [linux-system-cache.md](linux-system-cache.md)。
-2. **文件占用预检与原生目录枚举**：前者提升预览可预期性，后者降低大目录扫描的系统调用次数。
+2. **Linux 原生能力实机回归**：在 GNOME / KDE、X11 / Wayland 下验证自绘标题栏的拖动、缩放与系统菜单，以及 `/proc/locks` 占用提示、跨卷元数据恢复和 `ionice` 的实际效果。
 3. **回收站、卸载残留与更新入口的实机回归**：在 GNOME / KDE 上验证 freedesktop Trash 的多磁盘与权限场景、包管理器清单与实际卸载应用，以及规则 / 软件更新清单的 HTTPS 流程。
 4. **规则目录扩容与分发**：系统级 Flatpak / Snap revision 与 pacman / zypper 需要扩展提权助手；决定 Flatpak / Snap / AppImage 路线，补真实窗口冒烟与帧率测试。
 

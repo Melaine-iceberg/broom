@@ -1,8 +1,10 @@
 import 'package:flutter/services.dart';
 
-/// Lowers the process/thread priority while a scan runs. The Windows
-/// implementation asks for background mode and falls back to below-normal CPU
-/// priority when the privilege is unavailable.
+/// Lowers the process/thread priority while a scan runs.
+///
+/// Windows drops to below-normal CPU priority; Linux lowers both CPU (`nice`)
+/// and block-device I/O (`ionice`) priority. Both are best effort and must
+/// never prevent a scan from starting.
 abstract interface class ScanPriorityController {
   Future<String?> beginLowPriority();
   Future<void> endLowPriority();

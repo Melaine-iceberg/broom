@@ -41,6 +41,28 @@ void main() {
     expect(entries[2].type, FsEntityType.link);
   });
 
+  test('decodes the Linux type column', () async {
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      return <String, Object>{
+        'names': <String>['file.tmp', 'sub', 'link'],
+        'sizes': <int>[12, 0, 0],
+        'modified': <int>[1000000, 0, 0],
+        // Linux kinds: regular file, directory, symbolic link.
+        'types': <int>[0, 1, 2],
+      };
+    });
+
+    final entries = await MethodChannelDirectoryEnumerator(channel: channel)
+        .list('/home/broom/.cache');
+
+    expect(entries, isNotNull);
+    expect(entries!.map((entry) => entry.type), [
+      FsEntityType.file,
+      FsEntityType.directory,
+      FsEntityType.link,
+    ]);
+  });
+
   test(
     'maps a directory failure to a FileSystemException with the Win32 code',
     () async {

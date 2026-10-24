@@ -48,13 +48,15 @@ class FakeQuarantineService implements QuarantineService {
   bool get operationInProgress => false;
 
   @override
-  Future<QuarantineSpaceAssessment> assessSpace(List<JunkItem> items) async =>
-      QuarantineSpaceAssessment(
-        requiredBytes: 0,
-        crossVolumeCount: 0,
-        freeBytes: null,
-        quarantineRoot: quarantineRoot,
-      );
+  Future<QuarantineSpaceAssessment> assessSpace(
+    List<JunkItem> items, {
+    List<int?>? deviceIds,
+  }) async => QuarantineSpaceAssessment(
+    requiredBytes: 0,
+    crossVolumeCount: 0,
+    freeBytes: null,
+    quarantineRoot: quarantineRoot,
+  );
 
   final Map<String, List<QuarantineEntry>> _entriesBySession;
   final List<

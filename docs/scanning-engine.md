@@ -60,7 +60,7 @@ CleanController.scan()
 
 与设置项无关，Windows 上默认启用。
 
-1. `ScanService` 派生 worker 之前，从根 isolate 调用一次 `ping` 探测通道是否存在；只有探测成功才允许 worker 使用它。旧版 runner、非 Windows 平台或单元测试环境探测失败时，扫描自动回落到 `Directory.list` + 逐文件 `stat`。
+1. `ScanService` 派生 worker 之前，从根 isolate 调用一次 `ping` 探测通道是否存在；只有探测成功才允许 worker 使用它。Windows 的 runner 用 `FindFirstFileW`，Linux 的 runner 用 `readdir` + `statx`；旧版 runner、其他平台或单元测试环境探测失败时，扫描自动回落到 `Directory.list` + 逐文件 `stat`。
 2. worker isolate 通过 `RootIsolateToken` + `BackgroundIsolateBinaryMessenger.ensureInitialized` 取得平台通道。没有 token 的后台 isolate 直接发平台消息会**中止 isolate**，而不是抛出可捕获异常；因此“能否使用”必须由根 isolate 决定后显式下传（`_WorkerRequest.useDetailedListing`）。
 3. 原生侧在 4 个常驻线程上执行 `FindFirstFileW` / `FindNextFileW`，路径统一补 `\\?\` / `\\?\UNC\` 前缀，超过 `MAX_PATH` 的目录同样可枚举；结果通过 `PostMessage` 回到平台线程再回复通道，平台线程本身不执行枚举。
 4. 返回四个并行数组：`names`（UTF-16 → UTF-8）、`sizes`（Int64List）、`modified`（Int64List，Unix 微秒）、`attributes`（Int32List）。类型在 Dart 侧按属性位映射：`REPARSE_POINT` → link（不跟随）、`DIRECTORY` → directory，其余为 file。

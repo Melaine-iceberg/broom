@@ -101,10 +101,7 @@ void main() {
     expect(await first.readAsString(), 'alpha');
     expect(await second.readAsString(), 'bravo!');
     expect(await quarantine.listSessions(), isEmpty);
-    expect(
-      await Directory(p.join(temp.path, 'quarantine')).exists(),
-      isTrue,
-    );
+    expect(await Directory(p.join(temp.path, 'quarantine')).exists(), isTrue);
   });
 
   test('removes empty cache directories and recreates them on undo', () async {
@@ -120,10 +117,7 @@ void main() {
       await Directory(p.join(source.path, 'cache', 'nested')).exists(),
       isFalse,
     );
-    expect(
-      await Directory(p.join(source.path, 'cache')).exists(),
-      isFalse,
-    );
+    expect(await Directory(p.join(source.path, 'cache')).exists(), isFalse);
     expect(await source.exists(), isTrue);
 
     final undo = await quarantine.undo(report.sessionId!);
@@ -141,18 +135,13 @@ void main() {
   test('leaves pre-existing empty directories and directories with remaining files', () async {
     final selected = await createFile(p.join('cache', 'selected.tmp'), 'alpha');
     final kept = await createFile(p.join('cache', 'kept.tmp'), 'bravo');
-    final existingEmpty = Directory(
-      p.join(source.path, 'already_empty'),
-    );
+    final existingEmpty = Directory(p.join(source.path, 'already_empty'));
     await existingEmpty.create();
 
     final report = await clean([await itemFor(selected)]);
 
     expect(report.removedDirectoryCount, 0);
-    expect(
-      await Directory(p.join(source.path, 'cache')).exists(),
-      isTrue,
-    );
+    expect(await Directory(p.join(source.path, 'cache')).exists(), isTrue);
     expect(await existingEmpty.exists(), isTrue);
     expect(await kept.readAsString(), 'bravo');
   });
@@ -174,37 +163,22 @@ void main() {
 
       expect(interrupted.cancelled, isTrue);
       expect(interrupted.removedDirectoryCount, 0);
-      expect(
-        await Directory(p.join(source.path, 'a')).exists(),
-        isTrue,
-      );
+      expect(await Directory(p.join(source.path, 'a')).exists(), isTrue);
       expect(await second.exists(), isTrue);
 
       final resumed = await quarantine.resumeClean(interrupted.sessionId!);
 
       expect(resumed.movedCount, 1);
       expect(resumed.removedDirectoryCount, 2);
-      expect(
-        await Directory(p.join(source.path, 'a')).exists(),
-        isFalse,
-      );
-      expect(
-        await Directory(p.join(source.path, 'b')).exists(),
-        isFalse,
-      );
+      expect(await Directory(p.join(source.path, 'a')).exists(), isFalse);
+      expect(await Directory(p.join(source.path, 'b')).exists(), isFalse);
 
       final undo = await quarantine.undo(interrupted.sessionId!);
 
       expect(undo.restoredCount, 2);
       expect(undo.recreatedDirectoryCount, 2);
-      expect(
-        await Directory(p.join(source.path, 'a')).exists(),
-        isTrue,
-      );
-      expect(
-        await Directory(p.join(source.path, 'b')).exists(),
-        isTrue,
-      );
+      expect(await Directory(p.join(source.path, 'a')).exists(), isTrue);
+      expect(await Directory(p.join(source.path, 'b')).exists(), isTrue);
     },
   );
 
@@ -244,12 +218,7 @@ void main() {
     );
     final report = await clean([await itemFor(file)]);
     final recordsFile = File(
-      p.join(
-        temp.path,
-        'quarantine',
-        report.sessionId!,
-        'removed_dirs.jsonl',
-      ),
+      p.join(temp.path, 'quarantine', report.sessionId!, 'removed_dirs.jsonl'),
     );
     final outside = Directory(p.join(temp.path, 'outside'));
     final unrelated = Directory(p.join(source.path, 'unrelated'));
@@ -299,12 +268,7 @@ void main() {
     // A hard crash leaves the session in "cleaning"; listing must recover the
     // remaining count from the plan and entries instead of trusting metadata.
     final metaFile = File(
-      p.join(
-        temp.path,
-        'quarantine',
-        interrupted.sessionId!,
-        'session.json',
-      ),
+      p.join(temp.path, 'quarantine', interrupted.sessionId!, 'session.json'),
     );
     final crashedMeta =
         jsonDecode(await metaFile.readAsString()) as Map<String, dynamic>;
@@ -335,12 +299,7 @@ void main() {
     expect(readySession.remainingCount, 0);
     expect(
       File(
-        p.join(
-          temp.path,
-          'quarantine',
-          interrupted.sessionId!,
-          'plan.jsonl',
-        ),
+        p.join(temp.path, 'quarantine', interrupted.sessionId!, 'plan.jsonl'),
       ).existsSync(),
       isFalse,
     );
@@ -419,12 +378,7 @@ void main() {
 
       final report = await clean([await itemFor(file)]);
       final entriesFile = File(
-        p.join(
-          temp.path,
-          'quarantine',
-          report.sessionId!,
-          'entries.jsonl',
-        ),
+        p.join(temp.path, 'quarantine', report.sessionId!, 'entries.jsonl'),
       );
       final entry = jsonDecode(
         (await entriesFile.readAsLines()).single,
@@ -452,6 +406,57 @@ void main() {
       expect(await file.readAsString(), 'alpha');
     },
   );
+
+  test(
+    'persists and restores POSIX ownership and extended attributes',
+    () async {
+      final file = await createFile('posix-meta.txt', 'alpha');
+      final modified = DateTime.utc(2021, 2, 3, 4, 5, 6);
+      const xattrs = {'user.test': 'AQID', 'security.selinux': 'bGFiZWw='};
+      metadata.metadata = FileMetadata(
+        modified: modified,
+        mode: 0x1A4,
+        uid: 1000,
+        gid: 1001,
+        xattrs: xattrs,
+      );
+
+      final report = await clean([await itemFor(file)]);
+      final entriesFile = File(
+        p.join(temp.path, 'quarantine', report.sessionId!, 'entries.jsonl'),
+      );
+      final entry = jsonDecode(
+        (await entriesFile.readAsLines()).single,
+      ) as Map<String, dynamic>;
+
+      expect(entry['uid'], 1000);
+      expect(entry['gid'], 1001);
+      expect(entry['xattrs'], xattrs);
+
+      final undo = await quarantine.undo(report.sessionId!);
+
+      expect(undo.restoredCount, 1);
+      expect(undo.metadataFailureCount, 0);
+      final applied = metadata.applies.single.metadata;
+      expect(applied.uid, 1000);
+      expect(applied.gid, 1001);
+      expect(applied.xattrs, xattrs);
+    },
+  );
+
+  test('warns when POSIX extended metadata could not be captured', () async {
+    final file = await createFile('posix-meta.txt', 'alpha');
+    metadata.metadata = FileMetadata(
+      modified: DateTime.utc(2021, 1, 1),
+      extendedUnavailable: true,
+    );
+
+    final report = await clean([await itemFor(file)]);
+    final undo = await quarantine.undo(report.sessionId!);
+
+    expect(undo.metadataFailureCount, 1);
+    expect(undo.metadataWarnings.single.reason, contains('扩展属性'));
+  });
 
   test('derives undo metadata from the supplied stat', () async {
     final file = await createFile('derived.txt', 'alpha');
@@ -553,12 +558,7 @@ void main() {
     final report = await clean([await itemFor(file)]);
 
     final entriesFile = File(
-      p.join(
-        temp.path,
-        'quarantine',
-        report.sessionId!,
-        'entries.jsonl',
-      ),
+      p.join(temp.path, 'quarantine', report.sessionId!, 'entries.jsonl'),
     );
     final entry = jsonDecode(
       (await entriesFile.readAsLines()).single,
@@ -630,12 +630,7 @@ void main() {
     final report = await clean([await itemFor(file)]);
 
     final entriesFile = File(
-      p.join(
-        temp.path,
-        'quarantine',
-        report.sessionId!,
-        'entries.jsonl',
-      ),
+      p.join(temp.path, 'quarantine', report.sessionId!, 'entries.jsonl'),
     );
     final entry = jsonDecode(
       (await entriesFile.readAsLines()).single,
@@ -826,9 +821,8 @@ void main() {
     expect(await second.exists(), isFalse);
     expect(await quarantine.listSessions(), isEmpty);
     expect(
-      await Directory(
-        p.join(temp.path, 'quarantine', report.sessionId!),
-      ).exists(),
+      await Directory(p.join(temp.path, 'quarantine', report.sessionId!))
+          .exists(),
       isFalse,
     );
   });
@@ -1030,9 +1024,7 @@ try {
               ),
         ),
       );
-      expect(probed, [
-        p.windows.rootPrefix(p.join(temp.path, 'quarantine')),
-      ]);
+      expect(probed, [p.windows.rootPrefix(p.join(temp.path, 'quarantine'))]);
       expect(await service.listSessions(), isEmpty);
       expect(
         await Directory(p.join(temp.path, 'quarantine')).exists(),
@@ -1045,87 +1037,87 @@ try {
     'skips the preflight for same-volume moves',
     skip: _windowsOnly,
     () async {
-    final file = await createFile('same-volume.tmp', 'alpha');
-    final item = await itemFor(file);
-    var probeCalls = 0;
-    final service = QuarantineService(
-      quarantineRoot: p.join(temp.path, 'quarantine'),
-      guard: PathGuard(protectedRoots: const []),
-      metadataAccess: metadata,
-      freeSpaceProbe: (_) async {
-        probeCalls++;
-        return 0;
-      },
-    );
+      final file = await createFile('same-volume.tmp', 'alpha');
+      final item = await itemFor(file);
+      var probeCalls = 0;
+      final service = QuarantineService(
+        quarantineRoot: p.join(temp.path, 'quarantine'),
+        guard: PathGuard(protectedRoots: const []),
+        metadataAccess: metadata,
+        freeSpaceProbe: (_) async {
+          probeCalls++;
+          return 0;
+        },
+      );
 
-    final assessment = await service.assessSpace([item]);
-    expect(assessment.requiredBytes, 0);
-    expect(assessment.crossVolumeCount, 0);
-    expect(assessment.sufficient, isTrue);
+      final assessment = await service.assessSpace([item]);
+      expect(assessment.requiredBytes, 0);
+      expect(assessment.crossVolumeCount, 0);
+      expect(assessment.sufficient, isTrue);
 
-    final report = await service.clean([item], roots: testRoots);
-    expect(probeCalls, 0);
-    expect(report.movedCount, 1);
-    expect(report.sessionId, isNotNull);
-  });
+      final report = await service.clean([item], roots: testRoots);
+      expect(probeCalls, 0);
+      expect(report.movedCount, 1);
+      expect(report.sessionId, isNotNull);
+    },
+  );
 
   test(
     'refuses to resume when the remaining plan needs unavailable space',
     skip: _windowsOnly,
     () async {
-    final first = await createFile('first.txt', 'alpha');
-    final second = await createFile('second.txt', 'bravo');
-    var cancel = false;
-    final interrupted = await clean(
-      [await itemFor(first), await itemFor(second)],
-      onProgress: (progress) {
-        if (progress.moved >= 1) cancel = true;
-      },
-      isCancelled: () => cancel,
-    );
-    final sessionId = interrupted.sessionId!;
-    expect(interrupted.cancelled, isTrue);
+      final first = await createFile('first.txt', 'alpha');
+      final second = await createFile('second.txt', 'bravo');
+      var cancel = false;
+      final interrupted = await clean(
+        [await itemFor(first), await itemFor(second)],
+        onProgress: (progress) {
+          if (progress.moved >= 1) cancel = true;
+        },
+        isCancelled: () => cancel,
+      );
+      final sessionId = interrupted.sessionId!;
+      expect(interrupted.cancelled, isTrue);
 
-    final sessionDir = Directory(
-      p.join(temp.path, 'quarantine', sessionId),
-    );
-    final planFile = File(p.join(sessionDir.path, 'plan.jsonl'));
-    final existingPlan = await planFile.readAsString();
-    final extra = JunkItem(
-      rootIndex: 0,
-      path: r'D:\cache\extra.bin',
-      size: 4096,
-      modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
-    );
-    await planFile.writeAsString(
-      '$existingPlan'
-      '${jsonEncode({'originalPath': extra.path, 'rootPath': r'D:\cache', 'ruleId': 'test.rule', 'size': extra.size, 'modified': extra.modified.toUtc().toIso8601String()})}\n',
-    );
-    final metaFile = File(p.join(sessionDir.path, 'session.json'));
-    final meta =
-        jsonDecode(await metaFile.readAsString()) as Map<String, dynamic>;
-    meta['plannedCount'] = 3;
-    meta['remainingCount'] = 2;
-    await metaFile.writeAsString(jsonEncode(meta));
+      final sessionDir = Directory(p.join(temp.path, 'quarantine', sessionId));
+      final planFile = File(p.join(sessionDir.path, 'plan.jsonl'));
+      final existingPlan = await planFile.readAsString();
+      final extra = JunkItem(
+        rootIndex: 0,
+        path: r'D:\cache\extra.bin',
+        size: 4096,
+        modifiedMicros: DateTime(2026, 10, 18).microsecondsSinceEpoch,
+      );
+      await planFile.writeAsString(
+        '$existingPlan'
+        '${jsonEncode({'originalPath': extra.path, 'rootPath': r'D:\cache', 'ruleId': 'test.rule', 'size': extra.size, 'modified': extra.modified.toUtc().toIso8601String()})}\n',
+      );
+      final metaFile = File(p.join(sessionDir.path, 'session.json'));
+      final meta =
+          jsonDecode(await metaFile.readAsString()) as Map<String, dynamic>;
+      meta['plannedCount'] = 3;
+      meta['remainingCount'] = 2;
+      await metaFile.writeAsString(jsonEncode(meta));
 
-    final limited = QuarantineService(
-      quarantineRoot: p.join(temp.path, 'quarantine'),
-      guard: PathGuard(protectedRoots: const []),
-      metadataAccess: metadata,
-      freeSpaceProbe: (_) async => 0,
-    );
+      final limited = QuarantineService(
+        quarantineRoot: p.join(temp.path, 'quarantine'),
+        guard: PathGuard(protectedRoots: const []),
+        metadataAccess: metadata,
+        freeSpaceProbe: (_) async => 0,
+      );
 
-    await expectLater(
-      limited.resumeClean(sessionId),
-      throwsA(isA<QuarantineSpaceException>()),
-    );
-    expect(await second.exists(), isTrue);
-    expect(await planFile.exists(), isTrue);
-    final session = (await limited.listSessions()).single;
-    expect(session.status, QuarantineStatus.partial);
-    expect(session.remainingCount, 2);
-    expect(session.pendingCount, 1);
-  });
+      await expectLater(
+        limited.resumeClean(sessionId),
+        throwsA(isA<QuarantineSpaceException>()),
+      );
+      expect(await second.exists(), isTrue);
+      expect(await planFile.exists(), isTrue);
+      final session = (await limited.listSessions()).single;
+      expect(session.status, QuarantineStatus.partial);
+      expect(session.remainingCount, 2);
+      expect(session.pendingCount, 1);
+    },
+  );
 
   test(
     'migrates legacy sessions and refuses unknown schema versions',
@@ -1134,12 +1126,7 @@ try {
       final second = await createFile('second.txt', 'bravo');
       final report = await clean([await itemFor(first), await itemFor(second)]);
       final metaFile = File(
-        p.join(
-          temp.path,
-          'quarantine',
-          report.sessionId!,
-          'session.json',
-        ),
+        p.join(temp.path, 'quarantine', report.sessionId!, 'session.json'),
       );
       final v1 =
           jsonDecode(await metaFile.readAsString()) as Map<String, dynamic>;

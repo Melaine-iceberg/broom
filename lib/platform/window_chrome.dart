@@ -3,7 +3,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-/// Bridge to the native window chrome used by the Windows runner.
+/// Bridge to the native window chrome used by the desktop runners.
+///
+/// Windows and Linux both draw the title bar in Flutter, so the runner only
+/// provides dragging, maximize state and the caption commands.
 class WindowChrome {
   WindowChrome._();
 
@@ -25,7 +28,9 @@ class WindowChrome {
   StreamSubscription<dynamic>? _stateSubscription;
 
   bool get isSupported =>
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.linux);
 
   /// Subscribes to native maximize/restore changes.
   ///
@@ -60,7 +65,7 @@ class WindowChrome {
     try {
       await _channel.invokeMethod<void>(method);
     } on MissingPluginException {
-      // Only the Windows runner implements the window commands.
+      // Older runners and unit tests do not implement the window commands.
     } on PlatformException {
       // Window chrome is cosmetic; a failed command must not break cleaning.
     }

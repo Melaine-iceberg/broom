@@ -19,7 +19,8 @@ Broom 在清理预览阶段提示**可能被占用**的文件，并在清理结�
 | 探测调用 | `CreateFileW(path, DELETE, FILE_SHARE_READ \| FILE_SHARE_WRITE \| FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr)` |
 | 占用判定 | 打开失败且错误码为 `ERROR_SHARING_VIOLATION (32)` 或 `ERROR_LOCK_VIOLATION (33)` |
 | 长路径 | 复用 `ToExtendedWindowsPath`，本地路径补 `\\?\`，UNC 补 `\\?\UNC\` |
-| 非 Windows | 使用 `NoopFileLockProbe`，不报告占用 |
+| Linux 探测 | 解析 `/proc/locks`，用 `lstat` 的 `st_dev` / `st_ino` 匹配 **写** 类型的 POSIX / OFD / flock 锁；只读共享不报告 |
+| 其他平台 | 使用 `NoopFileLockProbe`，不报告占用 |
 | 异常 | 结果缺失或通道不可用时抛出 `FileLockProbeException`，控制器捕获后保持预览可用 |
 
 Dart 侧的 `runLockProbe` 负责分批、取消与进度回调；两个控制器（Safe 清理与系统缓存）共用同一实现，只在规则维度上分别统计占用数量。
@@ -65,7 +66,7 @@ flutter test
 
 ## 已知限制
 
-- 只有 Windows 提供真实探测；其他平台退化为不提示。
-- 探测只检查删除权限，不模拟跨卷“复制 + 删除”中的读取阶段；网络盘上的瞬时错误可能在清理时才暴露。
+- Linux 只检测 advisory 写锁；程序单纯打开文件读写、未加锁时不会提示。Windows 仍以共享 / 删除冲突为主。
+- 探测只检查占用信号，不模拟跨卷“复制 + 删除”中的读取阶段；网络盘上的瞬时错误可能在清理时才暴露。
 - 杀毒软件、索引服务或短暂扫描可能造成一次性误报或漏报。
 - 被标记为占用不会阻止用户勾选；如果用户坚持清理，结果仍以实际跳过 / 失败为准，不会尝试解锁。

@@ -6,11 +6,12 @@ import 'package:flutter/services.dart';
 import 'file_system.dart';
 import 'windows_path.dart';
 
-/// Client for the native `FindFirstFileW` enumerator.
+/// Client for the native directory enumerator.
 ///
-/// One call returns every child of a directory as four columns — names, sizes,
-/// modification times and attributes — because `WIN32_FIND_DATAW` already
-/// carries them. That replaces dart:io's listing plus one `stat` per child.
+/// Windows uses `FindFirstFileW`, which already carries names, sizes,
+/// modification times and attributes in `WIN32_FIND_DATAW`. Linux uses
+/// `readdir` plus one `statx` per child, returning a type column instead of
+/// Windows attribute bits. Both replace dart:io's listing plus separate stats.
 ///
 /// Failures are split by scope:
 /// - the channel is missing (other platforms, unit tests, old builds) →
@@ -102,27 +103,37 @@ class MethodChannelDirectoryEnumerator {
     final sizes = response['sizes'];
     final modified = response['modified'];
     final attributes = response['attributes'];
+    final types = response['types'];
     if (names is! List ||
         sizes is! List ||
         modified is! List ||
-        attributes is! List ||
+        (attributes is! List && types is! List) ||
+        (attributes is List && attributes.length != names.length) ||
+        (types is List && types.length != names.length) ||
         sizes.length != names.length ||
-        modified.length != names.length ||
-        attributes.length != names.length) {
+        modified.length != names.length) {
       throw FileSystemException('目录枚举返回的字段不完整', path);
     }
 
     final entries = <FsEntryDetail>[];
     for (var index = 0; index < names.length; index++) {
       final name = names[index];
-      final attribute = attributes[index];
-      if (name is! String || name.isEmpty || attribute is! int) continue;
+      if (name is! String || name.isEmpty) continue;
+      final FsEntityType type;
+      if (types is List) {
+        final kind = types[index];
+        type = kind is int ? _typeOfKind(kind) : FsEntityType.file;
+      } else {
+        final attribute = attributes[index];
+        if (attribute is! int) continue;
+        type = _typeOfAttribute(attribute);
+      }
       final size = sizes[index];
       final modifiedMicros = modified[index];
       entries.add(
         FsEntryDetail(
           name: name,
-          type: _typeOf(attribute),
+          type: type,
           size: size is int ? size : 0,
           modified: modifiedMicros is int && modifiedMicros > 0
               ? DateTime.fromMicrosecondsSinceEpoch(
@@ -136,10 +147,21 @@ class MethodChannelDirectoryEnumerator {
     return entries;
   }
 
-  static FsEntityType _typeOf(int attributes) {
+  static FsEntityType _typeOfAttribute(int attributes) {
     if ((attributes & _attributeReparsePoint) != 0) return FsEntityType.link;
-    if ((attributes & _attributeDirectory) != 0) return FsEntityType.directory;
+    if ((attributes & _attributeDirectory) != 0) {
+      return FsEntityType.directory;
+    }
     return FsEntityType.file;
+  }
+
+  /// Linux kinds: 0 regular file, 1 directory, 2 symbolic link.
+  static FsEntityType _typeOfKind(int kind) {
+    return switch (kind) {
+      1 => FsEntityType.directory,
+      2 => FsEntityType.link,
+      _ => FsEntityType.file,
+    };
   }
 }
 
@@ -151,7 +173,7 @@ class MethodChannelDirectoryEnumerator {
 /// instead of raising a catchable error. Callers must probe here before
 /// spawning and forward [RootIsolateToken.instance] to the worker.
 Future<bool> probeDetailedListingFromRoot() async {
-  if (!Platform.isWindows) return false;
+  if (!Platform.isWindows && !Platform.isLinux) return false;
   if (RootIsolateToken.instance == null) return false;
   return MethodChannelDirectoryEnumerator().probe();
 }
