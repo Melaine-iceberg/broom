@@ -102,9 +102,9 @@ jobs:
           deb="$(find dist -maxdepth 1 -name 'broom_*_amd64.deb' -type f | head -n 1)"
           test -n "$deb"
           dpkg-deb --info "$deb"
-          dpkg-deb --contents "$deb" | grep -q 'usr/libexec/broom/broom-system-helper'
-          dpkg-deb --contents "$deb" | grep -q 'usr/share/polkit-1/actions/com.broom.Broom.policy'
-          dpkg-deb --contents "$deb" | grep -q 'usr/bin/broom'
+          dpkg-deb --contents "$deb" | grep 'usr/libexec/broom/broom-system-helper' >/dev/null
+          dpkg-deb --contents "$deb" | grep 'usr/share/polkit-1/actions/com.broom.Broom.policy' >/dev/null
+          dpkg-deb --contents "$deb" | grep 'usr/bin/broom' >/dev/null
           appimage="$(find dist -maxdepth 1 -name 'broom-*-linux-x64.AppImage' -type f | head -n 1)"
           test -n "$appimage"
           "$appimage" --appimage-extract >/dev/null

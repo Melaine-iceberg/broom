@@ -93,7 +93,8 @@ void main() {
 
     test('helper path matches the Dart client constant', () {
       final source = File('lib/core/platform/linux_system_maintenance.dart')
-          .readAsStringSync();
+          .readAsStringSync()
+          .replaceAll('\r\n', '\n');
       final contents = script.readAsStringSync();
 
       expect(
