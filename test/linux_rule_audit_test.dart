@@ -44,6 +44,12 @@ void main() {
         'XDG_CACHE_HOME': _semantics.join(base.path, 'cache'),
         'XDG_CONFIG_HOME': _semantics.join(base.path, 'config'),
         'XDG_DATA_HOME': _semantics.join(base.path, 'data'),
+        'VCPKG_ROOT': _semantics.join(base.path, 'vcpkg-root'),
+        'VCPKG_DOWNLOADS': _semantics.join(base.path, 'vcpkg-downloads'),
+        'VCPKG_DEFAULT_BINARY_CACHE': _semantics.join(
+          base.path,
+          'vcpkg-binary-cache',
+        ),
       };
     });
 
@@ -61,9 +67,8 @@ void main() {
       }
 
       for (final rule in rules) {
-        final roots = await PosixRuleResolver(
-          environment: environment,
-        ).resolve(rule);
+        final roots = await PosixRuleResolver(environment: environment)
+            .resolve(rule);
         expect(
           roots,
           isNotEmpty,
@@ -173,7 +178,7 @@ Future<void> _materialize(
     );
     final file = File(path);
     await file.parent.create(recursive: true);
-    await file.writeAsString('broom-audit');
+    await file.writeAsString(sample.content ?? 'broom-audit');
     await file.setLastModified(DateTime.now().subtract(sample.age));
   }
 }
@@ -198,17 +203,16 @@ String _expandSample(String samplePath, Map<String, String> environment) {
     }
     return value;
   });
-  expanded = expanded.replaceAllMapped(
-    RegExp(r'\$([A-Za-z_][A-Za-z0-9_]*)'),
-    (match) {
-      final value = environment[match.group(1)!];
-      if (value == null || value.isEmpty) {
-        missing.add(match.group(1)!);
-        return '';
-      }
-      return value;
-    },
-  );
+  expanded = expanded.replaceAllMapped(RegExp(r'\$([A-Za-z_][A-Za-z0-9_]*)'), (
+    match,
+  ) {
+    final value = environment[match.group(1)!];
+    if (value == null || value.isEmpty) {
+      missing.add(match.group(1)!);
+      return '';
+    }
+    return value;
+  });
   expect(
     missing,
     isEmpty,

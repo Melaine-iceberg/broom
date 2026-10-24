@@ -78,7 +78,7 @@ Windows 与 Linux 现在共享同一套 HTTPS 清单、构建期 HMAC 签名校�
 - 启动时加载激活规则目录：[lib/main.dart](../lib/main.dart)
 - 目录位置沿用 `$XDG_DATA_HOME/Broom/rules/{active,previous}.json`
 
-Linux 的内置版本仍为 `builtin-linux-2`；没有激活目录时保持该版本，不会被通用 store 的 `builtin` 覆盖。设置页的“规则更新”区块现在会在 Linux 显示，但只有在构建时注入 `--dart-define=BROOM_RULE_SIGNING_KEY=...` 并填写 HTTPS 更新地址后才能实际检查和应用更新。
+Linux 的内置版本为 `builtin-linux-3`；没有激活目录时保持该版本，不会被通用 store 的 `builtin` 覆盖。设置页的“规则更新”区块现在会在 Linux 显示，但只有在构建时注入 `--dart-define=BROOM_RULE_SIGNING_KEY=...` 并填写 HTTPS 更新地址后才能实际检查和应用更新。包含扩展旧版本等版本感知规则的清单必须使用 `schemaVersion: 2`，避免旧客户端把 profile 根当成普通扫描根。
 
 ### 2.5 应用软件更新
 
@@ -173,25 +173,26 @@ Windows 从 runner 写入的版本读取；Linux 使用 `lib/core/app_info.dart`
 | 平台 | 规则总数 | 分类分布 |
 | --- | --- | --- |
 | Windows | 44 | 系统 3、浏览器 5、开发工具 28、应用 5、缩略图 1、GPU 1、日志 1 |
-| Linux | 39 | 系统 2、日志 1、GPU 2、浏览器 6、应用 4、开发工具 24 |
+| Linux | 48 | 系统 4、日志 3、GPU 2、浏览器 6、浏览器扩展 1、应用 6、开发工具 26 |
 
 - Windows 规则：[windows_rules.dart](../lib/core/rules/windows_rules.dart)
 - Linux 规则：[linux_rules.dart](../lib/core/rules/linux_rules.dart)
 
-Linux 目前覆盖缩略图、fontconfig、Broom 诊断日志、Mesa / NVIDIA 着色器、Chrome / Chromium / Edge / Brave / Firefox（含 Chromium `ScriptCache`）、VS Code / Discord / Slack / Spotify，以及 pip、npm、Yarn、pnpm、Bun、uv、Go、Cargo、Gradle、Pub、Maven、Playwright、Composer、Electron、Poetry、node-gyp、Deno、Corepack、NuGet、JetBrains、Hugging Face、conda、Coursier、Kotlin/Native 缓存。
+Linux 目前覆盖缩略图、fontconfig、Flatpak / Snap 用户缓存、Broom 诊断日志、应用日志与 Xorg 会话日志、Mesa / NVIDIA 着色器、Chrome / Chromium / Edge / Brave / Firefox（含 Chromium `ScriptCache` 与按 `Preferences` 保留当前版本的扩展旧版本）、VS Code / Discord / Slack / Teams / Spotify / Flatpak 应用缓存，以及 pip、npm、Yarn、pnpm、Bun、uv、Go、Cargo、Gradle、Pub、Maven、Playwright、Composer、Electron、Poetry、node-gyp、Deno、Corepack、vcpkg、AUR 助手（yay / paru / pikaur）、NuGet、JetBrains、Hugging Face、conda、Coursier、Kotlin/Native 缓存。
 
 Windows 侧存在但 Linux 没有对应规则的包括：
 
 - 系统临时文件、崩溃转储、Windows 错误报告（WER）
-- Teams、Docker、WSL、Scoop、vcpkg
+- Docker、WSL、Scoop
 
-其中一部分确实属于 Windows 专有；Linux 侧仍待补齐的主要是需要特殊语义或尚未验证的目标：
+Linux 侧仍受平台语义限制、不能简单照搬为普通规则的目标：
 
-- Flatpak、Snap 的旧版本与缓存
-- pacman / zypper 等尚未纳入系统助手的包管理器缓存
-- 新版 Teams 客户端与自定义安装路径的 vcpkg 尚未逐项验证
+- Flatpak / Snap 的系统级旧 revision、`/var/lib/flatpak`、`/var/lib/snapd` 与 `/var/cache/snapd` 仍在保护根中，由各自工具管理；普通规则只覆盖用户级缓存
+- pacman 的系统缓存 `/var/cache/pacman/pkg` 属于保护根；普通规则只覆盖 yay / paru / pikaur 的用户缓存
 - 回收站不作为普通清理规则，而是独立工具（见 2.2）
-- systemd journal 由系统助手处理，不进入普通规则（见 2.1）
+- systemd journal 与 `/var/log` 由系统助手处理或受保护，不进入普通规则（见 2.1）
+- vcpkg 的自定义克隆路径只有在导出 `VCPKG_ROOT`、`VCPKG_DOWNLOADS` 或 `VCPKG_DEFAULT_BINARY_CACHE` 时才能被发现
+- Firefox 扩展没有按版本号组织的目录，扩展旧版本规则只覆盖 Chromium 系浏览器
 
 规则在线更新已在 Linux 接入；默认发布仍需构建时注入签名密钥并配置 HTTPS 清单，未配置时入口会明确提示而不会静默使用未验证规则。
 
@@ -233,7 +234,7 @@ Linux：
 - 隔离区移动、撤销、永久释放、会话续跑、清理历史、保留策略
 - 排除列表、路径守卫、配置导入导出、设置迁移
 - 重复文件与大文件分析
-- 39 条内置规则（27 条 Safe、12 条 Review），覆盖日志、浏览器脚本、应用缓存与常用开发工具缓存
+- 48 条内置规则（33 条 Safe、15 条 Review），覆盖日志、浏览器脚本与扩展旧版本、Flatpak / Snap 用户缓存、应用缓存与常用开发工具缓存
 - 回收站查看与清空（freedesktop Trash，永久删除、需确认）
 - 卸载残留检测（包管理器清单 + 桌面文件 + 策划 XDG 清单）
 - 签名规则目录的在线更新、回滚与恢复内置规则（需要构建密钥与 HTTPS 清单）
@@ -252,7 +253,7 @@ Linux：
 1. **系统缓存实机验证**：Fedora VM 已覆盖安装、授权、DNF 与 journal；剩余 Debian / Ubuntu 的 APT、SELinux enforcing、卸载回滚与负向认证场景。见 [linux-system-cache.md](linux-system-cache.md)。
 2. **文件占用预检与原生目录枚举**：前者提升预览可预期性，后者降低大目录扫描的系统调用次数。
 3. **回收站、卸载残留与更新入口的实机回归**：在 GNOME / KDE 上验证 freedesktop Trash 的多磁盘与权限场景、包管理器清单与实际卸载应用，以及规则 / 软件更新清单的 HTTPS 流程。
-4. **规则目录扩容与分发**：补 Flatpak / Snap 旧版本、pacman / zypper 等目标；决定 Flatpak / Snap / AppImage 路线，补真实窗口冒烟与帧率测试。
+4. **规则目录扩容与分发**：系统级 Flatpak / Snap revision 与 pacman / zypper 需要扩展提权助手；决定 Flatpak / Snap / AppImage 路线，补真实窗口冒烟与帧率测试。
 
 ## 8. 代码索引
 

@@ -19,7 +19,7 @@ void main() {
 
       expect(platform.pathSemantics, isA<PosixPathSemantics>());
       expect(platform.displayName, 'Linux');
-      expect(platform.rulesVersion, 'builtin-linux-2');
+      expect(platform.rulesVersion, 'builtin-linux-3');
       expect(
         platform.quarantineRoot,
         '/home/broom/.local/share/Broom/quarantine',
@@ -123,6 +123,10 @@ void main() {
       expect(ruleCategoryKey(byId['system.linux_thumbnails']!), 'thumbnails');
       expect(ruleCategoryKey(byId['system.linux_fontconfig']!), 'system');
       expect(ruleCategoryKey(byId['browser.linux_firefox']!), 'browser');
+      expect(
+        ruleCategoryKey(byId['browser.linux_extension_versions']!),
+        'browser_extension',
+      );
       expect(ruleCategoryKey(byId['app.linux_vscode']!), 'app');
       expect(ruleCategoryKey(byId['dev.linux_pip']!), 'dev');
       expect(ruleCategoryKey(byId['gpu.linux_mesa_shader']!), 'gpu');

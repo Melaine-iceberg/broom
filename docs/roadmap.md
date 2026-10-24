@@ -100,7 +100,7 @@
       - 第二批（包管理器与工具链下载缓存）：新增 Electron / electron-builder、Scoop、uv、Poetry、node-gyp、vcpkg、Deno、Corepack 八条 Safe 规则，以及 Playwright 浏览器缓存的 Review 规则。规则根一律精确到缓存子目录，避开与缓存同级的安装与可运行内容：`uv\python`、`uv\tools`、`pypoetry\virtualenvs`、`vcpkg\installed`、`scoop\apps` 与 `scoop\persist` 均不在扫描范围内。Playwright 因重新下载体积大且会中断端到端测试，保持 Review 级、默认不勾选。各条目的路径已按官方安装器与本机实际目录核对，Electron（151 MB）与 Playwright（718 MB / 606 个文件）在本机完成只读扫描验证。
       - 第三批（Review 级大件缓存）：新增 Hugging Face（`hub` / `xet`）、conda（`pkgs`）、Coursier（`cache`）与 Kotlin/Native（`.konan\dependencies`）四条 Review 规则。同样只指向缓存子目录，并避开同目录中的凭据与可运行内容：`.cache\huggingface\token` 登录凭据、`.conda\environments.txt` 环境清单与 `Coursier\data` 配置凭据都不在范围内。Kotlin/Native 的 `kotlin-native-prebuilt-*` 编译器分发未纳入清理，因为末段通配符会同时匹配同级的相似目录，无法用审计样例稳定排除。四条均默认不勾选，需要用户显式选择并二次确认。
 - [x] **浏览器扩展缓存**：已新增 Chromium `ScriptCache` 规则，只清理可重建的脚本缓存；扩展程序、状态、设置与存储数据不在范围内。
-- [ ] **浏览器扩展旧版本目录**：仍需要按浏览器版本验证旧扩展目录结构，暂不删除。
+- [x] **浏览器扩展旧版本目录**：Linux 已实现按 Chromium profile 的 `Preferences` 保留当前扩展版本，只删除不再引用的旧版本目录；缺失或无法解析 `Preferences` 时失败关闭。Windows 仍沿用 `ScriptCache` 规则，Firefox 不在范围。
 - [x] **系统级缓存（管理员模式）**：已提供独立提权流程、固定规则集、默认不勾选、逐文件校验与单独确认；不把提权作为“清理更多”的默认路径。现已扩展 Windows.old。
 - [x] **卸载残留**：检测已卸载应用遗留在 `AppData` 的配置、登录状态与缓存，仅在确认应用不再安装时以 Review 级规则提供清理。
       - 已实现：新增原生 `broom/apps` 注册表清单通道与 `LeftoverService`，按人工核实的清单（Slack、Discord、Discord PTB、VS Code、Notion、Obsidian、Figma、Zoom、Signal）解析数据目录；安装标记、注册表显示名与数据目录任一命中即视为仍安装，清单读取不完整时拒绝生成规则而不猜测。清单校验要求数据目录与安装目录互不重叠（Zoom 这类安装在 `%APPDATA%` 内的应用尤其重要），避免清理残留时顺带删除安装。规则编号为 `leftover.<app>`，风险等级 Review、默认不勾选，清理前与清理中再次校验安装状态，应用被重装则取消清理或跳过该项。扫描范围、设置页与仪表盘共用同一类别开关，关闭“卸载残留”后既不读注册表也不探测应用目录。该类规则只在当前会话生成，不写入持久化扫描结果。真机端到端验证见 `integration_test/leftover_e2e_test.dart`；清单条目另由 `test/leftover_catalog_markers_test.dart` 逐条验证“任一安装标记存在时不得判定为残留”。
@@ -234,7 +234,7 @@
 
 ### Linux（核心可用版已完成）
 
-- [x] 规则根：`$XDG_CACHE_HOME`（默认 `~/.cache`）、`$XDG_CONFIG_HOME` 下的应用缓存、`$XDG_DATA_HOME` 下的 Broom 诊断日志、`$HOME` 下的开发工具缓存；39 条内置规则（27 条 Safe、12 条 Review），含正 / 反审计样例，覆盖 Composer、Electron、Poetry、node-gyp、Deno、Corepack、NuGet、JetBrains、Hugging Face、conda、Coursier、Kotlin/Native 与 Spotify。
+- [x] 规则根：`$XDG_CACHE_HOME`（默认 `~/.cache`）、`$XDG_CONFIG_HOME` 下的应用缓存、`$XDG_DATA_HOME` 下的 Broom 诊断日志与 Xorg 日志、`$HOME` 下的开发工具与 AUR 助手缓存；48 条内置规则（33 条 Safe、15 条 Review），含正 / 反审计样例，覆盖应用日志、浏览器扩展旧版本、Flatpak / Snap 用户缓存、Teams、AUR 助手、vcpkg、Composer、Electron、Poetry、node-gyp、Deno、Corepack、NuGet、JetBrains、Hugging Face、conda、Coursier、Kotlin/Native 与 Spotify。
 - [x] 路径与权限：`PosixPathSemantics`、大小写敏感、`$VAR` / `${VAR}` / `~` 规则展开、`PathGuard.forPosix` 保护 `/usr`、`/etc`、`/boot` 等系统目录。
 - [x] 隔离区：`$XDG_DATA_HOME/Broom/quarantine`；跨卷通过 `st_dev` 探测，不可探测时保守复制。
 - [x] 原生桥接：`statvfs` 磁盘空间、`GtkFileChooserNative` 选择器、Gio 定位文件、`getpriority` / `setpriority` 扫描优先级、`chmod` / `utimensat` 元数据恢复。
@@ -245,7 +245,7 @@
 - [x] 软件更新检查：读取 HTTPS JSON 清单，展示当前 / 最新版本与下载地址，不下载或安装；RPM 与 tar.gz 用户自行升级。
 - [x] UI 平台裁剪：只剩 NTFS 索引按 Windows 隐藏；系统缓存入口按助手能力显示，其余 Linux 入口在满足配置时显示。
 - [x] 打包与 CI：tar.gz + `.desktop` + 图标，Fedora / RHEL 系 x86_64 的 RPM（含系统助手与 Polkit policy），`tool/package_linux.sh`、`tool/package_rpm.sh`，Ubuntu 22.04 CI。
-- [ ] 后续：Flatpak / Snap / AppImage 分发、Wayland 下的定位行为验证、Snap 沙箱内的隔离区路径约定；Debian / Ubuntu APT、SELinux enforcing、RPM 卸载回滚与负向认证仍待 VM 验证，见 [linux-system-cache.md](linux-system-cache.md)。
+- [ ] 后续：Flatpak / Snap / AppImage 分发、Wayland 下的定位行为验证、Snap 沙箱内的隔离区路径约定；系统级 Flatpak / Snap revision 与 pacman / zypper 仍需要扩展提权助手；Debian / Ubuntu APT、SELinux enforcing、RPM 卸载回滚与负向认证仍待 VM 验证，见 [linux-system-cache.md](linux-system-cache.md)。
 
 ### 移动端
 

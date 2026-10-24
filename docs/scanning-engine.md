@@ -182,8 +182,8 @@ flutter build windows --release \
 应用更新前会验证：
 
 - HTTPS（不跟随重定向）、响应不超过 4 MiB、网络超时；
-- 清单版本、签名算法与签名；
-- 规则目录 `schemaVersion`、规则 ID 格式与唯一性；
+- 清单版本、签名算法与签名；包含 `keepActiveExtensionVersions` 等版本感知规则的清单必须使用 `schemaVersion: 2`，旧客户端会拒绝整份清单而不是把 profile 根当作普通扫描根；
+- 规则目录 `schemaVersion`（当前 2，仍接受 1）、规则 ID 格式与唯一性；
 - 每条规则的风险等级、路径模板、扩展名、最小保留时间；
 - 每条规则必须包含双语评审说明、反向证据与至少一个审计样例；
 - 新目录必须包含全部内置规则 ID（不允许静默删除规则）。

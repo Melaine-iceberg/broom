@@ -13,9 +13,9 @@ import 'package:path/path.dart' as p;
 
 const _key = 'linux-rule-signing-key';
 
-String _manifest({required String version}) {
+String _manifest({required String version, int schemaVersion = 2}) {
   final payload = <String, Object?>{
-    'schemaVersion': 1,
+    'schemaVersion': schemaVersion,
     'version': version,
     'publishedAt': '2026-10-24T00:00:00Z',
     'rules': [
@@ -46,7 +46,7 @@ void main() {
       rules: linuxCleanupRules,
     );
 
-    expect(platform.rulesVersion, 'builtin-linux-2');
+    expect(platform.rulesVersion, 'builtin-linux-3');
     expect(platform.rules, hasLength(linuxCleanupRules.length));
 
     platform.applyRuleCatalog(linuxCleanupRules, '2026.10.24');
@@ -59,12 +59,12 @@ void main() {
     final store = RuleCatalogStore(
       directoryPath: p.join(temp.path, 'rules'),
       builtinRules: linuxCleanupRules,
-      builtinVersion: 'builtin-linux-2',
+      builtinVersion: 'builtin-linux-3',
       semantics: PathSemanticsFactory.forCurrentPlatform(),
     );
 
     final catalog = store.loadSync();
-    expect(catalog.version, 'builtin-linux-2');
+    expect(catalog.version, 'builtin-linux-3');
     expect(catalog.isBuiltin, isTrue);
   });
 
@@ -73,7 +73,7 @@ void main() {
     final store = RuleCatalogStore(
       directoryPath: directory,
       builtinRules: linuxCleanupRules,
-      builtinVersion: 'builtin-linux-2',
+      builtinVersion: 'builtin-linux-3',
       semantics: PathSemanticsFactory.forCurrentPlatform(),
     );
     final service = RuleUpdateService(
@@ -96,7 +96,7 @@ void main() {
     final reloaded = RuleCatalogStore(
       directoryPath: directory,
       builtinRules: linuxCleanupRules,
-      builtinVersion: 'builtin-linux-2',
+      builtinVersion: 'builtin-linux-3',
       semantics: PathSemanticsFactory.forCurrentPlatform(),
     ).loadSync();
     expect(reloaded.version, '2026.10.24');
@@ -106,15 +106,67 @@ void main() {
     );
   });
 
+  test('rejects unsupported manifest schema versions', () async {
+    final store = RuleCatalogStore(
+      directoryPath: p.join(temp.path, 'rules'),
+      builtinRules: linuxCleanupRules,
+      builtinVersion: 'builtin-linux-3',
+      semantics: PathSemanticsFactory.forCurrentPlatform(),
+    );
+    final service = RuleUpdateService(
+      store: store,
+      signingKey: _key,
+      fetcher: (uri) async =>
+          _manifest(version: '2026.10.24', schemaVersion: 3),
+      clock: () => DateTime.utc(2026, 10, 24),
+    );
+
+    expect(
+      () => service.checkForUpdates(
+        Uri.parse('https://updates.example.test/linux.json'),
+      ),
+      throwsA(isA<RuleUpdateException>()),
+    );
+  });
+
+  test('version-aware rules require manifest schema 2', () async {
+    final store = RuleCatalogStore(
+      directoryPath: p.join(temp.path, 'rules'),
+      builtinRules: linuxCleanupRules,
+      builtinVersion: 'builtin-linux-3',
+      semantics: PathSemanticsFactory.forCurrentPlatform(),
+    );
+    final service = RuleUpdateService(
+      store: store,
+      signingKey: _key,
+      fetcher: (uri) async =>
+          _manifest(version: '2026.10.24', schemaVersion: 1),
+      clock: () => DateTime.utc(2026, 10, 24),
+    );
+
+    expect(
+      () => service.checkForUpdates(
+        Uri.parse('https://updates.example.test/linux.json'),
+      ),
+      throwsA(
+        isA<RuleUpdateException>().having(
+          (error) => error.message,
+          'message',
+          contains('schemaVersion 2'),
+        ),
+      ),
+    );
+  });
+
   test('Linux catalog rejects a manifest that drops a built-in rule', () async {
     final store = RuleCatalogStore(
       directoryPath: p.join(temp.path, 'rules'),
       builtinRules: linuxCleanupRules,
-      builtinVersion: 'builtin-linux-2',
+      builtinVersion: 'builtin-linux-3',
       semantics: PathSemanticsFactory.forCurrentPlatform(),
     );
     final payload = <String, Object?>{
-      'schemaVersion': 1,
+      'schemaVersion': 2,
       'version': '2026.10.24',
       'publishedAt': '2026-10-24T00:00:00Z',
       'rules': [
@@ -138,6 +190,22 @@ void main() {
         Uri.parse('https://updates.example.test/linux.json'),
       ),
       throwsA(isA<RuleUpdateException>()),
+    );
+  });
+
+  test('version-aware rule and audit fixtures survive a catalog roundtrip', () {
+    final original = linuxCleanupRules.firstWhere(
+      (rule) => rule.id == 'browser.linux_extension_versions',
+    );
+    final decoded = RuleCatalogCodec.decodeRule(
+      RuleCatalogCodec.encodeRule(original),
+    );
+
+    expect(decoded.keepActiveExtensionVersions, isTrue);
+    expect(decoded.pathPatterns, original.pathPatterns);
+    expect(
+      decoded.audit!.samples.any((sample) => sample.content != null),
+      isTrue,
     );
   });
 

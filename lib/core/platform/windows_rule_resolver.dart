@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import '../models/cleaner_rule.dart';
@@ -41,7 +42,89 @@ class RuleResolver {
       }
     }
     final result = roots.toList()..sort();
+    if (!rule.keepActiveExtensionVersions) return result;
+    return _resolveStaleExtensionVersions(result);
+  }
+
+  /// Resolves Chromium extension version directories that the profile's
+  /// `Preferences` no longer references.
+  ///
+  /// The active version is read from `extensions.settings.<id>.path`. When the
+  /// file is missing, unreadable, or does not name an existing version
+  /// directory, that extension is skipped rather than guessed.
+  Future<List<String>> _resolveStaleExtensionVersions(
+    List<String> profiles,
+  ) async {
+    final roots = <String>{};
+    for (final profile in profiles) {
+      final preferences = File(
+        semantics.forIo(semantics.join(profile, 'Preferences')),
+      );
+      if (!await preferences.exists()) continue;
+
+      Object? decoded;
+      try {
+        decoded = jsonDecode(await preferences.readAsString());
+      } on FileSystemException {
+        continue;
+      } on FormatException {
+        continue;
+      }
+      if (decoded is! Map) continue;
+      final extensions = decoded['extensions'];
+      if (extensions is! Map) continue;
+      final settings = extensions['settings'];
+      if (settings is! Map) continue;
+
+      for (final entry in settings.entries) {
+        final id = entry.key;
+        if (id is! String || !_extensionIdPattern.hasMatch(id)) continue;
+        final value = entry.value;
+        if (value is! Map) continue;
+        final activeVersion = value['path'];
+        if (activeVersion is! String || !_isSafeVersionSegment(activeVersion)) {
+          continue;
+        }
+
+        final extensionRoot = semantics.join(
+          semantics.join(profile, 'Extensions'),
+          id,
+        );
+        final activePath = semantics.join(extensionRoot, activeVersion);
+        if (await FileSystemEntity.type(
+              semantics.forIo(activePath),
+              followLinks: false,
+            ) !=
+            FileSystemEntityType.directory) {
+          continue;
+        }
+
+        try {
+          await for (final entity in Directory(
+            semantics.forIo(extensionRoot),
+          ).list(followLinks: false)) {
+            if (entity is! Directory) continue;
+            final name = semantics.basename(semantics.canonical(entity.path));
+            if (!_versionDirectoryPattern.hasMatch(name)) continue;
+            if (name == activeVersion) continue;
+            roots.add(semantics.normalize(semantics.absolute(entity.path)));
+          }
+        } on FileSystemException {
+          continue;
+        }
+      }
+    }
+    final result = roots.toList()..sort();
     return result;
+  }
+
+  static final _extensionIdPattern = RegExp(r'^[a-p]{32}$');
+  static final _versionDirectoryPattern = RegExp(r'^\d+(\.\d+)*(_\d+)?$');
+
+  static bool _isSafeVersionSegment(String value) {
+    if (value.isEmpty || value == '.' || value == '..') return false;
+    if (value.contains('/') || value.contains('\\')) return false;
+    return RegExp(r'^[0-9A-Za-z][0-9A-Za-z._-]*$').hasMatch(value);
   }
 
   String? _expandEnvironment(String pattern) {
@@ -174,11 +257,6 @@ class WindowsRuleResolver extends RuleResolver {
 
 /// Resolves Linux/XDG rule patterns into existing directories.
 class PosixRuleResolver extends RuleResolver {
-  PosixRuleResolver({
-    super.environment,
-    super.maxWildcardMatches = 512,
-  }) : super(
-         semantics: const PosixPathSemantics(),
-         expandPosixVariables: true,
-       );
+  PosixRuleResolver({super.environment, super.maxWildcardMatches = 512})
+    : super(semantics: const PosixPathSemantics(), expandPosixVariables: true);
 }

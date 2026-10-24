@@ -34,7 +34,7 @@ typedef RuleManifestFetcher = Future<String> Function(Uri uri);
 /// A manifest looks like:
 /// ```json
 /// {
-///   "schemaVersion": 1,
+///   "schemaVersion": 2,
 ///   "version": "2026.10.18",
 ///   "publishedAt": "2026-10-18T12:00:00Z",
 ///   "rules": [ ... ],
@@ -55,6 +55,12 @@ class RuleUpdateService {
   static const compiledSigningKey = String.fromEnvironment(
     'BROOM_RULE_SIGNING_KEY',
   );
+
+  /// Manifest schema 2 is required whenever a catalog contains version-aware
+  /// rules. Older clients reject the whole manifest instead of treating their
+  /// profile roots as ordinary scan roots.
+  static const manifestSchemaVersion = 2;
+  static const minimumManifestSchemaVersion = 1;
 
   static const maxManifestBytes = 4 * 1024 * 1024;
 
@@ -79,8 +85,11 @@ class RuleUpdateService {
     if (decoded is! Map<String, dynamic>) {
       throw const RuleUpdateException('规则更新清单格式无效。');
     }
-    if (decoded['schemaVersion'] != 1) {
-      throw RuleUpdateException('不支持的规则更新清单版本：${decoded['schemaVersion']}');
+    final manifestSchemaVersion = decoded['schemaVersion'];
+    if (manifestSchemaVersion is! int ||
+        manifestSchemaVersion < minimumManifestSchemaVersion ||
+        manifestSchemaVersion > RuleUpdateService.manifestSchemaVersion) {
+      throw RuleUpdateException('不支持的规则更新清单版本：$manifestSchemaVersion');
     }
     final version = decoded['version'];
     if (version is! String || version.trim().isEmpty) {
@@ -109,6 +118,13 @@ class RuleUpdateService {
     final actual = _parseHex(signature);
     if (actual == null || !_constantTimeEquals(expected, actual)) {
       throw const RuleUpdateException('规则更新签名校验失败，已拒绝更新。');
+    }
+
+    final usesVersionAwareRules = rawRules.any(
+      (raw) => raw is Map && raw['keepActiveExtensionVersions'] == true,
+    );
+    if (usesVersionAwareRules && manifestSchemaVersion < 2) {
+      throw const RuleUpdateException('包含版本感知规则的清单必须使用 schemaVersion 2，已拒绝更新。');
     }
 
     final catalog = RuleCatalogCodec.decodeCatalog({

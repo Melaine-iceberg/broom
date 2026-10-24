@@ -345,7 +345,7 @@ bash tool/package_rpm.sh
 
 - **RPM 打包**：`tool/package_rpm.sh` 会构建系统助手、展开 Polkit policy，并打包 Flutter bundle、`com.broom.Broom.desktop`、图标与文档。构建需要 x86_64 Linux、Flutter、CMake/C++ 工具链和 `rpm-build`；仓库必须位于 Linux 原生文件系统（WSL 中不要放在 `/mnt/...`，9p 会忽略权限）；脚本不安装 RPM、不运行 `pkexec`、不执行清理。已有 Linux bundle 时可加 `--skip-flutter-build` 只重新打包。默认输出未签名包；安装 `rpm-sign` 并配置 GPG 密钥后，可用 `BROOM_RPM_SIGN_KEY="<key-id>" bash tool/package_rpm.sh` 签名。spec 位于 [packaging/rpm/broom.spec](packaging/rpm/broom.spec)。
 
-- **核心可用范围**：规则扫描、预览、隔离区撤销 / 永久释放、设置与配置导入导出、重复文件与大文件分析可用；内置 39 条 Linux 规则（27 条 Safe、12 条 Review），覆盖日志、浏览器脚本、应用与常用开发工具缓存。
+- **核心可用范围**：规则扫描、预览、隔离区撤销 / 永久释放、设置与配置导入导出、重复文件与大文件分析可用；内置 48 条 Linux 规则（33 条 Safe、15 条 Review），覆盖应用日志与 Xorg 日志、浏览器脚本与扩展旧版本、Flatpak / Snap 用户缓存、Teams、AUR 助手、vcpkg 及常用开发工具缓存。
 - **桌面集成**：
   - **回收站**：读取 freedesktop Trash 的用户回收站与可访问挂载点，只统计和清空属于当前用户的真实目录，不跟随符号链接；清空为永久删除，需要勾选确认。
   - **卸载残留**：只读查询 dpkg / rpm / Flatpak / Snap 与 `.desktop` 文件，结合策划的 XDG 数据目录清单生成 Review 级残留规则；清单读取不完整时失败关闭。
@@ -382,9 +382,10 @@ bash tool/package_rpm.sh
 - 系统级工具覆盖 Windows Update 的 `SoftwareDistribution\Download`、传递优化的 `DeliveryOptimization\Cache` 与系统盘 `Windows.old`，均为永久删除、无撤销；更新缓存清理期间会临时停止相关服务，服务恢复失败需手动启动或重启系统。
 - Windows.old 可能包含旧用户配置文件副本与旧程序；即使以管理员运行，部分文件仍可能因 TrustedInstaller 权限或占用而删除失败，因此可能只清理已找到的部分。
 - Docker 规则只处理 Windows 侧日志，WSL 规则只处理 `%LOCALAPPDATA%\Temp\wsl-crashes` 中超过 7 天的崩溃转储；镜像、容器、构建缓存、Linux 发行版文件系统与 `ext4.vhdx` 均由各自工具管理，Broom 不会直接删除或压缩虚拟磁盘。
-- 开发工具缓存按默认安装路径声明。自定义 GOPATH、WSL 内缓存、容器内部缓存或非默认包管理器路径不会被猜测或扫描。
+- 开发工具缓存按默认安装路径声明。自定义 GOPATH、WSL 内缓存、容器内部缓存或非默认包管理器路径不会被猜测或扫描；vcpkg 额外识别 `VCPKG_ROOT`、`VCPKG_DOWNLOADS` 与 `VCPKG_DEFAULT_BINARY_CACHE`，未导出的自定义路径仍不会被扫描。
+- Linux 的 Flatpak / Snap 规则只处理用户缓存（`~/.cache/flatpak`、`~/.var/app/*/cache`、`~/snap/*/*/.cache`）。系统级 `/var/lib/flatpak`、`/var/lib/snapd`、`/var/cache/snapd` 与旧 revision 由 Flatpak / snapd 自己管理，普通规则不会触碰。
 - 缩略图 / 图标缓存通常被资源管理器占用；Broom 会跳过占用文件，不重启或强制解锁 Explorer。日志规则保留最近 7 天，且不处理受保护的 Windows 事件日志与 CBS 日志。
-- 应用缓存规则只覆盖 Teams / Slack / Discord / Spotify / VS Code 的明确缓存目录；不同版本路径可能变化，未识别的新路径不会被扫描。浏览器扩展规则只清理 Chromium `ScriptCache`，不碰扩展程序、扩展状态、设置与本地存储。
+- 应用缓存规则只覆盖 Teams / Slack / Discord / Spotify / VS Code 的明确缓存目录，以及 Linux 的 Flatpak 应用沙箱缓存（`~/.var/app/*/cache`）；不同版本路径可能变化，未识别的新路径不会被扫描。Linux 的浏览器扩展规则会读取 Chromium profile 的 `Preferences`，只清理不再使用的扩展版本目录；`Preferences` 缺失或无法解析时跳过，不触碰扩展程序、设置与本地存储。Firefox 扩展旧版本不在范围内。
 - 提权流程依赖交互式 UAC；自动化测试覆盖通道解析、路径校验、服务状态机与页面流程，真实 UAC 授权需手动验证。
 - 预览支持按规则或逐文件勾选；搜索、筛选与排序只影响显示，不改变已有的选择集合。资源管理器定位要求路径仍然存在，失效路径只显示错误。扫描范围由首页与设置中的类别复选框控制，类别过滤在解析规则目录之前生效。
 - 回收站清空覆盖所有磁盘且永久生效，Broom 不提供隔离或撤销。

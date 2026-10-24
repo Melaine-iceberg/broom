@@ -33,6 +33,7 @@ class RuleAuditSample {
     required this.inScope,
     this.age = const Duration(days: 30),
     this.reason,
+    this.content,
   });
 
   /// One of the rule's path patterns. System cache rules use [displayPath].
@@ -50,6 +51,11 @@ class RuleAuditSample {
 
   /// Optional engineering note for failures and future reviews.
   final String? reason;
+
+  /// Optional fixture content. Audit tests write this instead of the default
+  /// placeholder file, which lets version-aware rules seed files such as a
+  /// browser `Preferences` document.
+  final String? content;
 }
 
 /// Stable key for the category whose rules are created at runtime from the
@@ -65,7 +71,10 @@ const leftoverCategoryLabelEn = 'Uninstall leftovers';
 String ruleCategoryKey(CleanerRule rule) {
   if (rule.id == 'windows.thumbnail_icon_cache') return 'thumbnails';
   if (rule.id == 'system.linux_thumbnails') return 'thumbnails';
-  if (rule.id == 'browser.extension_scripts') return 'browser_extension';
+  if (rule.id == 'browser.extension_scripts' ||
+      rule.id == 'browser.linux_extension_versions') {
+    return 'browser_extension';
+  }
   if (rule.id.startsWith(leftoverRuleIdPrefix)) return leftoverCategoryKey;
   return switch (rule.id.split('.').first) {
     'windows' => 'system',
@@ -146,6 +155,7 @@ class CleanerRule {
     this.minAge = Duration.zero,
     this.extensions,
     this.excludedPathPatterns = const [],
+    this.keepActiveExtensionVersions = false,
     this.note,
     this.titleEn,
     this.categoryEn,
@@ -167,6 +177,11 @@ class CleanerRule {
   /// overlap another rule with a stricter retention policy, these paths are
   /// skipped so the owning rule can apply its own filters.
   final List<String> excludedPathPatterns;
+
+  /// Treats each declared root as a Chromium profile and resolves only
+  /// extension version directories that the profile's `Preferences` no longer
+  /// references. Missing or unreadable preferences make the rule fail closed.
+  final bool keepActiveExtensionVersions;
   final String? note;
   final String? titleEn;
   final String? categoryEn;

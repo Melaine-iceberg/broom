@@ -27,7 +27,10 @@ class RuleCatalog {
 /// carry its audit notes and at least one regression sample; an update cannot
 /// quietly introduce an unexplained rule.
 abstract final class RuleCatalogCodec {
-  static const schemaVersion = 1;
+  /// Version-aware rules (currently Chromium extension versions) must not reach
+  /// clients that would treat their profile roots as ordinary scan roots.
+  static const schemaVersion = 2;
+  static const minimumSchemaVersion = 1;
 
   static Map<String, Object?> encodeRule(CleanerRule rule) => {
     'id': rule.id,
@@ -44,6 +47,7 @@ abstract final class RuleCatalogCodec {
       'extensions': rule.extensions!.toList()..sort(),
     if (rule.excludedPathPatterns.isNotEmpty)
       'excludedPathPatterns': rule.excludedPathPatterns,
+    if (rule.keepActiveExtensionVersions) 'keepActiveExtensionVersions': true,
     if (rule.note != null) 'note': rule.note,
     if (rule.noteEn != null) 'noteEn': rule.noteEn,
     if (rule.audit != null) 'audit': _encodeAudit(rule.audit!),
@@ -119,6 +123,11 @@ abstract final class RuleCatalogCodec {
       value['excludedPathPatterns'],
       '$id.excludedPathPatterns',
     );
+    final keepActiveExtensionVersions =
+        value['keepActiveExtensionVersions'] ?? false;
+    if (keepActiveExtensionVersions is! bool) {
+      throw FormatException('$id 的扩展版本策略无效');
+    }
     final audit = _decodeAudit(value['audit'], id);
     return CleanerRule(
       id: id,
@@ -133,6 +142,7 @@ abstract final class RuleCatalogCodec {
       minAge: Duration(seconds: minAgeSeconds),
       extensions: extensions,
       excludedPathPatterns: excludedPatterns,
+      keepActiveExtensionVersions: keepActiveExtensionVersions,
       note: _optionalString(value['note']),
       noteEn: _optionalString(value['noteEn']),
       audit: audit,
@@ -155,8 +165,11 @@ abstract final class RuleCatalogCodec {
     if (value is! Map<String, dynamic>) {
       throw const FormatException('规则目录必须是对象');
     }
-    if (value['schemaVersion'] != schemaVersion) {
-      throw FormatException('不支持的规则目录版本：${value['schemaVersion']}');
+    final rawSchemaVersion = value['schemaVersion'];
+    if (rawSchemaVersion is! int ||
+        rawSchemaVersion < minimumSchemaVersion ||
+        rawSchemaVersion > schemaVersion) {
+      throw FormatException('不支持的规则目录版本：$rawSchemaVersion');
     }
     final version = _requiredString(value['version'], 'version');
     final source =
@@ -198,6 +211,7 @@ abstract final class RuleCatalogCodec {
           'inScope': sample.inScope,
           'ageSeconds': sample.age.inSeconds,
           if (sample.reason != null) 'reason': sample.reason,
+          if (sample.content != null) 'content': sample.content,
         },
     ],
   };
@@ -239,6 +253,7 @@ abstract final class RuleCatalogCodec {
           inScope: inScope,
           age: Duration(seconds: ageSeconds),
           reason: _optionalString(raw['reason']),
+          content: _optionalString(raw['content']),
         ),
       );
     }
