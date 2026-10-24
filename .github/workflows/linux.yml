@@ -10,6 +10,13 @@ on:
         description: HTTPS base URL used by the generated update manifest
         required: false
         default: https://melaine-iceberg.github.io/broom/
+  workflow_call:
+    inputs:
+      base_url:
+        description: HTTPS base URL used by the generated update manifest
+        required: false
+        type: string
+        default: https://melaine-iceberg.github.io/broom/
 
 permissions:
   contents: read

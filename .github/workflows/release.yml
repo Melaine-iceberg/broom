@@ -1,0 +1,80 @@
+name: Release
+
+# Tag pushes build the same Linux and Windows pipelines used by CI, then attach
+# the packages to the GitHub Release for that tag. The Linux update manifest
+# points at the release download URLs, so a release is self-contained; the MSIX
+# is not built here because signing/broom-release.pfx never leaves the machine
+# that owns the signing identity.
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  linux:
+    name: Build Linux packages
+    uses: ./.github/workflows/linux.yml
+    with:
+      base_url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/
+
+  windows:
+    name: Build Windows package
+    uses: ./.github/workflows/windows.yml
+
+  publish:
+    name: Publish GitHub Release
+    needs: [linux, windows]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Verify tag matches pubspec version
+        run: |
+          set -euo pipefail
+          tag_version="${GITHUB_REF_NAME#v}"
+          pubspec_version="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n 1 | cut -d+ -f1)"
+          if [[ "$tag_version" != "$pubspec_version" ]]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match pubspec version ${pubspec_version}."
+            exit 1
+          fi
+
+      - name: Download Linux release artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: broom-linux-release
+          path: dist
+
+      - name: Download Windows package
+        uses: actions/download-artifact@v7
+        with:
+          name: broom-windows-package
+          path: dist
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find dist -maxdepth 1 -type f | sort)
+          [[ "${#files[@]}" -gt 0 ]] || { echo '::error::No release assets were produced.'; exit 1; }
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --verify-tag \
+              --title "Broom $GITHUB_REF_NAME" \
+              --generate-notes \
+              "${files[@]}"
+          fi

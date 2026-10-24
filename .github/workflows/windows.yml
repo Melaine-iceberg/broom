@@ -14,6 +14,16 @@ on:
         description: Run the 1M file scan benchmark
         type: boolean
         default: false
+  workflow_call:
+    inputs:
+      run_desktop_tests:
+        description: Run Windows integration and frame-time tests
+        type: boolean
+        default: false
+      run_benchmarks:
+        description: Run the 1M file scan benchmark
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -61,6 +71,24 @@ jobs:
         with:
           name: broom-windows-x64
           path: build/windows/x64/runner/Release/
+          if-no-files-found: error
+          retention-days: 14
+
+      # The MSIX signature key stays local (signing/ is gitignored), so tagged
+      # builds publish the portable ZIP. Run tool/package_windows.ps1 locally
+      # with the certificate to produce the signed MSIX and installer feed.
+      - name: Package portable ZIP
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: ./tool/package_windows.ps1 -SkipBuild -SkipMsix
+
+      - name: Upload Windows release package
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v7
+        with:
+          name: broom-windows-package
+          path: |
+            dist/broom_*_win-x64-portable.zip
+            dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
 
