@@ -171,9 +171,7 @@ Future<_Sample> _write({
     truncated: false,
   );
   stopwatch.stop();
-  final file = File(
-    p.join(store.rootDirectory, summary.id, 'items.jsonl'),
-  );
+  final file = File(p.join(store.rootDirectory, summary.id, 'items.jsonl'));
   final sample = _Sample(
     elapsed: stopwatch.elapsed,
     fileBytes: await file.length(),

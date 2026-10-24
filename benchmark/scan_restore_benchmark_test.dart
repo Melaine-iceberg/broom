@@ -240,9 +240,7 @@ Future<CleanController> _createController({
       guard: guard,
       metadataAccess: const LocalFileMetadataAccess(),
     ),
-    exclusions: ExclusionStore(
-      filePath: p.join(basePath, 'exclusions.json'),
-    ),
+    exclusions: ExclusionStore(filePath: p.join(basePath, 'exclusions.json')),
     scanServiceFactory: ScanService.new,
     // Keeps the asynchronous probe from competing with the next measured
     // restore; building the path list is still part of restoreLastScan.
