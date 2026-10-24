@@ -66,6 +66,26 @@ need() {
 version="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n 1 | cut -d+ -f1)"
 [[ -n "$version" ]] || die "Unable to read the version from pubspec.yaml."
 
+# WSL mounts Windows drives as 9p/v9fs, which silently ignores chmod. rpm then
+# records 0777 for every staged file, so refuse to build from such a path.
+filesystem_type="$(stat -f -c %T "$root" 2>/dev/null || true)"
+case "$filesystem_type" in
+  9p|v9fs)
+    die "The repository is on a ${filesystem_type} mount (for example /mnt/k in WSL).
+Copy it to a Linux-native path such as \$HOME before packaging, or every file
+in the RPM will be recorded as 0777."
+    ;;
+esac
+
+probe="$(mktemp "$root/.broom-perm-probe.XXXXXX")" ||
+  die "Unable to create a permission probe in ${root}."
+chmod 600 "$probe"
+probe_mode="$(stat -c %a "$probe")"
+rm -f "$probe"
+[[ "$probe_mode" == "600" ]] ||
+  die "The repository filesystem ignores POSIX permissions (expected 600, got ${probe_mode}).
+Copy the repository to a Linux-native path before packaging."
+
 need cmake
 need rpm
 need rpmbuild
@@ -108,9 +128,13 @@ mkdir -p "$source_root/bundle" "$source_root/helper" "$source_root/packaging" \
   "$source_root/docs"
 cp -a "${bundle}/." "$source_root/bundle/"
 install -m 0755 "$helper_bin" "$source_root/helper/broom-system-helper"
-install -m 0644 linux/packaging/broom.desktop \
-  "$source_root/packaging/broom.desktop"
+install -m 0644 linux/packaging/com.broom.Broom.desktop \
+  "$source_root/packaging/com.broom.Broom.desktop"
 install -m 0644 linux/packaging/broom.png "$source_root/packaging/broom.png"
+install -m 0644 linux/packaging/broom-256.png \
+  "$source_root/packaging/broom-256.png"
+install -m 0644 linux/packaging/broom-512.png \
+  "$source_root/packaging/broom-512.png"
 install -m 0644 "$policy" "$source_root/packaging/com.broom.Broom.policy"
 install -m 0644 README.md "$source_root/README.md"
 install -m 0644 docs/linux-system-cache.md \

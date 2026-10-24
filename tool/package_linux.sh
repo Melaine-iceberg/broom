@@ -27,8 +27,11 @@ archive="dist/${name}.tar.gz"
 rm -rf "$stage" "$archive" "${archive}.sha256"
 mkdir -p "$stage"
 cp -R "${bundle}/." "$stage/"
-install -m 0644 linux/packaging/broom.desktop "${stage}/broom.desktop"
+install -m 0644 linux/packaging/com.broom.Broom.desktop \
+  "${stage}/com.broom.Broom.desktop"
 install -m 0644 linux/packaging/broom.png "${stage}/broom.png"
+install -m 0644 linux/packaging/broom-256.png "${stage}/broom-256.png"
+install -m 0644 linux/packaging/broom-512.png "${stage}/broom-512.png"
 if [[ -f LICENSE ]]; then
   install -m 0644 LICENSE "${stage}/LICENSE"
 fi

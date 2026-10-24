@@ -24,6 +24,36 @@ void main() {
       );
       expect(contents, contains('%{_bindir}/broom'));
       expect(contents, contains('%{_libdir}/broom/'));
+      expect(
+        contents,
+        contains(
+          '%attr(0644,root,root) %{_datadir}/applications/'
+          'com.broom.Broom.desktop',
+        ),
+      );
+      expect(
+        contents,
+        contains(
+          '%attr(0755,root,root) '
+          '%{_libexecdir}/broom/broom-system-helper',
+        ),
+      );
+      expect(
+        contents,
+        contains(
+          '%attr(0644,root,root) '
+          '%{_datadir}/polkit-1/actions/com.broom.Broom.policy',
+        ),
+      );
+      expect(contents, contains('gtk-update-icon-cache'));
+      expect(
+        contents,
+        contains('%{_datadir}/icons/hicolor/256x256/apps/broom.png'),
+      );
+      expect(
+        contents,
+        contains('%{_datadir}/icons/hicolor/512x512/apps/broom.png'),
+      );
       expect(contents, contains('%doc README.md docs/linux-system-cache.md'));
     });
 
@@ -51,6 +81,8 @@ void main() {
       expect(contents, contains('rpmbuild -bb'));
       expect(contents, contains('sha256sum'));
       expect(contents, contains('--skip-flutter-build'));
+      expect(contents, contains('stat -f -c %T'));
+      expect(contents, contains('POSIX permissions'));
       expect(
         contents,
         isNot(matches(RegExp(r'^\s*rpm\s+-i\b', multiLine: true))),

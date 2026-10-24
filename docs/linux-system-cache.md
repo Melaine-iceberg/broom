@@ -312,8 +312,8 @@ broom-system-helper --self-test
 | --- | --- |
 | Flutter bundle | `%{_libdir}/broom/`（含 `broom`、`lib/`、`data/`） |
 | 启动入口 | `%{_bindir}/broom` → `%{_libdir}/broom/broom` |
-| 桌面文件 | `%{_datadir}/applications/broom.desktop` |
-| 图标 | `%{_datadir}/icons/hicolor/1024x1024/apps/broom.png` |
+| 桌面文件 | `%{_datadir}/applications/com.broom.Broom.desktop` |
+| 图标 | `%{_datadir}/icons/hicolor/{256x256,512x512,256x256@2,512x512@2}/apps/broom.png` |
 | 系统助手 | `%{_libexecdir}/broom/broom-system-helper` |
 | Polkit policy | `%{_datadir}/polkit-1/actions/com.broom.Broom.policy` |
 | 文档 | `%{_docdir}/broom/`（README、本设计文档） |
@@ -322,7 +322,7 @@ broom-system-helper --self-test
 
 - 助手和 policy 必须由 RPM 以 root 所有权安装，不能由应用自行写入。
 - 入口符号链接是否影响 Flutter 查找 `data/` / `lib/` 必须在 VM 中验证；如果 `/proc/self/exe` 解析不符合预期，改为安装一个极小的 shell wrapper 或直接 `Exec=%{_libdir}/broom/broom`。
-- 图标当前为 1024×1024 PNG；如桌面环境需要其他尺寸，后续再生成多尺寸，不在本阶段阻塞。
+- 图标按 256 / 512 以及对应的 `@2` 目录安装；不要在 `hicolor` 下新建 1024×1024 目录，Fedora 的 `index.theme` 不索引它，GTK 会直接忽略该图标。
 
 ### 9.3 Spec
 
@@ -330,8 +330,9 @@ broom-system-helper --self-test
 
 - `Version` 由脚本从 `pubspec.yaml` 读取，通过 `--define "broom_version ..."` 传入；`Release` 为 `1%{?dist}`，因此 Fedora 上产物类似 `broom-0.4.0-1.fc44.x86_64.rpm`。
 - `BuildArch: x86_64`；本阶段是预构建 binary RPM，不是 Fedora 官方仓库要求的 from-source 包。
-- `AutoReqProv: no` + 显式 `Requires: polkit systemd gtk3 glib2 libstdc++ xz-libs`；关闭 RPM 的 strip / rpath 后处理，避免改动 Flutter 预构建库。
-- 助手安装为 `%{_libexecdir}/broom/broom-system-helper`（0755，root:root），policy 安装为 `%{_datadir}/polkit-1/actions/com.broom.Broom.policy`（0644，root:root）。
+- `AutoReqProv: no` + 显式 `Requires: polkit systemd gtk3 gtk-update-icon-cache glib2 libstdc++ xz-libs`；关闭 RPM 的 strip / rpath 后处理，避免改动 Flutter 预构建库。
+- 助手安装为 `%{_libexecdir}/broom/broom-system-helper`（`%attr` 固定 0755，root:root），policy 安装为 `%{_datadir}/polkit-1/actions/com.broom.Broom.policy`（0644，root:root）；desktop 与各尺寸图标也用 `%attr` 固定 0644。
+- 桌面文件安装为 `com.broom.Broom.desktop`，与 `linux/CMakeLists.txt` 的 `APPLICATION_ID` 一致，面板和任务栏才能把运行中的窗口关联到应用图标；`%post` / `%postun` 刷新 hicolor 图标缓存与 desktop database。
 - 应用入口使用相对于 `%{_bindir}` 计算的符号链接（Fedora 上为 `../lib64/broom/broom`），避免绝对符号链接告警，也不假设 `%{_libdir}` 的具体布局。
 - `License` 仍为占位 `Proprietary`：仓库没有 LICENSE 文件，正式发布前必须确认。
 - `URL`、维护者邮箱与 changelog 身份仍需在正式出包前替换。
@@ -351,6 +352,7 @@ broom-system-helper --self-test
 约束：
 
 - 使用普通用户运行 `rpmbuild`，不要用 root 构建；
+- 仓库必须位于 Linux 原生文件系统。WSL 的 `/mnt/...` 是 9p/v9fs，`chmod` 会被静默忽略，导致包内所有文件记录为 0777；脚本会检测文件系统类型和 `chmod` 是否生效，检测失败时直接退出；
 - RPM 构建需要 Linux 环境（Fedora，或安装了 `rpm-build` 的 Ubuntu）；当前 Windows 工作区不执行 RPM 构建；
 - 构建机需要 `rpm-build`、`cmake`、C++ 工具链和 Flutter；
 - 构建脚本只打包，不安装、不执行助手、不运行 `pkexec`、`dnf`、`apt-get` 或 `journalctl`；

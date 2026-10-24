@@ -24,6 +24,7 @@ AutoReqProv:    no
 Requires:       polkit
 Requires:       systemd
 Requires:       gtk3
+Requires:       gtk-update-icon-cache
 Requires:       glib2
 Requires:       libstdc++
 Requires:       xz-libs
@@ -45,23 +46,48 @@ mkdir -p %{buildroot}%{_libdir}/broom
 cp -a bundle/. %{buildroot}%{_libdir}/broom/
 install -Dm0755 helper/broom-system-helper \
   %{buildroot}%{_libexecdir}/broom/broom-system-helper
-install -Dm0644 packaging/broom.desktop \
-  %{buildroot}%{_datadir}/applications/broom.desktop
+install -Dm0644 packaging/com.broom.Broom.desktop \
+  %{buildroot}%{_datadir}/applications/com.broom.Broom.desktop
+install -Dm0644 packaging/broom-256.png \
+  %{buildroot}%{_datadir}/icons/hicolor/256x256/apps/broom.png
+install -Dm0644 packaging/broom-512.png \
+  %{buildroot}%{_datadir}/icons/hicolor/512x512/apps/broom.png
+install -Dm0644 packaging/broom-512.png \
+  %{buildroot}%{_datadir}/icons/hicolor/256x256@2/apps/broom.png
 install -Dm0644 packaging/broom.png \
-  %{buildroot}%{_datadir}/icons/hicolor/1024x1024/apps/broom.png
+  %{buildroot}%{_datadir}/icons/hicolor/512x512@2/apps/broom.png
 install -Dm0644 packaging/com.broom.Broom.policy \
   %{buildroot}%{_datadir}/polkit-1/actions/com.broom.Broom.policy
 mkdir -p %{buildroot}%{_bindir}
 ln -sf "$(realpath --relative-to=%{buildroot}%{_bindir} %{buildroot}%{_libdir}/broom/broom)" \
   %{buildroot}%{_bindir}/broom
 
+%post
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+  gtk-update-icon-cache -q -t -f %{_datadir}/icons/hicolor 2>/dev/null || :
+fi
+if command -v update-desktop-database >/dev/null 2>&1; then
+  update-desktop-database -q %{_datadir}/applications 2>/dev/null || :
+fi
+
+%postun
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+  gtk-update-icon-cache -q -t -f %{_datadir}/icons/hicolor 2>/dev/null || :
+fi
+if command -v update-desktop-database >/dev/null 2>&1; then
+  update-desktop-database -q %{_datadir}/applications 2>/dev/null || :
+fi
+
 %files
 %{_bindir}/broom
 %{_libdir}/broom/
-%{_datadir}/applications/broom.desktop
-%{_datadir}/icons/hicolor/1024x1024/apps/broom.png
-%{_libexecdir}/broom/broom-system-helper
-%{_datadir}/polkit-1/actions/com.broom.Broom.policy
+%attr(0644,root,root) %{_datadir}/applications/com.broom.Broom.desktop
+%attr(0644,root,root) %{_datadir}/icons/hicolor/256x256/apps/broom.png
+%attr(0644,root,root) %{_datadir}/icons/hicolor/512x512/apps/broom.png
+%attr(0644,root,root) %{_datadir}/icons/hicolor/256x256@2/apps/broom.png
+%attr(0644,root,root) %{_datadir}/icons/hicolor/512x512@2/apps/broom.png
+%attr(0755,root,root) %{_libexecdir}/broom/broom-system-helper
+%attr(0644,root,root) %{_datadir}/polkit-1/actions/com.broom.Broom.policy
 %doc README.md docs/linux-system-cache.md
 
 %changelog

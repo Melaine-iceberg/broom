@@ -1038,7 +1038,8 @@ const translationsEn = <String, String>{
   '{count} 次清理未正常结束': '{count, plural, one{# cleanup did not finish} other{# cleanups did not finish}}',
   '查看各磁盘回收站占用': 'View recycle bin usage on every drive',
   '按文件内容查找重复项': 'Find duplicates by file content',
-  'Windows 更新与旧系统文件 · 需要管理员权限': 'Windows Update and previous installations · requires administrator rights',
+  '系统缓存与日志文件 · 需要管理员权限':
+      'System caches and log files · administrator rights required',
   '按体积排序，定位空间占用': 'Sort by size to find what uses space',
   '选择文件夹开始分析': 'Choose a folder to start analyzing',
   '只读取文件内容，不会修改文件。': 'Reads file contents only; nothing is modified.',

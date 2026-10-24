@@ -739,7 +739,7 @@ class _ToolsSection extends StatelessWidget {
               key: 'tool-system-cache',
               icon: LucideIcons.database,
               title: context.t('系统级缓存'),
-              description: context.t('Windows 更新与旧系统文件 · 需要管理员权限'),
+              description: context.t('系统缓存与日志文件 · 需要管理员权限'),
               onTap: onOpenSystemCache!,
             ),
           if (onOpenRecycleBin != null)
