@@ -52,9 +52,8 @@ void main() {
         .create(recursive: true);
     final local = await Directory(p.join(tempRoot.path, 'Local'))
         .create(recursive: true);
-    final programFiles = await Directory(
-      p.join(tempRoot.path, 'ProgramFiles'),
-    ).create(recursive: true);
+    final programFiles = await Directory(p.join(tempRoot.path, 'ProgramFiles'))
+        .create(recursive: true);
     environment = {
       'APPDATA': roaming.path,
       'LOCALAPPDATA': local.path,
@@ -91,23 +90,19 @@ void main() {
     );
   }
 
-  test(
-    'detects data when the application is absent',
-    () async {
-      await Directory(appDataPath()).create(recursive: true);
+  test('detects data when the application is absent', () async {
+    await Directory(appDataPath()).create(recursive: true);
 
-      final detection = await service().detect();
+    final detection = await service().detect();
 
-      expect(detection.error, isNull);
-      expect(detection.candidates, hasLength(1));
-      final candidate = detection.candidates.single;
-      expect(candidate.entry.id, 'example');
-      expect(candidate.paths, [PathGuard.normalize(appDataPath())]);
-      expect(candidate.evidence, contains('Example'));
-      expect(candidate.evidenceEn, contains('Example'));
-    },
-    skip: _windowsOnly,
-  );
+    expect(detection.error, isNull);
+    expect(detection.candidates, hasLength(1));
+    final candidate = detection.candidates.single;
+    expect(candidate.entry.id, 'example');
+    expect(candidate.paths, [PathGuard.normalize(appDataPath())]);
+    expect(candidate.evidence, contains('Example'));
+    expect(candidate.evidenceEn, contains('Example'));
+  }, skip: _windowsOnly);
 
   test('skips applications present in the inventory by name prefix', () async {
     await Directory(appDataPath()).create(recursive: true);
@@ -244,19 +239,15 @@ void main() {
     expect(validation.orphanedRuleIds, isEmpty);
   });
 
-  test(
-    'revalidate detects a new install marker',
-    () async {
-      final marker = File(markerPath());
-      await marker.parent.create(recursive: true);
-      await marker.writeAsString('');
+  test('revalidate detects a new install marker', () async {
+    final marker = File(markerPath());
+    await marker.parent.create(recursive: true);
+    await marker.writeAsString('');
 
-      final validation = await service().revalidate(['leftover.example']);
+    final validation = await service().revalidate(['leftover.example']);
 
-      expect(validation.orphanedRuleIds, isEmpty);
-    },
-    skip: _windowsOnly,
-  );
+    expect(validation.orphanedRuleIds, isEmpty);
+  }, skip: _windowsOnly);
 
   test('revalidate fails closed when the inventory is incomplete', () async {
     installedApps.inventory = const InstalledAppInventory(

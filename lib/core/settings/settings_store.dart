@@ -15,10 +15,8 @@ class SettingsException implements Exception {
 }
 
 class SettingsStore {
-  SettingsStore({
-    required this.filePath,
-    PathSemantics? semantics,
-  }) : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform() {
+  SettingsStore({required this.filePath, PathSemantics? semantics})
+    : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform() {
     if (!this.semantics.isAbsolute(filePath)) {
       throw ArgumentError.value(filePath, 'filePath', '设置文件路径必须是绝对路径');
     }
@@ -26,7 +24,10 @@ class SettingsStore {
 
   static const fileName = 'settings.json';
 
-  static String defaultFilePath(String quarantineRoot, {PathSemantics? semantics}) {
+  static String defaultFilePath(
+    String quarantineRoot, {
+    PathSemantics? semantics,
+  }) {
     final paths = semantics ?? PathSemanticsFactory.forCurrentPlatform();
     return paths.join(paths.dirname(quarantineRoot), fileName);
   }

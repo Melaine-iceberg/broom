@@ -304,9 +304,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    final store = SettingsStore(
-      filePath: p.join(temp.path, 'settings.json'),
-    );
+    final store = SettingsStore(filePath: p.join(temp.path, 'settings.json'));
     await store.save(AppSettings.defaults);
     final settings = SettingsController(store: store);
     settings.load();
@@ -354,9 +352,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    final store = SettingsStore(
-      filePath: p.join(temp.path, 'settings.json'),
-    );
+    final store = SettingsStore(filePath: p.join(temp.path, 'settings.json'));
     await store.save(AppSettings.defaults);
     final settings = SettingsController(store: store);
     settings.load();

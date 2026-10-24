@@ -182,8 +182,7 @@ void main() {
     final latest = await store.loadLatest();
     expect(latest!.id, secondSummary.id);
     expect(
-      await Directory(p.join(temp.path, 'scans', firstSummary.id))
-          .exists(),
+      await Directory(p.join(temp.path, 'scans', firstSummary.id)).exists(),
       isFalse,
     );
   });
@@ -255,12 +254,7 @@ void main() {
           for (var index = start; index < start + 10; index++)
             JunkItem(
               rootIndex: 0,
-              path: p.join(
-                temp.path,
-                'cache',
-                'd$index',
-                '$longName.tmp',
-              ),
+              path: p.join(temp.path, 'cache', 'd$index', '$longName.tmp'),
               size: 1,
               modifiedMicros: DateTime.utc(
                 2026,

@@ -113,9 +113,7 @@ void main() {
 
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('broom_settings_page_');
-    settingsStore = SettingsStore(
-      filePath: p.join(temp.path, 'settings.json'),
-    );
+    settingsStore = SettingsStore(filePath: p.join(temp.path, 'settings.json'));
   });
 
   tearDown(() async {

@@ -1,0 +1,64 @@
+#!/bin/sh
+# Pre-commit format gate for Dart sources.
+#
+# Enable for this clone with:
+#   git config core.hooksPath .githooks
+# or install a shim at .git/hooks/pre-commit that execs this file.
+#
+# Set BROOM_DART to the dart executable when it is not discoverable.
+
+set -u
+
+root=$(git rev-parse --show-toplevel) || exit 1
+cd "$root" || exit 1
+
+find_dart() {
+  if [ -n "${BROOM_DART:-}" ]; then
+    printf '%s\n' "$BROOM_DART"
+    return 0
+  fi
+
+  if command -v dart >/dev/null 2>&1; then
+    command -v dart
+    return 0
+  fi
+
+  if command -v flutter >/dev/null 2>&1; then
+    flutter_bin=$(command -v flutter)
+    flutter_dir=$(dirname "$flutter_bin")
+    for candidate in "$flutter_dir/dart" "$flutter_dir/dart.bat"; do
+      if [ -f "$candidate" ]; then
+        printf '%s\n' "$candidate"
+        return 0
+      fi
+    done
+  fi
+
+  for candidate in \
+    "$HOME/flutter/bin/dart" \
+    "${LOCALAPPDATA:-}/flutter/bin/dart.bat" \
+    "${USERPROFILE:-}/flutter/bin/dart.bat" \
+    "/opt/flutter/bin/dart" \
+    "/usr/local/flutter/bin/dart"; do
+    if [ -f "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+dart_bin=$(find_dart) || {
+  echo "pre-commit: Dart SDK not found." >&2
+  echo "pre-commit: add Flutter/Dart to PATH or set BROOM_DART=/path/to/dart." >&2
+  exit 1
+}
+
+if ! "$dart_bin" format --output=none --set-exit-if-changed \
+  lib test benchmark integration_test; then
+  echo >&2
+  echo "pre-commit: formatting check failed." >&2
+  echo "pre-commit: run 'dart format lib test benchmark integration_test' and stage the result." >&2
+  exit 1
+fi

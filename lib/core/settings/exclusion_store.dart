@@ -15,10 +15,8 @@ class ExclusionException implements Exception {
 }
 
 class ExclusionStore implements PathExclusionSource {
-  ExclusionStore({
-    required this.filePath,
-    PathSemantics? semantics,
-  }) : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform() {
+  ExclusionStore({required this.filePath, PathSemantics? semantics})
+    : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform() {
     if (!this.semantics.isAbsolute(filePath)) {
       throw ArgumentError.value(filePath, 'filePath', '排除列表路径必须是绝对路径');
     }
@@ -27,7 +25,10 @@ class ExclusionStore implements PathExclusionSource {
 
   static const fileName = 'exclusions.json';
 
-  static String defaultFilePath(String quarantineRoot, {PathSemantics? semantics}) {
+  static String defaultFilePath(
+    String quarantineRoot, {
+    PathSemantics? semantics,
+  }) {
     final paths = semantics ?? PathSemanticsFactory.forCurrentPlatform();
     return paths.join(paths.dirname(quarantineRoot), fileName);
   }

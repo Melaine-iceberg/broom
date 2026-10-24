@@ -185,10 +185,7 @@ class MethodChannelSystemShell implements SystemShell {
       final suffix = Platform.isWindows
           ? '（Windows 错误 0x${details.toRadixString(16).toUpperCase().padLeft(8, '0')}）'
           : '（errno $details）';
-      return SystemShellException(
-        '$fallback$suffix',
-        code: error.code,
-      );
+      return SystemShellException('$fallback$suffix', code: error.code);
     }
     final message = error.message?.trim();
     return SystemShellException(

@@ -17,13 +17,14 @@ class EmptyPathExclusionSource implements PathExclusionSource {
 }
 
 class PathExclusions implements PathExclusionSource {
-  PathExclusions(
-    Iterable<String> paths, {
-    PathSemantics? semantics,
-  }) : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform(),
-       paths = List.unmodifiable(
-         _normalize(paths, semantics ?? PathSemanticsFactory.forCurrentPlatform()),
-       );
+  PathExclusions(Iterable<String> paths, {PathSemantics? semantics})
+    : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform(),
+      paths = List.unmodifiable(
+        _normalize(
+          paths,
+          semantics ?? PathSemanticsFactory.forCurrentPlatform(),
+        ),
+      );
 
   PathExclusions.empty({PathSemantics? semantics})
     : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform(),

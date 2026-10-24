@@ -33,9 +33,8 @@ void main() {
         .create(recursive: true);
     final local = await Directory(p.join(tempRoot.path, 'Local'))
         .create(recursive: true);
-    final programFiles = await Directory(
-      p.join(tempRoot.path, 'ProgramFiles'),
-    ).create(recursive: true);
+    final programFiles = await Directory(p.join(tempRoot.path, 'ProgramFiles'))
+        .create(recursive: true);
     environment = {
       'appdata': roaming.path,
       'localappdata': local.path,

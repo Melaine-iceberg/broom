@@ -118,10 +118,7 @@ class QuarantineRetentionService {
           removedSessionCount++;
         }
       } catch (error) {
-        recordFailure(
-          p.join(quarantine.quarantineRoot, session.id),
-          error,
-        );
+        recordFailure(p.join(quarantine.quarantineRoot, session.id), error);
       }
     }
 

@@ -63,10 +63,7 @@ class ConfigBundleCodec {
     return '${const JsonEncoder.withIndent('  ').convert(encoded)}\n';
   }
 
-  static ConfigBundle decode(
-    String source, {
-    PathSemantics? semantics,
-  }) {
+  static ConfigBundle decode(String source, {PathSemantics? semantics}) {
     final resolvedSemantics =
         semantics ?? PathSemanticsFactory.forCurrentPlatform();
     final Object? decoded;

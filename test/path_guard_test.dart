@@ -75,24 +75,20 @@ void main() {
       expect(fromEnv.isProtected(r'C:\Users\Alice\cache'), isFalse);
     });
 
-    test(
-      'normalizes extended-length paths before comparing',
-      () {
-        expect(
-          PathGuard.normalize(r'\\?\C:\Users\Alice\Temp\..\Temp\file.tmp'),
-          r'C:\Users\Alice\Temp\file.tmp',
-        );
-        expect(
-          guard.allows(
-            path: r'\\?\C:\Users\Alice\Temp\cache\file.tmp',
-            root: r'C:\Users\Alice\Temp',
-          ),
-          isTrue,
-        );
-        expect(guard.isProtected(r'\\?\C:\Windows\Temp\file.tmp'), isTrue);
-      },
-      skip: _windowsOnly,
-    );
+    test('normalizes extended-length paths before comparing', () {
+      expect(
+        PathGuard.normalize(r'\\?\C:\Users\Alice\Temp\..\Temp\file.tmp'),
+        r'C:\Users\Alice\Temp\file.tmp',
+      );
+      expect(
+        guard.allows(
+          path: r'\\?\C:\Users\Alice\Temp\cache\file.tmp',
+          root: r'C:\Users\Alice\Temp',
+        ),
+        isTrue,
+      );
+      expect(guard.isProtected(r'\\?\C:\Windows\Temp\file.tmp'), isTrue);
+    }, skip: _windowsOnly);
 
     test('handles UNC roots without matching sibling shares', () {
       final uncGuard = PathGuard(

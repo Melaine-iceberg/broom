@@ -162,9 +162,7 @@ void main() {
         .create(recursive: true);
     await File(p.join(cacheDir.path, 'a.tmp')).writeAsString('1234');
     await File(p.join(leftoverDir.path, 'b.dat')).writeAsString('5678');
-    exclusions = ExclusionStore(
-      filePath: p.join(temp.path, 'exclusions.json'),
-    );
+    exclusions = ExclusionStore(filePath: p.join(temp.path, 'exclusions.json'));
     baseRule = const CleanerRule(
       id: 'test.cache',
       title: '测试缓存',

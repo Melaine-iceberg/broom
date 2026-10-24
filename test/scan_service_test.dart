@@ -101,8 +101,7 @@ void main() {
     final directory = Directory(p.join(temp.path, 'stream'));
     await directory.create(recursive: true);
     for (var index = 0; index < 5; index++) {
-      await File(p.join(directory.path, 'file-$index.tmp'))
-          .writeAsString('x');
+      await File(p.join(directory.path, 'file-$index.tmp')).writeAsString('x');
     }
 
     final service = ScanService();
@@ -184,8 +183,7 @@ void main() {
     final directory = Directory(p.join(temp.path, 'limited'));
     await directory.create(recursive: true);
     for (var index = 0; index < 8; index++) {
-      await File(p.join(directory.path, 'file-$index.tmp'))
-          .writeAsString('x');
+      await File(p.join(directory.path, 'file-$index.tmp')).writeAsString('x');
     }
 
     final service = ScanService();
