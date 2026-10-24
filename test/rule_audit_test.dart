@@ -224,7 +224,7 @@ Future<void> _materialize(
     );
     final file = File(path);
     await file.parent.create(recursive: true);
-    await file.writeAsString('broom-audit');
+    await file.writeAsString(sample.content ?? 'broom-audit');
     await file.setLastModified(DateTime.now().subtract(sample.age));
   }
 }

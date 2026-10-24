@@ -12,7 +12,7 @@ v4 内容：在 v3 的 **管理员系统级缓存清理** 之上，完成 **隔�
 
 当前开发版同时完成 **工程与质量收口**：Windows CI（格式校验、严格静态检查、完整测试、Release 构建与产物上传）、可注入文件系统与内存测试替身、恶意 / 损坏隔离元数据防御、清理 / 撤销 / 扫描并发保护、10 万 / 100 万文件与 UI 帧率基准，以及默认关闭的本地滚动诊断日志与 JSON 诊断包导出。详见 [docs/engineering.md](docs/engineering.md)。
 
-规则与类别也已扩展：**Review 级缓存规则进入普通扫描但默认不勾选**，需要手动选择并额外确认；新增缩略图 / 图标、DirectX / GPU、日志诊断、常见应用、Cargo / Go / NuGet / Maven / JetBrains 等开发缓存、浏览器扩展脚本缓存，以及管理员工具中的 Windows.old 清理。当前内置 **31 条用户规则 + 3 条管理员规则**，兼容边界见 [docs/roadmap.md](docs/roadmap.md)。Linux 核心可用版已接入（见下文），macOS 与移动端尚未实现。
+规则与类别也已扩展：**Review 级缓存规则进入普通扫描但默认不勾选**，需要手动选择并额外确认；新增缩略图 / 图标、DirectX / GPU、日志诊断、常见应用、Cargo / Go / NuGet / Maven / JetBrains 等开发缓存、浏览器扩展脚本缓存与扩展旧版本，以及管理员工具中的 Windows.old 清理。当前内置 **45 条用户规则 + 3 条管理员规则**，兼容边界见 [docs/roadmap.md](docs/roadmap.md)。Linux 核心可用版已接入（见下文），macOS 与移动端尚未实现。
 
 ## 如何定义“垃圾”
 
@@ -34,6 +34,7 @@ Broom 不使用启发式猜测，也不按扩展名全局搜索。垃圾文件�
 | 日志与诊断 | 应用日志与诊断 | Safe | VS Code、Teams、Slack、Discord 的 `logs`；仅 >7 天，不含 Windows 事件日志 |
 | 浏览器缓存 | Chrome、Edge、Brave、Firefox | Safe | profile 下的网页、代码、GPU、Service Worker 缓存；不碰书签、密码、历史 |
 | 浏览器扩展缓存 | Chromium 扩展脚本缓存 | Safe | 单 profile 的 `ScriptCache`；不碰扩展程序、状态与设置 |
+| 浏览器扩展缓存 | 浏览器扩展旧版本 | Review | Chrome / Chromium / Edge / Brave 的 `Extensions/<ID>/<旧版本>`；按 `Preferences` 保留当前版本，缺失或无效时跳过该 profile |
 | 应用缓存 | Teams、Slack、Discord、Spotify、VS Code | Safe | 明确的 Cache / Code Cache / GPUCache / Service Worker 等目录 |
 | 开发工具缓存 | npm、pip、Pub、Gradle、Yarn、pnpm、Bun、Composer | Safe | 仅包下载 / 构建缓存；不碰项目与全局工具 |
 | 开发工具缓存 | Docker Desktop 日志、WSL 崩溃转储 | Safe | 仅 Windows 侧日志与崩溃转储；不直接删除 WSL 虚拟磁盘、镜像或容器 |
@@ -413,7 +414,7 @@ BROOM_GPG_KEY="<key-id>" bash tool/sign_linux_release.sh \
 - Linux 的 deb / AppImage 以 Ubuntu 22.04 为构建基线，产物要求 glibc 2.34+ 与 libstdc++ 11+；在 Fedora 等更新工具链上直接构建的 deb 不能兼容 Ubuntu 22.04。AppImage 不含系统助手与 Polkit policy，因此没有系统级缓存入口；需要该功能请安装 deb 或 RPM。
 - Linux 更新清单默认指向 AppImage，只用于提示新版本与下载地址；应用不会自动下载或安装，也不会提交到发行版官方仓库、Flathub、Snap Store 或 AUR。
 - 缩略图 / 图标缓存通常被资源管理器占用；Broom 会跳过占用文件，不重启或强制解锁 Explorer。日志规则保留最近 7 天，且不处理受保护的 Windows 事件日志与 CBS 日志。
-- 应用缓存规则只覆盖 Teams / Slack / Discord / Spotify / VS Code 的明确缓存目录，以及 Linux 的 Flatpak 应用沙箱缓存（`~/.var/app/*/cache`）；不同版本路径可能变化，未识别的新路径不会被扫描。Linux 的浏览器扩展规则会读取 Chromium profile 的 `Preferences`，只清理不再使用的扩展版本目录；`Preferences` 缺失或无法解析时跳过，不触碰扩展程序、设置与本地存储。Firefox 扩展旧版本不在范围内。
+- 应用缓存规则只覆盖 Teams / Slack / Discord / Spotify / VS Code 的明确缓存目录，以及 Linux 的 Flatpak 应用沙箱缓存（`~/.var/app/*/cache`）；不同版本路径可能变化，未识别的新路径不会被扫描。Windows 与 Linux 的浏览器扩展旧版本规则都会读取 Chromium profile 的 `Preferences`，只清理不再使用的扩展版本目录；`Preferences` 缺失或无法解析时跳过，不触碰扩展程序、设置与本地存储。Firefox 扩展旧版本不在范围内。
 - 提权流程依赖交互式 UAC；自动化测试覆盖通道解析、路径校验、服务状态机与页面流程，真实 UAC 授权需手动验证。
 - 预览支持按规则或逐文件勾选；搜索、筛选与排序只影响显示，不改变已有的选择集合。资源管理器定位要求路径仍然存在，失效路径只显示错误。扫描范围由首页与设置中的类别复选框控制，类别过滤在解析规则目录之前生效。
 - 回收站清空覆盖所有磁盘且永久生效，Broom 不提供隔离或撤销。

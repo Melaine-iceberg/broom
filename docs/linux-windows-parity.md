@@ -166,13 +166,15 @@ Linux 的 CMake 在配置阶段提取 `version:` 并注入 `BROOM_VERSION`，Dar
 
 | 平台 | 规则总数 | 分类分布 |
 | --- | --- | --- |
-| Windows | 44 | 系统 3、浏览器 5、开发工具 28、应用 5、缩略图 1、GPU 1、日志 1 |
+| Windows | 45 | 系统 3、浏览器 4、浏览器扩展 2、开发工具 28、应用 5、缩略图 1、GPU 1、日志 1 |
 | Linux | 48 | 系统 4、日志 3、GPU 2、浏览器 6、浏览器扩展 1、应用 6、开发工具 26 |
 
 - Windows 规则：[windows_rules.dart](../lib/core/rules/windows_rules.dart)
 - Linux 规则：[linux_rules.dart](../lib/core/rules/linux_rules.dart)
 
 Linux 目前覆盖缩略图、fontconfig、Flatpak / Snap 用户缓存、Broom 诊断日志、应用日志与 Xorg 会话日志、Mesa / NVIDIA 着色器、Chrome / Chromium / Edge / Brave / Firefox（含 Chromium `ScriptCache` 与按 `Preferences` 保留当前版本的扩展旧版本）、VS Code / Discord / Slack / Teams / Spotify / Flatpak 应用缓存，以及 pip、npm、Yarn、pnpm、Bun、uv、Go、Cargo、Gradle、Pub、Maven、Playwright、Composer、Electron、Poetry、node-gyp、Deno、Corepack、vcpkg、AUR 助手（yay / paru / pikaur）、NuGet、JetBrains、Hugging Face、conda、Coursier、Kotlin/Native 缓存。
+
+Windows 的浏览器扩展旧版本规则已与 Linux 对齐：覆盖 Chrome / Chromium / Edge / Brave 单个 profile，按 `Preferences` 保留当前版本，缺失或无法解析时跳过该 profile；Firefox 不在范围。
 
 Windows 侧存在但 Linux 没有对应规则的包括：
 
@@ -186,7 +188,7 @@ Linux 侧仍受平台语义限制、不能简单照搬为普通规则的目标�
 - 回收站不作为普通清理规则，而是独立工具（见 2.2）
 - systemd journal 与 `/var/log` 由系统助手处理或受保护，不进入普通规则（见 2.1）
 - vcpkg 的自定义克隆路径只有在导出 `VCPKG_ROOT`、`VCPKG_DOWNLOADS` 或 `VCPKG_DEFAULT_BINARY_CACHE` 时才能被发现
-- Firefox 扩展没有按版本号组织的目录，扩展旧版本规则只覆盖 Chromium 系浏览器
+- Firefox 扩展没有按版本号组织的目录，Windows / Linux 的扩展旧版本规则只覆盖 Chromium 系浏览器
 
 规则在线更新已在 Linux 接入；默认发布仍需构建时注入签名密钥并配置 HTTPS 清单，未配置时入口会明确提示而不会静默使用未验证规则。
 

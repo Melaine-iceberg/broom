@@ -19,7 +19,7 @@ String _manifest({
   String publishedAt = '2026-01-01T00:00:00Z',
 }) {
   final payload = <String, Object?>{
-    'schemaVersion': 1,
+    'schemaVersion': 2,
     'version': version,
     'publishedAt': publishedAt,
     'rules': rules,

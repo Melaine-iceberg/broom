@@ -72,7 +72,8 @@ String ruleCategoryKey(CleanerRule rule) {
   if (rule.id == 'windows.thumbnail_icon_cache') return 'thumbnails';
   if (rule.id == 'system.linux_thumbnails') return 'thumbnails';
   if (rule.id == 'browser.extension_scripts' ||
-      rule.id == 'browser.linux_extension_versions') {
+      rule.id == 'browser.linux_extension_versions' ||
+      rule.id == 'browser.windows_extension_versions') {
     return 'browser_extension';
   }
   if (rule.id.startsWith(leftoverRuleIdPrefix)) return leftoverCategoryKey;

@@ -1515,6 +1515,36 @@ final windowsSafeRules = <CleanerRule>[
 
 final windowsReviewRules = <CleanerRule>[
   CleanerRule(
+    id: 'browser.windows_extension_versions',
+    title: '浏览器扩展旧版本',
+    titleEn: 'Browser extension old versions',
+    category: '浏览器扩展缓存',
+    categoryEn: 'Browser extension cache',
+    risk: CleanRisk.review,
+    description: 'Chrome、Chromium、Edge 与 Brave 扩展目录中不再使用的旧版本；按 profile 的 Preferences 保留当前版本，不会影响正在使用的扩展。',
+    descriptionEn:
+        'Old extension versions under Chrome, Chromium, Edge, and Brave '
+        'profiles. The active version named by each profile Preferences is '
+        'kept, so extensions in use are unaffected.',
+    pathPatterns: [
+      r'%LOCALAPPDATA%\Google\Chrome\User Data\*',
+      r'%LOCALAPPDATA%\Chromium\User Data\*',
+      r'%LOCALAPPDATA%\Microsoft\Edge\User Data\*',
+      r'%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\*',
+    ],
+    keepActiveExtensionVersions: true,
+    note:
+        'Review：请关闭浏览器后清理。只处理 Extensions/<扩展 ID>/<版本> 中的'
+        '非当前版本；Preferences 缺失或无法解析时跳过该 profile，不猜测当前版本。'
+        'Firefox 不在此规则范围。',
+    noteEn:
+        'Review: close the browser before cleaning. Only non-active '
+        'Extensions/<id>/<version> folders are cleaned. A profile with a '
+        'missing or unreadable Preferences is skipped instead of guessing the '
+        'active version. Firefox is out of scope.',
+    audit: _extensionVersionAudit(),
+  ),
+  CleanerRule(
     id: 'dev.cargo',
     title: 'Cargo 注册表缓存',
     titleEn: 'Cargo registry cache',
@@ -1911,6 +1941,63 @@ RuleAudit _directoryAudit({
     reviewNotesEn: reviewNotesEn,
     reverseEvidence: reverseEvidence,
     reverseEvidenceEn: reverseEvidenceEn,
+    samples: samples,
+  );
+}
+
+RuleAudit _extensionVersionAudit() {
+  const patterns = [
+    r'%LOCALAPPDATA%\Google\Chrome\User Data\*',
+    r'%LOCALAPPDATA%\Chromium\User Data\*',
+    r'%LOCALAPPDATA%\Microsoft\Edge\User Data\*',
+    r'%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\*',
+  ];
+  const extensionId = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  final samples = <RuleAuditSample>[];
+  for (final pattern in patterns) {
+    final profile = pattern.replaceAll('*', 'broom-audit-profile');
+    samples.add(
+      RuleAuditSample(
+        pattern: pattern,
+        path: '$profile\\Extensions\\$extensionId\\1.0.0\\broom-audit',
+        inScope: true,
+      ),
+    );
+    samples.add(
+      RuleAuditSample(
+        pattern: pattern,
+        path: '$profile\\Extensions\\$extensionId\\2.0.0\\broom-audit',
+        inScope: false,
+        reason: '当前启用版本必须保留',
+      ),
+    );
+    samples.add(
+      RuleAuditSample(
+        pattern: pattern,
+        path: '$profile\\Preferences',
+        inScope: false,
+        reason: 'Preferences 用于确定当前版本',
+        content:
+            '{"extensions":{"settings":{"$extensionId":{"path":"2.0.0"}}}}',
+      ),
+    );
+  }
+  return RuleAudit(
+    reviewNotes:
+        '仅扫描 Chrome、Chromium、Edge 与 Brave 单个 profile 的 '
+        'Extensions/<扩展 ID>/<版本>，并以 Preferences 中的 path 保留当前版本；'
+        'Firefox 不在范围内。',
+    reviewNotesEn:
+        'Scans only Extensions/<id>/<version> below one profile in Chrome, '
+        'Chromium, Edge, and Brave, keeping the path named by Preferences. '
+        'Firefox is out of scope.',
+    reverseEvidence:
+        '当前版本、扩展设置、Local Extension Settings、IndexedDB 与 Preferences '
+        '本身不会被扫描；Preferences 缺失或无效时不会猜测当前版本。',
+    reverseEvidenceEn:
+        'The active version, extension settings, Local Extension Settings, '
+        'IndexedDB, and Preferences itself are never scanned. A missing or '
+        'invalid Preferences never causes a guess at the active version.',
     samples: samples,
   );
 }
