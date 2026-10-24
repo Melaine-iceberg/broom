@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:broom/app.dart';
+import 'package:broom/core/app/linux_app_update_service.dart';
+import 'package:broom/core/app/linux_update_installer.dart';
 import 'package:broom/core/clean/quarantine_retention_service.dart';
 import 'package:broom/core/diagnostics/app_logger.dart';
 import 'package:broom/core/models/app_settings.dart';
@@ -23,6 +25,7 @@ import 'package:broom/ui/app_update_controller.dart';
 import 'package:broom/ui/clean_controller.dart';
 import 'package:broom/ui/rule_update_controller.dart';
 import 'package:broom/ui/settings_controller.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -97,6 +100,43 @@ class _FakeSystemShell implements SystemShell {
 
   @override
   Future<void> revealPath(String path) async {}
+}
+
+class _StubLinuxUpdateInstaller extends LinuxUpdateInstaller {
+  _StubLinuxUpdateInstaller()
+    : super(
+        updatesRoot: p.join('stub', 'updates'),
+        environment: const {'APPIMAGE': '/stub/broom.AppImage'},
+        osRelease: 'ID=ubuntu',
+      );
+
+  @override
+  Future<File> download({
+    required LinuxUpdateArtifact artifact,
+    required void Function(int received, int? total) onProgress,
+    required bool Function() isActive,
+  }) async {
+    onProgress(1024, 1024);
+    return File(p.join(updatesRoot, artifact.fileName));
+  }
+
+  @override
+  Future<LinuxUpdateInstallOutcome> install({
+    required File package,
+    required LinuxUpdateArtifact artifact,
+    required bool Function() isActive,
+  }) async {
+    return LinuxUpdateInstallOutcome(
+      mode: LinuxUpdateInstallMode.appImageReplaced,
+      path: '/stub/broom.AppImage',
+    );
+  }
+
+  @override
+  Future<bool> openDownloadsFolder() async => true;
+
+  @override
+  Future<void> relaunch(String path) async {}
 }
 
 const _testRule = CleanerRule(
@@ -294,6 +334,55 @@ void main() {
 
     expect(find.textContaining('0.5.0.0'), findsWidgets);
     expect(find.text('当前已是最新版本。'), findsNothing);
+  });
+
+  testWidgets('offers in-app Linux update installation', (tester) async {
+    final bytes = utf8.encode('linux update payload');
+    final hash = sha256.convert(bytes).toString();
+    final appUpdates = AppUpdateController(
+      versionSource: const StaticAppVersion('0.4.0'),
+      distribution: AppUpdateDistribution.linuxPackage,
+      fetcher: (uri) async => jsonEncode({
+        'schemaVersion': 1,
+        'version': '0.5.0',
+        'url': 'https://example.com/broom-0.5.0.AppImage',
+        'sha256': hash,
+        'artifacts': [
+          {
+            'format': 'appimage',
+            'file': 'broom-0.5.0.AppImage',
+            'url': 'https://example.com/broom-0.5.0.AppImage',
+            'sha256': hash,
+          },
+        ],
+      }),
+      installer: _StubLinuxUpdateInstaller(),
+    );
+    addTearDown(appUpdates.dispose);
+    await appUpdates.loadVersion();
+
+    await pumpApp(tester, appUpdates: appUpdates);
+
+    await tester.ensureVisible(find.text('软件更新'));
+    final checkButton = find.byKey(const ValueKey('settings-check-app-update'));
+    await tester.ensureVisible(checkButton);
+    await tester.tap(checkButton);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('可下载并校验安装包'), findsOneWidget);
+
+    final installButton = find.byKey(
+      const ValueKey('settings-install-app-update'),
+    );
+    await tester.ensureVisible(installButton);
+    await tester.tap(installButton);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('settings-restart-app-update')),
+      findsOneWidget,
+    );
+    expect(find.text('更新已安装，重启应用后生效。'), findsOneWidget);
   });
 
   testWidgets('shows rule update status for a build without a key', (

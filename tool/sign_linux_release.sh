@@ -5,8 +5,9 @@
 # detached GPG signature.
 #
 # The manifest matches lib/core/app/linux_app_update_service.dart
-# (schemaVersion 1). The application only displays the version and a download
-# link; it never downloads or installs anything.
+# (schemaVersion 1). The application reads it, then can download an artifact,
+# verify its SHA-256 and install it: AppImages are replaced in place, deb / RPM
+# packages are handed to the system installer.
 #
 # This script never uploads files. Copy dist/ to the host named by --base-url
 # after verifying the signatures.

@@ -3,8 +3,10 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import 'app.dart';
+import 'core/app/linux_update_installer.dart';
 import 'core/clean/clean_history_store.dart';
 import 'core/clean/file_metadata.dart';
 import 'core/clean/quarantine_retention_service.dart';
@@ -201,12 +203,16 @@ void main(List<String> args) {
     }),
   );
 
+  final linuxUpdatesRoot = Platform.isLinux ? _linuxUpdatesRoot() : null;
   final appUpdates = (Platform.isWindows || Platform.isLinux)
       ? AppUpdateController(
           versionSource: createAppVersionSource(),
           distribution: Platform.isLinux
               ? AppUpdateDistribution.linuxPackage
               : AppUpdateDistribution.windowsInstaller,
+          installer: linuxUpdatesRoot == null
+              ? null
+              : LinuxUpdateInstaller(updatesRoot: linuxUpdatesRoot),
         )
       : null;
   if (appUpdates != null) {
@@ -331,6 +337,17 @@ Future<void> _initializeBroom(
 ) async {
   await retention.ensureInitialized();
   await controller.initialize();
+}
+
+String? _linuxUpdatesRoot() {
+  final environment = Platform.environment;
+  final dataHome = environment['XDG_DATA_HOME']?.trim();
+  if (dataHome != null && dataHome.isNotEmpty && p.posix.isAbsolute(dataHome)) {
+    return p.posix.join(dataHome, 'Broom', 'updates');
+  }
+  final home = environment['HOME']?.trim();
+  if (home == null || home.isEmpty) return null;
+  return p.posix.join(home, '.local', 'share', 'Broom', 'updates');
 }
 
 String? _downloadsDirectory(

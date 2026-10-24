@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path/path.dart' as p;
 
+import '../core/app/linux_update_installer.dart';
 import '../core/app_info.dart';
 import '../core/clean/quarantine_retention_service.dart';
 import '../core/diagnostics/app_logger.dart';
@@ -945,6 +946,15 @@ class _AppUpdateSection extends StatelessWidget {
     final info = updates.info;
     final current = updates.currentVersion;
     final windows = updates.usesWindowsInstaller;
+    final package = updates.installOutcome;
+    final downloadTotal = updates.downloadTotal;
+    final unavailableReason = updates.installUnavailableReason;
+    final canShowUnavailableReason =
+        !windows &&
+        info != null &&
+        info.hasUpdate &&
+        !updates.canInstallInApp &&
+        unavailableReason != null;
 
     return _Section(
       icon: LucideIcons.packageCheck,
@@ -953,8 +963,8 @@ class _AppUpdateSection extends StatelessWidget {
         windows
             ? '通过 App Installer 更新源检查新版本。下载、安装与签名校验都由 Windows 完成，'
                   '应用本身只读取清单、不运行任何安装程序。'
-            : '通过 HTTPS 更新清单检查新版本。应用只读取版本与下载地址，'
-                  '不下载或安装任何内容；请使用发行版包管理器或安装包升级。',
+            : '通过 HTTPS 更新清单检查新版本。可在应用内下载并校验安装包：AppImage 会原子替换并提示重启，'
+                  'deb / RPM 交给系统安装器完成授权与安装。',
       ),
       trailing: updates.busy
           ? const SizedBox(
@@ -970,6 +980,30 @@ class _AppUpdateSection extends StatelessWidget {
             _SettingsBanner(message: error, isError: true),
           if (updates.notice case final notice?)
             _SettingsBanner(message: notice),
+          if (updates.installError case final installError?)
+            _SettingsBanner(message: installError, isError: true),
+          if (updates.installNotice case final installNotice?)
+            _SettingsBanner(message: installNotice),
+          if (updates.installing) ...[
+            const SizedBox(height: 4),
+            LinearProgressIndicator(
+              key: const ValueKey('settings-app-update-progress'),
+              value: updates.downloadProgress,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              downloadTotal == null
+                  ? context.t('正在下载更新包…')
+                  : context.tf('正在下载更新包… {percent}%（{bytes}）', {
+                      'percent': ((updates.downloadProgress ?? 0) * 100)
+                          .round(),
+                      'bytes': formatBytes(downloadTotal),
+                    }),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ],
           ListTile(
             key: const ValueKey('settings-app-version'),
             contentPadding: EdgeInsets.zero,
@@ -1010,29 +1044,83 @@ class _AppUpdateSection extends StatelessWidget {
                 ),
               ),
             ),
+          if (package != null)
+            ListTile(
+              key: const ValueKey('settings-app-update-package'),
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(LucideIcons.fileArchive),
+              title: Text(context.t('已校验的更新包')),
+              subtitle: SelectableText(
+                package.path,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
           const SizedBox(height: 4),
-          Row(
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               FilledButton.tonalIcon(
                 key: const ValueKey('settings-check-app-update'),
-                onPressed: updates.busy ? null : onCheck,
+                onPressed: updates.busy || updates.installing ? null : onCheck,
                 icon: const Icon(LucideIcons.download, size: 18),
                 label: Text(context.t('检查更新')),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  context.t(
-                    windows
-                        ? '发现新版本后，Windows 会在后台完成下载与安装，重启应用即可生效。'
-                        : '发现新版本后，请下载对应安装包，或通过发行版包管理器升级。',
-                  ),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
+              if (!windows &&
+                  info != null &&
+                  info.hasUpdate &&
+                  updates.canInstallInApp)
+                FilledButton.icon(
+                  key: const ValueKey('settings-install-app-update'),
+                  onPressed: updates.busy || updates.installing
+                      ? null
+                      : updates.installUpdate,
+                  icon: const Icon(LucideIcons.download, size: 18),
+                  label: Text(
+                    context.t(updates.restartAvailable ? '重新下载并安装' : '下载并安装'),
                   ),
                 ),
-              ),
+              if (updates.restartAvailable)
+                FilledButton.icon(
+                  key: const ValueKey('settings-restart-app-update'),
+                  onPressed: updates.installing ? null : updates.restartApp,
+                  icon: const Icon(LucideIcons.rotateCcw, size: 18),
+                  label: Text(context.t('重启应用')),
+                ),
             ],
+          ),
+          if (canShowUnavailableReason) ...[
+            const SizedBox(height: 8),
+            Text(
+              unavailableReason,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+          if (package != null &&
+              package.mode == LinuxUpdateInstallMode.manual) ...[
+            const SizedBox(height: 8),
+            TextButton.icon(
+              key: const ValueKey('settings-open-update-folder'),
+              onPressed: updates.openDownloadsFolder,
+              icon: const Icon(LucideIcons.folderOpen, size: 18),
+              label: Text(context.t('打开更新包目录')),
+            ),
+          ],
+          const SizedBox(height: 4),
+          Text(
+            context.t(
+              windows
+                  ? '发现新版本后，Windows 会在后台完成下载与安装，重启应用即可生效。'
+                  : '下载完成后会先用清单中的 SHA-256 校验安装包，应用不会执行下载的文件。',
+            ),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),

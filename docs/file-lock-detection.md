@@ -4,7 +4,7 @@ Broom 在清理预览阶段提示**可能被占用**的文件，并在清理结�
 
 ## 行为约定
 
-- **只读探测**：原生通道尝试以 `DELETE` 访问打开目标文件，但允许其他进程读写与删除（`FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE`），随后立即关闭句柄。只有调用进程本身获得删除权限，才能说明随后的移动 / 删除大概率不会被共享冲突阻止。
+- **只读探测**：Windows 以 `DELETE` 访问打开目标文件，允许其他进程读写与删除（`FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE`），随后立即关闭句柄；只有调用进程本身获得删除权限，才能说明随后的移动 / 删除大概率不会被共享冲突阻止。Linux 只读取 `/proc/locks` 与 `/proc/<pid>/fdinfo`，不打开、不修改候选文件。
 - **可能而非确定**：探测与真正清理之间存在时间差（TOCTOU），其他程序可能在此期间打开或关闭文件。因此界面使用“可能被占用”措辞，实际结果以清理时的文件操作返回值为准。
 - **不强制解锁**：被占用的文件会保留在原处，等待用户关闭相关程序后重试；Broom 不会结束进程、调整共享模式或绕过锁。
 - **不阻塞预览**：扫描完成、进入预览后才在后台分批探测，每批 512 个文件。探测进度显示为“正在检测被占用的文件…（已检查 / 总数）”；失败、超时或当前系统不支持时静默降级，预览、勾选与清理仍然可用。
@@ -19,7 +19,7 @@ Broom 在清理预览阶段提示**可能被占用**的文件，并在清理结�
 | 探测调用 | `CreateFileW(path, DELETE, FILE_SHARE_READ \| FILE_SHARE_WRITE \| FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr)` |
 | 占用判定 | 打开失败且错误码为 `ERROR_SHARING_VIOLATION (32)` 或 `ERROR_LOCK_VIOLATION (33)` |
 | 长路径 | 复用 `ToExtendedWindowsPath`，本地路径补 `\\?\`，UNC 补 `\\?\UNC\` |
-| Linux 探测 | 解析 `/proc/locks`，用 `lstat` 的 `st_dev` / `st_ino` 匹配 **写** 类型的 POSIX / OFD / flock 锁；只读共享不报告 |
+| Linux 探测 | 解析 `/proc/locks` 的 **写** 类型 POSIX / OFD / flock 锁，并扫描 `/proc/<pid>/fdinfo` 中可写（`O_WRONLY` / `O_RDWR`，排除 `O_PATH`）的普通文件描述符；用 `lstat` 的 `st_dev` / `st_ino` 匹配，只读共享不报告 |
 | 其他平台 | 使用 `NoopFileLockProbe`，不报告占用 |
 | 异常 | 结果缺失或通道不可用时抛出 `FileLockProbeException`，控制器捕获后保持预览可用 |
 
@@ -66,7 +66,7 @@ flutter test
 
 ## 已知限制
 
-- Linux 只检测 advisory 写锁；程序单纯打开文件读写、未加锁时不会提示。Windows 仍以共享 / 删除冲突为主。
+- Linux 组合 advisory 写锁与可写文件描述符两类信号；只读打开、未加锁且未在写入的文件不会提示。`/proc` 被隐藏（如 `hidepid`）、其他用户进程不可读或扫描超出进程 / 描述符上限时会少报；快照缓存 2 秒，同一批预览内可能不是实时状态。Windows 仍以共享 / 删除冲突为主。
 - 探测只检查占用信号，不模拟跨卷“复制 + 删除”中的读取阶段；网络盘上的瞬时错误可能在清理时才暴露。
 - 杀毒软件、索引服务或短暂扫描可能造成一次性误报或漏报。
 - 被标记为占用不会阻止用户勾选；如果用户坚持清理，结果仍以实际跳过 / 失败为准，不会尝试解锁。

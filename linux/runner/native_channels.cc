@@ -20,6 +20,7 @@
 #include <cerrno>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <set>
 #include <string>
@@ -223,16 +224,110 @@ void LoadWriteLocks(std::set<std::string>* keys) {
   std::fclose(file);
 }
 
+bool IsDecimalName(const char* name) {
+  if (name[0] == '\0') return false;
+  for (const char* character = name; *character != '\0'; character++) {
+    if (*character < '0' || *character > '9') return false;
+  }
+  return true;
+}
+
+// Advisory locks are optional, so desktop applications that keep a cache file
+// open for writing never show up in /proc/locks. Collect those files as well:
+// a writable descriptor means the file is actively in use, which is the same
+// "skip this while cleaning" signal Broom exposes on Windows. The scan only
+// records device/inode pairs, never file paths or process names, and it is
+// capped so a pathological process table cannot stall a scan.
+void LoadOpenWritableFiles(std::set<std::string>* keys) {
+  constexpr size_t kMaxProcesses = 20000;
+  constexpr size_t kMaxFileDescriptors = 200000;
+  constexpr unsigned long kOPathFlag = 010000000UL;
+
+  DIR* processes = opendir("/proc");
+  if (processes == nullptr) return;
+  size_t scanned_processes = 0;
+  size_t scanned_descriptors = 0;
+  while (scanned_processes < kMaxProcesses) {
+    struct dirent* process = readdir(processes);
+    if (process == nullptr) break;
+    if (!IsDecimalName(process->d_name)) continue;
+    scanned_processes++;
+
+    const std::string process_root =
+        std::string("/proc/") + process->d_name;
+    DIR* descriptors = opendir((process_root + "/fd").c_str());
+    if (descriptors == nullptr) continue;
+    while (true) {
+      errno = 0;
+      struct dirent* descriptor = readdir(descriptors);
+      if (descriptor == nullptr) break;
+      if (!IsDecimalName(descriptor->d_name)) continue;
+      if (++scanned_descriptors > kMaxFileDescriptors) break;
+
+      const std::string descriptor_path =
+          process_root + "/fd/" + descriptor->d_name;
+      struct stat target;
+      if (stat(descriptor_path.c_str(), &target) != 0 ||
+          !S_ISREG(target.st_mode)) {
+        continue;
+      }
+
+      const std::string info_path =
+          process_root + "/fdinfo/" + descriptor->d_name;
+      FILE* info = std::fopen(info_path.c_str(), "r");
+      if (info == nullptr) continue;
+      unsigned long flags = 0;
+      char line[256];
+      while (std::fgets(line, sizeof(line), info) != nullptr) {
+        if (std::strncmp(line, "flags:", 6) != 0) continue;
+        const char* value = line + 6;
+        while (*value == ' ' || *value == '\t') value++;
+        flags = std::strtoul(value, nullptr, 8);
+        break;
+      }
+      std::fclose(info);
+      // O_PATH descriptors do not reference file content for I/O.
+      if (flags == 0 || (flags & kOPathFlag) != 0) continue;
+      if ((flags & O_ACCMODE) == O_RDONLY) continue;
+      keys->insert(LockKey(
+          static_cast<unsigned int>(major(target.st_dev)),
+          static_cast<unsigned int>(minor(target.st_dev)),
+          static_cast<unsigned long long>(target.st_ino)));
+    }
+    closedir(descriptors);
+    if (scanned_descriptors > kMaxFileDescriptors) break;
+  }
+  closedir(processes);
+}
+
+// The Dart probe walks large candidates in batches of a few hundred files.
+// Reuse one /proc snapshot for consecutive batches instead of rescanning the
+// process table for every call.
+const std::set<std::string>& OccupiedFileSnapshot() {
+  constexpr gint64 kSnapshotTtlMicroseconds = 2 * G_USEC_PER_SEC;
+  static std::set<std::string> keys;
+  static gint64 loaded_at = 0;
+  const gint64 now = g_get_monotonic_time();
+  if (loaded_at == 0 || now < loaded_at ||
+      now - loaded_at >= kSnapshotTtlMicroseconds) {
+    keys.clear();
+    LoadWriteLocks(&keys);
+    LoadOpenWritableFiles(&keys);
+    loaded_at = now;
+  }
+  return keys;
+}
+
 bool PossiblyLocked(const std::string& path,
-                    const std::set<std::string>& write_locks) {
-  if (write_locks.empty()) return false;
+                    const std::set<std::string>& occupied_files) {
+  if (occupied_files.empty()) return false;
   struct stat info;
   if (lstat(path.c_str(), &info) != 0 || !S_ISREG(info.st_mode)) return false;
   const std::string key = LockKey(
       static_cast<unsigned int>(major(info.st_dev)),
       static_cast<unsigned int>(minor(info.st_dev)),
       static_cast<unsigned long long>(info.st_ino));
-  return write_locks.find(key) != write_locks.end();
+  return occupied_files.find(key) != occupied_files.end();
 }
 
 bool IsDotEntry(const char* name) {
@@ -904,8 +999,7 @@ void FileLockMethodCallHandler(FlMethodChannel*,
     return;
   }
 
-  std::set<std::string> write_locks;
-  LoadWriteLocks(&write_locks);
+  const std::set<std::string>& occupied_files = OccupiedFileSnapshot();
 
   g_autoptr(FlValue) result = fl_value_new_list();
   const size_t count = fl_value_get_length(paths);
@@ -913,7 +1007,7 @@ void FileLockMethodCallHandler(FlMethodChannel*,
     FlValue* item = fl_value_get_list_value(paths, index);
     bool locked = false;
     if (item != nullptr && fl_value_get_type(item) == FL_VALUE_TYPE_STRING) {
-      locked = PossiblyLocked(fl_value_get_string(item), write_locks);
+      locked = PossiblyLocked(fl_value_get_string(item), occupied_files);
     }
     fl_value_append_take(result, fl_value_new_bool(locked));
   }

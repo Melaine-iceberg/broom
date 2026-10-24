@@ -54,7 +54,7 @@ Broom 不使用启发式猜测，也不按扩展名全局搜索。垃圾文件�
 - **排除优先**：用户维护的排除列表优先于所有 Safe 与 Review 规则；被排除目录及其子目录不会扫描，清理与撤销也会再次校验。
 - **不跟随链接**：目录遍历使用 `followLinks: false`，遇到 `Link` 直接跳过。
 - **移动而非删除**：清理先把文件移动到隔离区；运行中的程序占用的文件会自动跳过并保留在原处。报告把占用、文件消失、符号链接与排除项归为“跳过”，把权限、路径校验与 IO 错误归为“失败”，两者分开展示，不强制解锁。
-- **占用检测**：扫描完成进入预览后，通过原生 `broom/file_lock` 通道以 `CreateFileW(..., DELETE)` 只读探测每个候选文件；共享冲突（`ERROR_SHARING_VIOLATION` / `ERROR_LOCK_VIOLATION`）标记为“可能被占用”。预览页显示每项规则的占用数量与逐项图标，被占用文件仍可勾选。探测不写入、不解锁，失败或不支持时静默降级，清理开始前自动取消。详见 [docs/file-lock-detection.md](docs/file-lock-detection.md)。
+- **占用检测**：扫描完成进入预览后，通过原生 `broom/file_lock` 通道只读探测每个候选文件。Windows 以 `CreateFileW(..., DELETE)` 探测，共享冲突（`ERROR_SHARING_VIOLATION` / `ERROR_LOCK_VIOLATION`）标记为“可能被占用”；Linux 组合 `/proc/locks` 写锁与 `/proc/<pid>/fdinfo` 中可写的普通文件描述符，只记录设备号与 inode，并在原生侧缓存 2 秒快照。预览页显示每项规则的占用数量与逐项图标，被占用文件仍可勾选。探测不写入、不解锁，失败或不支持时静默降级，清理开始前自动取消。详见 [docs/file-lock-detection.md](docs/file-lock-detection.md)。
 - **跨卷兼容**：同卷优先 `rename`，跨卷退回“复制 + 删除”，删除失败或复制中断时清理复制出的半成品。
 - **清理前空间预检**：开始移动文件前查询隔离区所在卷的可用空间，只对需要跨卷复制的文件计费；空间不足时在创建会话前中止，不会留下半完成文件。清理过程中如果卷被其他程序占满，会记录失败并停止后续复制，剩余计划可在释放空间后继续。
 - **长路径与 UNC**：接近或超过 `MAX_PATH` 时自动使用 `\\?\` / `\\?\UNC\` 扩展长度路径；程序清单声明 `longPathAware`，原生元数据通道同样支持。会话记录与界面始终保存不带前缀的规范路径，路径守卫对 UNC 共享和大小写不敏感比较。验证范围与操作步骤见 [docs/filesystem-validation.md](docs/filesystem-validation.md)。
@@ -363,7 +363,7 @@ BROOM_GPG_KEY="<key-id>" bash tool/sign_linux_release.sh \
 - **RPM 打包**：`tool/package_rpm.sh` 会构建系统助手、展开 Polkit policy，并打包 Flutter bundle、`com.broom.Broom.desktop`、图标与文档。构建需要 x86_64 Linux、Flutter、CMake/C++ 工具链和 `rpm-build`；仓库必须位于 Linux 原生文件系统（WSL 中不要放在 `/mnt/...`，9p 会忽略权限）；脚本不安装 RPM、不运行 `pkexec`、不执行清理。已有 Linux bundle 时可加 `--skip-flutter-build` 只重新打包。默认输出未签名包；安装 `rpm-sign` 并配置 GPG 密钥后，可用 `BROOM_RPM_SIGN_KEY="<key-id>" bash tool/package_rpm.sh` 签名。spec 位于 [packaging/rpm/broom.spec](packaging/rpm/broom.spec)。
 - **Debian / Ubuntu 打包**：`tool/package_deb.sh` 安装 bundle 到 `/usr/lib/broom`、系统助手到 `/usr/libexec/broom`，并写入 Polkit policy、桌面文件、hicolor 图标与 `copyright`。依赖同时兼容 Ubuntu 22.04 的 `libgtk-3-0` / `policykit-1` 与 24.04 的 `libgtk-3-0t64` / `pkexec` / `polkitd`。脚本不安装 deb、不运行 `pkexec`、不执行清理。
 - **AppImage**：`tool/package_appimage.sh` 生成单文件便携包，`AppRun` 从 `usr/lib/broom` 启动同一 Flutter bundle。appimagetool 固定为 1.9.1 并校验 SHA-256，首次构建会下载到 `build/tools`；可用 `APPIMAGETOOL=/path/to/appimagetool` 覆盖。AppImage 不包含系统助手与 Polkit policy，因此系统缓存入口会自动隐藏。
-- **签名与更新清单**：设置 `BROOM_GPG_KEY` 后，deb / AppImage 会生成分离签名，AppImage 还会内嵌签名；`tool/sign_linux_release.sh` 为 dist 中的全部包（tar.gz、deb、AppImage、RPM）生成 `SHA256SUMS`、`broom-linux.json` 及对应 `.asc`。清单协议见 `LinuxAppUpdateService`（`schemaVersion: 1`），默认下载地址指向 AppImage，可用 `--artifact` 或 `--url` 覆盖；应用只读取版本与链接，不下载或安装。脚本不上传任何文件，也不提交到发行版官方仓库。
+- **签名与更新清单**：设置 `BROOM_GPG_KEY` 后，deb / AppImage 会生成分离签名，AppImage 还会内嵌签名；`tool/sign_linux_release.sh` 为 dist 中的全部包（tar.gz、deb、AppImage、RPM）生成 `SHA256SUMS`、`broom-linux.json` 及对应 `.asc`。清单协议见 `LinuxAppUpdateService`（`schemaVersion: 1`），包含各产物的下载地址与 SHA-256；应用内可下载并校验安装包，AppImage 原位替换，deb / RPM 交给系统安装器，下载内容不会被执行。脚本不上传任何文件，也不提交到发行版官方仓库。
 - **安装**：
   ```bash
   sudo apt install ./dist/broom_0.4.0-1_amd64.deb
@@ -377,9 +377,9 @@ BROOM_GPG_KEY="<key-id>" bash tool/sign_linux_release.sh \
   - **回收站**：读取 freedesktop Trash 的用户回收站与可访问挂载点，只统计和清空属于当前用户的真实目录，不跟随符号链接；清空为永久删除，需要勾选确认。
   - **卸载残留**：只读查询 dpkg / rpm / Flatpak / Snap 与 `.desktop` 文件，结合策划的 XDG 数据目录清单生成 Review 级残留规则；清单读取不完整时失败关闭。
   - **规则在线更新**：可从 HTTPS 清单加载经过 HMAC 签名校验的规则目录并回滚；构建时需注入 `--dart-define=BROOM_RULE_SIGNING_KEY=...`，未配置时入口会提示禁用。
-  - **软件更新检查**：读取 HTTPS JSON 清单，展示当前版本、最新版本与下载地址，不下载或安装；默认源为 `https://melaine-iceberg.github.io/broom/broom-linux.json`，可用 `--dart-define=BROOM_LINUX_UPDATE_FEED=...` 覆盖。
+  - **软件更新**：读取 HTTPS JSON 清单，展示当前版本、最新版本与更新源；发现更新后可下载并校验安装包。AppImage 会原子替换当前文件并提供重启入口，deb / RPM 通过 `xdg-open` 交给系统安装器完成授权与安装，tar.gz 只下载并提示手动安装。下载上限 512 MiB、仅允许 HTTPS 重定向，缺少 SHA-256 的产物不会进入安装流程；默认源为 `https://melaine-iceberg.github.io/broom/broom-linux.json`，可用 `--dart-define=BROOM_LINUX_UPDATE_FEED=...` 覆盖，更新包保存在 `$XDG_DATA_HOME/Broom/updates`。
 - **系统级缓存**：安装 `broom-system-helper` 与 Polkit policy 的 RPM 或 deb 后，系统缓存入口会出现，可在一次 `pkexec` 授权后清理 APT / DNF / pacman / zypper 包缓存、系统级 Flatpak 未使用运行时、系统级 Snap 旧修订与 7 天前的 systemd journal。助手、policy 或 `pkexec` 缺失时入口自动隐藏，因此 tar.gz 与 AppImage 版本不提供系统级清理；操作不传路径、不进入隔离区、不可撤销。设计与 VM 验证清单见 [docs/linux-system-cache.md](docs/linux-system-cache.md)。
-- **数据位置**：隔离区在 `$XDG_DATA_HOME/Broom/quarantine`（默认 `~/.local/share/Broom/quarantine`），配置、历史、日志与激活规则目录同样位于该目录；规则使用 `$XDG_CACHE_HOME`、`$XDG_CONFIG_HOME`、`$XDG_DATA_HOME` 与 `$HOME`。
+- **数据位置**：隔离区在 `$XDG_DATA_HOME/Broom/quarantine`（默认 `~/.local/share/Broom/quarantine`），配置、历史、日志、下载的更新包（`updates`）与激活规则目录同样位于该目录；规则使用 `$XDG_CACHE_HOME`、`$XDG_CONFIG_HOME`、`$XDG_DATA_HOME` 与 `$HOME`。
 - **原生能力**：文件选择器、磁盘空间（`statvfs`）、定位文件、recycle bin（freedesktop Trash）、进程优先级（`getpriority` / `setpriority`）、POSIX 权限与时间戳恢复（`chmod` / `utimensat`）都由 `linux/runner/native_channels.cc` 提供，不依赖 zenity 或外部命令。
 - **跨卷判断**：隔离区通过 `st_dev` 批量探测判断是否跨卷；无法探测时保守按跨卷复制处理，避免空间预检低估。
 - **分发**：提供四种自托管产物，均可配合 `SHA256SUMS` 与分离签名使用；不提交 Fedora / Ubuntu 官方仓库、Flathub、Snap Store 或 AUR。tar.gz 解压后直接运行 `./broom`；deb / RPM 通过系统包管理器安装并集成菜单、图标与系统助手；AppImage 单文件运行，适合无法安装包的场景。桌面文件名与应用的 Wayland app id 一致，面板才能关联到正确图标。

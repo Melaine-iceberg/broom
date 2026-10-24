@@ -5,11 +5,13 @@ import 'dart:math';
 import 'package:flutter/services.dart';
 
 /// Best-effort preview signal for files that another process is using in a way
-/// that blocks a move or delete. A positive result is advisory: it can change
+/// that makes cleaning them unsafe. A positive result is advisory: it can change
 /// between preview and cleanup, and cleanup always reports the real outcome.
 ///
-/// Windows probes sharing/delete access; Linux has no equivalent guarantee and
-/// only reports advisory write locks from `/proc/locks`. Both are best effort.
+/// Windows probes sharing/delete access. Linux combines advisory write locks
+/// from `/proc/locks` with files that a process currently has open for writing
+/// (`/proc/<pid>/fdinfo`), because desktop applications rarely take advisory
+/// locks even while they are writing a cache file. Both are best effort.
 abstract interface class FileLockProbe {
   Future<List<bool>> probePossiblyLocked(List<String> paths);
 }

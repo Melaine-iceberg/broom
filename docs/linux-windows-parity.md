@@ -2,7 +2,7 @@
 
 > 评估对象：Broom 0.4.0（`pubspec.yaml`，0.4.0+4）
 > 评估日期：2026-10-24
-> 结论：Linux 已具备“规则扫描 → 预览 → 隔离区 → 撤销 / 永久释放”的完整核心闭环，并补齐回收站、卸载残留、规则在线更新与软件更新检查入口。文件占用预检、原生目录枚举、POSIX 元数据、低优先级扫描与自绘标题栏已按平台语义实现；系统级清理已覆盖 APT / DNF / pacman / zypper、系统级 Flatpak / Snap 与 systemd journal；tar.gz、deb、AppImage 与 RPM 四种自托管产物、签名和更新清单也已就绪。剩余差距集中在 NTFS 索引（无等价实现）、Flatpak / Snap 沙箱分发、自动安装更新，以及真实窗口 / 实机回归。
+> 结论：Linux 已具备“规则扫描 → 预览 → 隔离区 → 撤销 / 永久释放”的完整核心闭环，并补齐回收站、卸载残留、规则在线更新与应用内软件更新安装入口。文件占用预检、原生目录枚举、POSIX 元数据、低优先级扫描与自绘标题栏已按平台语义实现；系统级清理已覆盖 APT / DNF / pacman / zypper、系统级 Flatpak / Snap 与 systemd journal；tar.gz、deb、AppImage 与 RPM 四种自托管产物、签名和更新清单也已就绪。剩余差距集中在 NTFS 索引（无等价实现）、Flatpak / Snap 沙箱分发、deb / RPM 仍需系统安装器确认，以及真实窗口 / 实机回归。
 
 ## 1. 总览
 
@@ -16,14 +16,14 @@
 | 回收站查看与清空 | 支持 | 支持 freedesktop Trash（用户回收站 + 可访问磁盘） | 已对齐，平台语义不同 |
 | 卸载残留检测 | 支持，依赖注册表 | 支持 dpkg / rpm / Flatpak / Snap 清单与桌面文件 | 已对齐，采用策划清单 |
 | 规则在线更新、签名校验、回滚 | 支持 | 支持，需构建时签名密钥与 HTTPS 清单 | 已对齐，发布配置需提供 |
-| 应用软件更新检查 | 支持，MSIX / App Installer | 支持 HTTPS JSON 清单，只读检查 | 已对齐，升级仍由用户完成 |
+| 应用软件更新检查 | 支持，MSIX / App Installer | 支持 HTTPS JSON 清单、应用内下载与 SHA-256 校验 | 已对齐，安装方式不同 |
 | NTFS 索引加速 | 支持，USN / MFT | 无等价实现 | 功能缺失 |
-| 文件占用预检 | 原生通道（共享冲突） | 原生通道（advisory 写锁） | 平台语义不同 |
+| 文件占用预检 | 原生通道（共享冲突） | 原生通道（写锁 + 可写句柄） | 已对齐，平台语义不同 |
 | 原生目录枚举 | `FindFirstFileW` | `readdir` + `statx` | 已对齐，系统调用模型不同 |
 | 元数据恢复 | 时间 / 只读 / DACL 尽力恢复 | 权限位 / 时间 / 所有者 / btime / xattr 尽力恢复 | 已对齐，创建时间只读 |
 | 扫描低优先级 | 后台模式 + 低 CPU 优先级 | `nice 10` + I/O idle | 已对齐，实现手段不同 |
 | 自定义窗口标题栏 | 支持 | 支持（无边框 + GTK 原生缩放边缘） | 已对齐 |
-| 安装器与自动更新 | MSIX + App Installer | tar.gz / deb / AppImage / RPM + 只读更新清单 | 已缩小，无自动安装 |
+| 安装器与自动更新 | MSIX + App Installer | AppImage 原位替换；deb / RPM 交给系统安装器；tar.gz 手动安装 | 已缩小，需用户确认 |
 | 真实窗口集成测试 | 支持，手动触发 | 无 | 验证差距 |
 
 ## 2. 仍缺失或需要降级的入口
@@ -82,12 +82,21 @@ Linux 的内置版本为 `builtin-linux-3`；没有激活目录时保持该版�
 
 ### 2.5 应用软件更新
 
-Windows 通过 `.appinstaller` 与 MSIX 提供更新提示；Linux 读取一个只读 JSON 清单：
+Windows 通过 `.appinstaller` 与 MSIX 提供更新提示；Linux 读取 HTTPS JSON 清单，并可以在应用内完成下载、校验与安装：
 
-- Linux 清单解析：[lib/core/app/linux_app_update_service.dart](../lib/core/app/linux_app_update_service.dart)
+- Linux 清单解析：[linux_app_update_service.dart](../lib/core/app/linux_app_update_service.dart)
+- 下载、校验与安装：[linux_update_installer.dart](../lib/core/app/linux_update_installer.dart)
 - 控制器在 Windows 与 Linux 创建：[lib/main.dart](../lib/main.dart)
 
-Linux 清单包含 `schemaVersion`、`version`、可选的 `publishedAt`、HTTPS 下载地址与 SHA-256。设置页展示当前版本、更新源、发现的新版本与下载地址；应用本身不下载、不执行安装程序。RPM 用户通过包管理器升级，tar.gz 用户替换解压目录。默认更新源为 `https://melaine-iceberg.github.io/broom/broom-linux.json`，可通过 `--dart-define=BROOM_LINUX_UPDATE_FEED=...` 覆盖。
+Linux 清单包含 `schemaVersion`、`version`、可选的 `publishedAt`、HTTPS 下载地址、SHA-256，以及 `sign_linux_release.sh` 生成的 `artifacts` 数组（tar.gz / deb / AppImage / RPM 各自的文件名、地址与哈希）。设置页展示当前版本、更新源和新版本；发现更新后可下载所选产物：
+
+- 运行中的 AppImage（`$APPIMAGE`）会先复制到同目录临时文件、设置执行位，再用 `rename` 原子替换；完成后提供“重启应用”按钮。
+- deb / RPM 会先校验 SHA-256，再通过 `xdg-open` 交给桌面软件安装器；授权与包管理事务由系统完成，Broom 不调用 `sudo` / `pkexec`。
+- tar.gz 或非 AppImage 运行方式只下载并校验，随后提示手动安装。
+- 下载上限 512 MiB，重定向只允许 HTTPS，缺少 SHA-256 的产物不会进入安装流程；应用不执行下载的文件。
+- 更新包保存在 `$XDG_DATA_HOME/Broom/updates`（默认 `~/.local/share/Broom/updates`）。
+
+默认更新源为 `https://melaine-iceberg.github.io/broom/broom-linux.json`，可通过 `--dart-define=BROOM_LINUX_UPDATE_FEED=...` 覆盖。清单本身不做 GPG 验签，因此应用始终以清单提供的 SHA-256 校验下载内容；发布时应同时提供 `.asc` 以便用户手工核对。
 
 ### 2.6 NTFS 索引
 
@@ -106,7 +115,12 @@ Linux 没有等价的文件系统快速索引，始终走目录遍历；这不�
 - 探测与降级：[file_lock_probe.dart](../lib/core/platform/file_lock_probe.dart)
 - Linux 原生实现：[linux/runner/native_channels.cc](../linux/runner/native_channels.cc)
 
-Windows 以 `DELETE` 访问再次打开文件，共享 / 锁冲突（32 / 33）即报告“可能被占用”。Linux 没有等价的独占打开语义，因此读取 `/proc/locks`，只把写类型的 POSIX / OFD / flock 锁视为占用信号；普通“已打开”或只读共享不会报告。探测仍是只读、best effort，桌面程序不使用 advisory 锁时可能漏报，清理阶段仍以真实结果为准。
+Windows 以 `DELETE` 访问再次打开文件，共享 / 锁冲突（32 / 33）即报告“可能被占用”。Linux 没有等价的独占打开语义，因此组合两类只读信号：
+
+1. `/proc/locks` 中写类型的 POSIX / OFD / flock 锁；
+2. `/proc/<pid>/fdinfo` 中 flags 为可写（`O_WRONLY` / `O_RDWR`，排除 `O_PATH`）且目标为普通文件的描述符。
+
+第二类信号用于补齐不取 advisory 锁、但正在写缓存文件的桌面程序，避免只依赖 `/proc/locks` 时的大量漏报。扫描只记录设备号与 inode，不读取路径或进程名，并对进程数与描述符数设置上限；`/proc` 快照在原生侧缓存 2 秒，供连续批次复用。探测仍是只读、best effort：无法访问其他用户或隐藏的进程时会少报，文件在预览后仍可能被打开，清理阶段以真实结果为准。
 
 ### 3.2 目录枚举
 
@@ -245,7 +259,7 @@ Linux（全部为自托管产物，不提交发行版官方仓库）：
 - 文件夹 / JSON 文件选择器（GTK）
 - 定位文件（Gio 打开默认文件管理器）
 - 扫描低优先级（`nice` + I/O idle）
-- 文件占用预检（advisory 写锁 best effort）
+- 文件占用预检（写锁 + 可写句柄 best effort）
 - 原生目录枚举（`readdir` + `statx`）
 - POSIX 元数据尽力恢复（权限位、时间、所有者、xattr / ACL / capability / SELinux 标签）
 - Flutter 自绘标题栏与无边框窗口缩放
@@ -257,7 +271,7 @@ Linux（全部为自托管产物，不提交发行版官方仓库）：
 按投入产出排序：
 
 1. **系统缓存实机验证**：Fedora VM 已覆盖安装、授权、DNF 与 journal；Ubuntu 22.04 / 24.04 容器已验证 deb 安装、助手探测与 APT 路径可用性。剩余交互式 `pkexec` 授权、取消 / 错误密码、SELinux enforcing、真实卸载回滚，以及 Arch / openSUSE / Ubuntu 上的 pacman、zypper、Flatpak、Snap 清理。见 [linux-system-cache.md](linux-system-cache.md)。
-2. **Linux 原生能力实机回归**：在 GNOME / KDE、X11 / Wayland 下验证自绘标题栏的拖动、缩放与系统菜单，以及 `/proc/locks` 占用提示、跨卷元数据恢复和 `ionice` 的实际效果。
+2. **Linux 原生能力实机回归**：在 GNOME / KDE、X11 / Wayland 下验证自绘标题栏的拖动、缩放与系统菜单，以及 `/proc/locks` + 可写句柄的占用提示、跨卷元数据恢复和 `ionice` 的实际效果。
 3. **回收站、卸载残留与更新入口的实机回归**：在 GNOME / KDE 上验证 freedesktop Trash 的多磁盘与权限场景、包管理器清单与实际卸载应用，以及规则 / 软件更新清单的 HTTPS 流程。
 4. **规则目录扩容与新分发格式**：系统级清理已覆盖 pacman / zypper 与系统级 Flatpak / Snap；剩余是 Flatpak / Snap 沙箱分发，以及 Wayland 真实窗口冒烟与帧率测试。
 
@@ -276,6 +290,7 @@ Linux（全部为自托管产物，不提交发行版官方仓库）：
 | 卸载残留服务 | [lib/core/leftover/leftover_service.dart](../lib/core/leftover/leftover_service.dart) |
 | 规则目录与在线更新 | [lib/core/rules/rule_catalog_store.dart](../lib/core/rules/rule_catalog_store.dart)、[lib/core/rules/rule_update_service.dart](../lib/core/rules/rule_update_service.dart) |
 | Linux 软件更新检查 | [lib/core/app/linux_app_update_service.dart](../lib/core/app/linux_app_update_service.dart) |
+| Linux 更新下载与安装 | [lib/core/app/linux_update_installer.dart](../lib/core/app/linux_update_installer.dart) |
 | 文件元数据 | [lib/core/clean/file_metadata.dart](../lib/core/clean/file_metadata.dart) |
 | 目录枚举 | [lib/core/platform/directory_enum.dart](../lib/core/platform/directory_enum.dart) |
 | 占用检测 | [lib/core/platform/file_lock_probe.dart](../lib/core/platform/file_lock_probe.dart) |

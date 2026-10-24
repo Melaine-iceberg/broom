@@ -87,6 +87,7 @@ void main() {
         jsonEncode(_manifest(version: 'latest')),
         jsonEncode(_manifest(url: 'http://example.com/broom.tar.gz')),
         jsonEncode(_manifest(hash: 'abc')),
+        jsonEncode({..._manifest(), 'artifacts': 'appimage'}),
       ];
 
       for (final body in cases) {
@@ -100,6 +101,79 @@ void main() {
           reason: body,
         );
       }
+    });
+
+    test('keeps the manifest hash and per-format artifacts', () {
+      final base = _manifest();
+      final info = LinuxAppUpdateService.parseManifest(
+        jsonEncode({
+          ...base,
+          'artifacts': [
+            {
+              'format': 'appimage',
+              'file': 'broom-0.5.0-linux-x64.AppImage',
+              'url': 'https://example.com/broom-0.5.0-linux-x64.AppImage',
+              'sha256':
+                  'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+                  'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+            },
+            {
+              'format': 'deb',
+              'file': 'broom_0.5.0_amd64.deb',
+              'url': 'http://example.com/broom_0.5.0_amd64.deb',
+              'sha256':
+                  'cccccccccccccccccccccccccccccccc'
+                  'cccccccccccccccccccccccccccccccc',
+            },
+            {
+              'format': 'rpm',
+              'file': 'broom-0.5.0.x86_64.rpm',
+              'url': 'https://example.com/broom-0.5.0.x86_64.rpm',
+            },
+            {
+              'format': 'appimage',
+              'file': 'broom-linux-x64',
+              'url': 'https://example.com/download/broom-linux-x64',
+              'sha256':
+                  'dddddddddddddddddddddddddddddddd'
+                  'dddddddddddddddddddddddddddddddd',
+            },
+          ],
+        }),
+        feed: Uri.parse('https://example.com/broom-linux.json'),
+        currentVersion: AppVersion.parse('0.4.0'),
+      );
+
+      expect(info.sha256, base['sha256']);
+      expect(info.artifacts, hasLength(3));
+      expect(info.artifacts.first.format, LinuxUpdateArtifactFormat.appImage);
+      expect(info.artifacts.first.fileName, 'broom-0.5.0-linux-x64.AppImage');
+      expect(info.artifacts[1].format, LinuxUpdateArtifactFormat.rpm);
+      expect(info.artifacts[1].sha256, isNull);
+      expect(info.artifacts.last.format, LinuxUpdateArtifactFormat.appImage);
+    });
+
+    test('maps package file names to artifact formats', () {
+      expect(
+        LinuxAppUpdateService.formatForFileName('broom.AppImage'),
+        LinuxUpdateArtifactFormat.appImage,
+      );
+      expect(
+        LinuxAppUpdateService.formatForFileName('broom_0.5.0_amd64.deb'),
+        LinuxUpdateArtifactFormat.deb,
+      );
+      expect(
+        LinuxAppUpdateService.formatForFileName('broom-0.5.0.x86_64.rpm'),
+        LinuxUpdateArtifactFormat.rpm,
+      );
+      expect(
+        LinuxAppUpdateService.formatForFileName('broom-0.5.0-linux-x64.tar.gz'),
+        LinuxUpdateArtifactFormat.tarball,
+      );
+      expect(
+        LinuxAppUpdateService.formatForFileName('broom.zip'),
+        LinuxUpdateArtifactFormat.unknown,
+      );
     });
   });
 

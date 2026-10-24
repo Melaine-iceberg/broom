@@ -5,6 +5,42 @@ import 'dart:typed_data';
 
 import 'app_update_service.dart';
 
+enum LinuxUpdateArtifactFormat { appImage, deb, rpm, tarball, unknown }
+
+/// One downloadable package listed by the release manifest.
+class LinuxUpdateArtifact {
+  const LinuxUpdateArtifact({
+    required this.format,
+    required this.fileName,
+    required this.uri,
+    this.sha256,
+  });
+
+  final LinuxUpdateArtifactFormat format;
+  final String fileName;
+  final Uri uri;
+
+  /// Lower-case SHA-256 from the manifest. Downloads without a hash are
+  /// rejected by the installer because they cannot be verified.
+  final String? sha256;
+}
+
+/// Linux manifest result: the common update fields plus the signed hashes and
+/// the per-format artifact list published by `tool/sign_linux_release.sh`.
+class LinuxAppUpdateInfo extends AppUpdateInfo {
+  const LinuxAppUpdateInfo({
+    required super.currentVersion,
+    required super.latestVersion,
+    required super.feedUri,
+    super.packageUri,
+    this.sha256,
+    this.artifacts = const [],
+  });
+
+  final String? sha256;
+  final List<LinuxUpdateArtifact> artifacts;
+}
+
 /// Reads the Linux release manifest and reports whether a newer version exists.
 ///
 /// The manifest is a small JSON document published over HTTPS:
@@ -13,13 +49,18 @@ import 'app_update_service.dart';
 ///   "schemaVersion": 1,
 ///   "version": "0.5.0",
 ///   "publishedAt": "2026-10-24T12:00:00Z",
-///   "url": "https://host/broom-0.5.0-linux-x64.tar.gz",
-///   "sha256": "<64 hex characters>"
+///   "url": "https://host/broom-0.5.0-linux-x64.AppImage",
+///   "sha256": "<64 hex characters>",
+///   "artifacts": [
+///     {"format": "appimage", "file": "broom-0.5.0-linux-x64.AppImage",
+///      "url": "https://host/broom-0.5.0-linux-x64.AppImage", "sha256": "..."}
+///   ]
 /// }
 /// ```
-/// Like the Windows App Installer feed, this check is advisory only. Broom
-/// never downloads or runs an installer; RPM users upgrade through their
-/// package manager and tar.gz users replace the extracted bundle.
+/// The check itself only reads the manifest. Downloading and installing is
+/// performed by `LinuxUpdateInstaller`, which verifies every byte against the
+/// manifest hash before it is allowed to replace an AppImage or reach the
+/// system package installer.
 class LinuxAppUpdateService {
   LinuxAppUpdateService({
     required this.currentVersion,
@@ -42,7 +83,7 @@ class LinuxAppUpdateService {
 
   Uri get feedUri => Uri.parse(compiledFeedUrl);
 
-  Future<AppUpdateInfo> check([Uri? feed]) async {
+  Future<LinuxAppUpdateInfo> check([Uri? feed]) async {
     final uri = feed ?? feedUri;
     if (uri.scheme != 'https') {
       throw const AppUpdateException('更新源必须使用 HTTPS。');
@@ -52,7 +93,7 @@ class LinuxAppUpdateService {
   }
 
   /// Parses a manifest without networking so the format can be tested alone.
-  static AppUpdateInfo parseManifest(
+  static LinuxAppUpdateInfo parseManifest(
     String body, {
     required Uri feed,
     required AppVersion currentVersion,
@@ -94,19 +135,84 @@ class LinuxAppUpdateService {
     }
 
     final rawHash = decoded['sha256'];
+    String? primaryHash;
     if (rawHash != null) {
       if (rawHash is! String ||
           !RegExp(_hashPattern).hasMatch(rawHash.trim())) {
         throw const AppUpdateException('更新清单的 SHA-256 校验值无效。');
       }
+      primaryHash = rawHash.trim().toLowerCase();
     }
 
-    return AppUpdateInfo(
+    final rawArtifacts = decoded['artifacts'];
+    if (rawArtifacts != null && rawArtifacts is! List) {
+      throw const AppUpdateException('更新清单的产物列表无效。');
+    }
+    final artifacts = <LinuxUpdateArtifact>[];
+    if (rawArtifacts is List) {
+      for (final entry in rawArtifacts) {
+        if (entry is! Map) continue;
+        final rawFileName = entry['file'];
+        final rawEntryUrl = entry['url'];
+        if (rawFileName is! String || rawFileName.trim().isEmpty) continue;
+        if (rawEntryUrl is! String || rawEntryUrl.trim().isEmpty) continue;
+        final entryUri = Uri.tryParse(rawEntryUrl.trim());
+        if (entryUri == null || entryUri.scheme != 'https') continue;
+        final entryHash = entry['sha256'];
+        String? artifactHash;
+        if (entryHash is String &&
+            RegExp(_hashPattern).hasMatch(entryHash.trim())) {
+          artifactHash = entryHash.trim().toLowerCase();
+        }
+        final fileName = rawFileName.trim();
+        var format = formatForFileName(fileName);
+        final rawFormat = entry['format'];
+        if (rawFormat is String) {
+          final explicit = formatForFileName(rawFormat);
+          if (explicit != LinuxUpdateArtifactFormat.unknown) {
+            format = explicit;
+          }
+        }
+        artifacts.add(
+          LinuxUpdateArtifact(
+            format: format,
+            fileName: fileName,
+            uri: entryUri,
+            sha256: artifactHash,
+          ),
+        );
+      }
+    }
+
+    return LinuxAppUpdateInfo(
       currentVersion: currentVersion,
       latestVersion: latest,
       feedUri: feed,
       packageUri: packageUri,
+      sha256: primaryHash,
+      artifacts: List.unmodifiable(artifacts),
     );
+  }
+
+  /// Maps the manifest `format` value or a file name to a known package kind.
+  static LinuxUpdateArtifactFormat formatForFileName(String value) {
+    final lower = value.trim().toLowerCase();
+    if (lower.endsWith('.appimage') || lower == 'appimage') {
+      return LinuxUpdateArtifactFormat.appImage;
+    }
+    if (lower.endsWith('.deb') || lower == 'deb') {
+      return LinuxUpdateArtifactFormat.deb;
+    }
+    if (lower.endsWith('.rpm') || lower == 'rpm') {
+      return LinuxUpdateArtifactFormat.rpm;
+    }
+    if (lower.endsWith('.tar.gz') ||
+        lower.endsWith('.tgz') ||
+        lower == 'tar.gz' ||
+        lower == 'tarball') {
+      return LinuxUpdateArtifactFormat.tarball;
+    }
+    return LinuxUpdateArtifactFormat.unknown;
   }
 
   Future<String> _fetch(Uri uri) async {

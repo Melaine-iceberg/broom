@@ -242,7 +242,8 @@
 - [x] 回收站：freedesktop Trash 用户回收站与可访问挂载点的 `.Trash/$uid` / `.Trash-$uid`，只统计与清空属于当前用户的真实目录，不跟随符号链接；永久删除、需确认。
 - [x] 卸载残留：只读查询 dpkg / rpm / Flatpak / Snap 与 `.desktop` 文件，结合策划的 XDG 数据目录清单生成 Review 级 `leftover.*` 规则；清单不完整时失败关闭。
 - [x] 规则在线更新：Linux 加载 `$XDG_DATA_HOME/Broom/rules` 中的签名目录，支持回滚与恢复内置规则；未配置构建密钥时禁用并提示。
-- [x] 软件更新检查：读取 HTTPS JSON 清单，展示当前 / 最新版本与下载地址，不下载或安装；各包用户通过包管理器或替换文件自行升级。
+- [x] 软件更新：读取 HTTPS JSON 清单（版本、下载地址、SHA-256 与各格式 `artifacts`），在应用内下载并校验安装包；AppImage 原子替换并提供重启，deb / RPM 交给系统安装器，tar.gz 手动安装。
+- [x] Linux 文件占用探测：组合 `/proc/locks` 写锁与 `/proc/<pid>/fdinfo` 可写句柄，2 秒快照复用，减少不取 advisory 锁的桌面程序漏报。
 - [x] UI 平台裁剪：只剩 NTFS 索引按 Windows 隐藏；系统缓存入口按助手能力显示，其余 Linux 入口在满足配置时显示。
 - [x] 打包与 CI：tar.gz + `.desktop` + 图标，Fedora / RHEL 系 x86_64 的 RPM，Debian / Ubuntu 的 deb 与跨发行版 AppImage；`tool/package_linux.sh`、`tool/package_deb.sh`、`tool/package_appimage.sh`、`tool/package_rpm.sh`，Ubuntu 22.04 CI 构建全部格式，Fedora 44 容器构建 RPM。
 - [x] 自托管签名与更新清单：`tool/sign_linux_release.sh` 生成 `SHA256SUMS`、GPG 分离签名与 `schemaVersion: 1` 的 `broom-linux.json`；AppImage 支持内嵌签名。产物只面向自托管分发，不提交发行版官方仓库、Flathub、Snap Store 或 AUR。
