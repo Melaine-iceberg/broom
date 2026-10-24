@@ -17,6 +17,8 @@ void main() {
       expect(contents, contains('BuildArch:      x86_64'));
       expect(contents, contains('Requires:       polkit'));
       expect(contents, contains('Requires:       systemd'));
+      expect(contents, contains('License:        MIT'));
+      expect(contents, contains('%license LICENSE'));
       expect(contents, contains('%{_libexecdir}/broom/broom-system-helper'));
       expect(
         contents,
@@ -83,6 +85,8 @@ void main() {
       expect(contents, contains('--skip-flutter-build'));
       expect(contents, contains('stat -f -c %T'));
       expect(contents, contains('POSIX permissions'));
+      expect(contents, contains('BROOM_RPM_SIGN_KEY'));
+      expect(contents, contains('rpm --addsign'));
       expect(
         contents,
         isNot(matches(RegExp(r'^\s*rpm\s+-i\b', multiLine: true))),
@@ -96,6 +100,17 @@ void main() {
         isNot(matches(RegExp(r'^\s*pkexec\b', multiLine: true))),
       );
       expect(contents, isNot(matches(RegExp(r'^\s*sudo\b', multiLine: true))));
+    });
+    test('Linux CI builds the RPM in a Fedora container', () {
+      final workflow = File('.github/workflows/linux.yml').readAsStringSync();
+
+      expect(workflow, contains('container: fedora:44'));
+      expect(workflow, contains('broom-linux-bundle.tar.gz'));
+      expect(
+        workflow,
+        contains('bash tool/package_rpm.sh --skip-flutter-build'),
+      );
+      expect(workflow, contains('%{LICENSE}'));
     });
   });
 }

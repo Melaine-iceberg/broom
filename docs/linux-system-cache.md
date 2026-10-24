@@ -317,6 +317,7 @@ broom-system-helper --self-test
 | 系统助手 | `%{_libexecdir}/broom/broom-system-helper` |
 | Polkit policy | `%{_datadir}/polkit-1/actions/com.broom.Broom.policy` |
 | 文档 | `%{_docdir}/broom/`（README、本设计文档） |
+| 许可证 | `%{_datadir}/licenses/broom/LICENSE` |
 
 说明：
 
@@ -334,7 +335,7 @@ broom-system-helper --self-test
 - 助手安装为 `%{_libexecdir}/broom/broom-system-helper`（`%attr` 固定 0755，root:root），policy 安装为 `%{_datadir}/polkit-1/actions/com.broom.Broom.policy`（0644，root:root）；desktop 与各尺寸图标也用 `%attr` 固定 0644。
 - 桌面文件安装为 `com.broom.Broom.desktop`，与 `linux/CMakeLists.txt` 的 `APPLICATION_ID` 一致，面板和任务栏才能把运行中的窗口关联到应用图标；`%post` / `%postun` 刷新 hicolor 图标缓存与 desktop database。
 - 应用入口使用相对于 `%{_bindir}` 计算的符号链接（Fedora 上为 `../lib64/broom/broom`），避免绝对符号链接告警，也不假设 `%{_libdir}` 的具体布局。
-- `License` 仍为占位 `Proprietary`：仓库没有 LICENSE 文件，正式发布前必须确认。
+- `License: MIT`；仓库根目录的 `LICENSE` 通过 `%license` 安装到 `%{_datadir}/licenses/broom/LICENSE`。
 - `URL`、维护者邮箱与 changelog 身份仍需在正式出包前替换。
 
 ### 9.4 构建脚本
@@ -347,7 +348,8 @@ broom-system-helper --self-test
 4. 生成 policy（展开 `%{_libexecdir}`），并用 `rpm --eval '%{_libexecdir}/broom/broom-system-helper'` 校验它指向本发行版的实际安装路径；
 5. 把 bundle、助手、desktop、图标、policy、README 与本设计文档暂存为 `broom-bundle-<version>.tar.gz`；
 6. `rpmbuild -bb packaging/rpm/broom.spec --define "_topdir ..." --define "broom_version ..."`；
-7. 输出 `dist/broom-<version>-1.<dist>.x86_64.rpm` 与 `.sha256`。
+7. 输出 `dist/broom-<version>-1.<dist>.x86_64.rpm` 与 `.sha256`；
+8. 可选：设置 `BROOM_RPM_SIGN_KEY` 时用 `rpm --addsign` 签名，并重新生成 `.sha256`。
 
 约束：
 
@@ -356,8 +358,9 @@ broom-system-helper --self-test
 - RPM 构建需要 Linux 环境（Fedora，或安装了 `rpm-build` 的 Ubuntu）；当前 Windows 工作区不执行 RPM 构建；
 - 构建机需要 `rpm-build`、`cmake`、C++ 工具链和 Flutter；
 - 构建脚本只打包，不安装、不执行助手、不运行 `pkexec`、`dnf`、`apt-get` 或 `journalctl`；
-- RPM 不签名，作为本地测试包；正式分发前再接入签名；
-- 现有 Ubuntu CI 只做 `bash -n` 语法校验；完整 RPM 构建与 VM 验证在本机 / Fedora VM 中执行。
+- RPM 默认作为未签名的本地测试包；正式分发前用维护者 GPG 密钥签名。
+- RPM 默认不签名；安装 `rpm-sign`、配置并解锁 GPG 密钥后，用 `BROOM_RPM_SIGN_KEY="<key-id>" bash tool/package_rpm.sh` 签名。密钥不进入仓库。
+- CI 在 Ubuntu 上跑测试并构建 tar.gz；另有 Fedora 44 容器任务复用该 bundle 构建 RPM，校验 License、权限与 desktop 路径。`pkexec` 与真实清理仍在 VM 中验证。
 
 ### 9.5 依赖与安装行为
 
@@ -460,7 +463,7 @@ VM 验证中发现的问题应回写到本文件“已知风险 / 开放问题�
 
 ## 12. 已知风险与开放问题
 
-1. **许可证**：仓库没有 LICENSE，RPM `License` 字段暂为占位，正式发布前必须确认。
+1. **许可证**：已采用 MIT，`LICENSE` 随 RPM 安装；若未来更改许可证，需要同步 spec、README 与发布产物。
 2. **SELinux**：`pkexec` 启动自定义助手后的 domain 与写入 `/var/cache/dnf`、`/var/log/journal` 的权限仍需在 SELinux enforcing 的 Fedora VM 中实测；若有 AVC，可能需要 SELinux policy 或改用 systemd service。
 3. **包管理器兼容性**：DNF 路径已在 Fedora VM 验证；`apt-get clean` 仍待 Debian / Ubuntu VM 验证。实现只以退出码与固定参数为准，不解析本地化文本。
 4. **Polkit agent**：GNOME / KDE 的正常认证框已通过；取消、错误密码、无 agent 与非活跃会话仍需补测，系统缓存入口应优雅降级。

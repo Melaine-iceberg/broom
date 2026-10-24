@@ -13,9 +13,7 @@ Version:        %{broom_version}
 Release:        1%{?dist}
 Summary:        Safe, reversible cache cleaner for Linux desktops
 
-# Placeholder until the repository has a LICENSE file. Replace before any
-# public distribution.
-License:        Proprietary
+License:        MIT
 URL:            https://melaine-iceberg.github.io/broom/
 Source0:        broom-bundle-%{version}.tar.gz
 BuildArch:      x86_64
@@ -88,6 +86,7 @@ fi
 %attr(0644,root,root) %{_datadir}/icons/hicolor/512x512@2/apps/broom.png
 %attr(0755,root,root) %{_libexecdir}/broom/broom-system-helper
 %attr(0644,root,root) %{_datadir}/polkit-1/actions/com.broom.Broom.policy
+%license LICENSE
 %doc README.md docs/linux-system-cache.md
 
 %changelog

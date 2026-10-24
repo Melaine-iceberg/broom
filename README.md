@@ -343,7 +343,7 @@ bash tool/package_rpm.sh
 # 产物：dist/broom-<版本>-1.<dist>.x86_64.rpm 与同名 .sha256
 ```
 
-- **RPM 打包**：`tool/package_rpm.sh` 会构建系统助手、展开 Polkit policy，并打包 Flutter bundle、`com.broom.Broom.desktop`、图标与文档。构建需要 x86_64 Linux、Flutter、CMake/C++ 工具链和 `rpm-build`；仓库必须位于 Linux 原生文件系统（WSL 中不要放在 `/mnt/...`，9p 会忽略权限）；脚本不安装 RPM、不运行 `pkexec`、不执行清理。已有 Linux bundle 时可加 `--skip-flutter-build` 只重新打包。spec 位于 [packaging/rpm/broom.spec](packaging/rpm/broom.spec)。
+- **RPM 打包**：`tool/package_rpm.sh` 会构建系统助手、展开 Polkit policy，并打包 Flutter bundle、`com.broom.Broom.desktop`、图标与文档。构建需要 x86_64 Linux、Flutter、CMake/C++ 工具链和 `rpm-build`；仓库必须位于 Linux 原生文件系统（WSL 中不要放在 `/mnt/...`，9p 会忽略权限）；脚本不安装 RPM、不运行 `pkexec`、不执行清理。已有 Linux bundle 时可加 `--skip-flutter-build` 只重新打包。默认输出未签名包；安装 `rpm-sign` 并配置 GPG 密钥后，可用 `BROOM_RPM_SIGN_KEY="<key-id>" bash tool/package_rpm.sh` 签名。spec 位于 [packaging/rpm/broom.spec](packaging/rpm/broom.spec)。
 
 - **核心可用范围**：规则扫描、预览、隔离区撤销 / 永久释放、设置与配置导入导出、重复文件与大文件分析可用；内置 39 条 Linux 规则（27 条 Safe、12 条 Review），覆盖日志、浏览器脚本、应用与常用开发工具缓存；回收站、规则在线更新、软件更新与卸载残留仅在 Windows 显示。
 - **系统级缓存**：安装 `broom-system-helper` 与 Polkit policy 的 RPM 后，系统缓存入口会出现，可在一次 `pkexec` 授权后清理 APT / DNF 包缓存与 7 天前的 systemd journal。助手、policy 或 `pkexec` 缺失时入口自动隐藏；操作不传路径、不进入隔离区、不可撤销。设计与 VM 验证清单见 [docs/linux-system-cache.md](docs/linux-system-cache.md)。
@@ -351,7 +351,7 @@ bash tool/package_rpm.sh
 - **原生能力**：文件选择器、磁盘空间（`statvfs`）、定位文件与进程优先级（`getpriority` / `setpriority`）、POSIX 权限与时间戳恢复（`chmod` / `utimensat`）都由 `linux/runner/native_channels.cc` 提供，不依赖 zenity 或外部命令。
 - **跨卷判断**：隔离区通过 `st_dev` 批量探测判断是否跨卷；无法探测时保守按跨卷复制处理，避免空间预检低估。
 - **分发**：tar.gz 解压后直接运行 `./broom`；`com.broom.Broom.desktop` 与 `broom-256.png`、`broom-512.png` 一并提供，可把图标复制到 `~/.local/share/icons/hicolor/{256x256,512x512}/apps`、桌面文件复制到 `~/.local/share/applications` 完成菜单集成。桌面文件名与应用的 Wayland app id 一致，面板才能关联到正确图标。
-- **CI**：`.github/workflows/linux.yml` 在 Ubuntu 22.04 上执行格式校验、严格静态检查、完整测试、Release 构建与 tar.gz 打包。
+- **CI**：`.github/workflows/linux.yml` 在 Ubuntu 22.04 上执行格式校验、严格静态检查、完整测试、Release 构建与 tar.gz 打包，并在 Fedora 44 容器中复用该 bundle 构建 RPM、校验许可证和文件权限后上传产物。
 
 ## 工程、测试与诊断
 
@@ -403,3 +403,7 @@ bash tool/package_rpm.sh
 - NTFS 索引需要管理员权限、NTFS 卷与已启用的 USN 日志；任何探测或枚举失败都会回退到逐目录扫描。该索引只用于加速候选文件枚举，文件大小与修改时间仍在扫描器中重新读取校验。
 
 完整路线图见 [docs/roadmap.md](docs/roadmap.md)。
+
+## 许可证
+
+本项目以 [MIT License](LICENSE) 发布。

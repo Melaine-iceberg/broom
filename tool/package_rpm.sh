@@ -12,8 +12,10 @@
 # Usage:
 #   bash tool/package_rpm.sh
 #   bash tool/package_rpm.sh --skip-flutter-build
+#   BROOM_RPM_SIGN_KEY="<gpg-key-id>" bash tool/package_rpm.sh
 #
 # Requirements: Linux x86_64, Flutter, CMake/C++ toolchain and rpm-build.
+# Signing additionally needs rpm-sign and a configured GPG key.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -30,6 +32,9 @@ Builds dist/broom-<version>-1.<dist>.x86_64.rpm and its SHA-256 file.
 
 The script always rebuilds the system helper and the Polkit policy. It never
 installs the RPM, runs pkexec or performs a system cleanup.
+
+Set BROOM_RPM_SIGN_KEY to a GPG key id/email to sign the finished RPM. Signing
+needs the rpm-sign package and an unlocked key.
 EOF
 }
 
@@ -162,6 +167,11 @@ final_rpm="dist/$(basename "${built_rpms[0]}")"
 rm -f "$final_rpm" "${final_rpm}.sha256"
 cp "${built_rpms[0]}" "$final_rpm"
 (cd dist && sha256sum "$(basename "$final_rpm")" > "$(basename "$final_rpm").sha256")
+
+if [[ -n "${BROOM_RPM_SIGN_KEY:-}" ]]; then
+  rpm --addsign --define "_gpg_name ${BROOM_RPM_SIGN_KEY}" "$final_rpm"
+  (cd dist && sha256sum "$(basename "$final_rpm")" > "$(basename "$final_rpm").sha256")
+fi
 
 echo "Created ${final_rpm}"
 echo "Created ${final_rpm}.sha256"

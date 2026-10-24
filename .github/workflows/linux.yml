@@ -68,6 +68,17 @@ jobs:
       - name: Build Linux release
         run: flutter build linux --release
 
+      - name: Archive Linux bundle for RPM packaging
+        run: tar -C build/linux/x64/release -czf build/broom-linux-bundle.tar.gz bundle
+
+      - name: Upload Linux bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: broom-linux-bundle
+          path: build/broom-linux-bundle.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Package tar.gz
         run: bash tool/package_linux.sh
 
@@ -76,5 +87,58 @@ jobs:
         with:
           name: broom-linux-x64
           path: dist/broom-*-linux-x64.tar.gz*
+          if-no-files-found: error
+          retention-days: 14
+
+  rpm:
+    name: Build Fedora RPM
+    needs: quality
+    runs-on: ubuntu-22.04
+    container: fedora:44
+    timeout-minutes: 20
+    steps:
+      - name: Install RPM build dependencies
+        run: |
+          dnf install -y \
+            cmake findutils gcc-c++ gzip git make rpm-build shadow-utils tar
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download Linux bundle
+        uses: actions/download-artifact@v7
+        with:
+          name: broom-linux-bundle
+          path: build
+
+      - name: Extract Linux bundle
+        run: tar -C build/linux/x64/release -xzf build/broom-linux-bundle.tar.gz
+
+      - name: Prepare unprivileged builder
+        run: |
+          useradd -m builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+
+      - name: Build RPM
+        run: su builder -c "cd '$GITHUB_WORKSPACE' && bash tool/package_rpm.sh --skip-flutter-build"
+
+      - name: Verify RPM metadata
+        run: |
+          rpm_file="$(find dist -maxdepth 1 -name 'broom-*.rpm' -type f | head -n 1)"
+          test -n "$rpm_file"
+          rpm -qp --qf '%{LICENSE}\n' "$rpm_file" | grep -qx MIT
+          rpm -qp --dump "$rpm_file" |
+            awk '$1 ~ /broom-system-helper$/ { print $5 }' | grep -qx 0100755
+          rpm -qp --dump "$rpm_file" |
+            awk '$1 ~ /Broom.policy$/ { print $5 }' | grep -qx 0100644
+          rpm -qpl "$rpm_file" |
+            grep -qx /usr/share/applications/com.broom.Broom.desktop
+          rpm -qpl "$rpm_file" | grep -q '/usr/share/licenses/broom/LICENSE'
+
+      - name: Upload RPM
+        uses: actions/upload-artifact@v7
+        with:
+          name: broom-linux-rpm
+          path: dist/broom-*.rpm*
           if-no-files-found: error
           retention-days: 14
