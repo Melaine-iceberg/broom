@@ -338,12 +338,38 @@ flutter build linux --release
 bash tool/package_linux.sh
 # 产物：dist/broom-<版本>-linux-x64.tar.gz 与同名 .sha256
 
+# Debian / Ubuntu：deb（含系统助手与 Polkit policy）
+bash tool/package_deb.sh
+# 产物：dist/broom_<版本>-1_amd64.deb 与同名 .sha256
+
+# 跨发行版便携包（不含系统助手）
+bash tool/package_appimage.sh
+# 产物：dist/broom-<版本>-linux-x64.AppImage 与同名 .sha256
+
 # Fedora / RHEL 系：构建助手、Polkit policy 与 RPM
 bash tool/package_rpm.sh
 # 产物：dist/broom-<版本>-1.<dist>.x86_64.rpm 与同名 .sha256
+
+# 可选：签名全部产物并生成自托管更新清单（不负责上传）
+BROOM_GPG_KEY="<key-id>" bash tool/package_deb.sh
+BROOM_GPG_KEY="<key-id>" bash tool/package_appimage.sh
+BROOM_GPG_KEY="<key-id>" bash tool/sign_linux_release.sh \
+  --base-url https://<host>/broom/
+# 产物：dist/SHA256SUMS(.asc)、dist/broom-linux.json(.asc) 与各包 .asc
 ```
 
+- **构建基线**：`.deb` 与 AppImage 应以 Ubuntu 22.04（与 CI 相同）构建，产物面向 Ubuntu 22.04+ / Debian 12+；在 Fedora 44 上构建的 bundle 会要求 glibc 2.38，不能代表 Debian / Ubuntu 的兼容基线。RPM 的 bundle 建议复用 Ubuntu 构建产物，在 Fedora 容器中只构建助手与包。
 - **RPM 打包**：`tool/package_rpm.sh` 会构建系统助手、展开 Polkit policy，并打包 Flutter bundle、`com.broom.Broom.desktop`、图标与文档。构建需要 x86_64 Linux、Flutter、CMake/C++ 工具链和 `rpm-build`；仓库必须位于 Linux 原生文件系统（WSL 中不要放在 `/mnt/...`，9p 会忽略权限）；脚本不安装 RPM、不运行 `pkexec`、不执行清理。已有 Linux bundle 时可加 `--skip-flutter-build` 只重新打包。默认输出未签名包；安装 `rpm-sign` 并配置 GPG 密钥后，可用 `BROOM_RPM_SIGN_KEY="<key-id>" bash tool/package_rpm.sh` 签名。spec 位于 [packaging/rpm/broom.spec](packaging/rpm/broom.spec)。
+- **Debian / Ubuntu 打包**：`tool/package_deb.sh` 安装 bundle 到 `/usr/lib/broom`、系统助手到 `/usr/libexec/broom`，并写入 Polkit policy、桌面文件、hicolor 图标与 `copyright`。依赖同时兼容 Ubuntu 22.04 的 `libgtk-3-0` / `policykit-1` 与 24.04 的 `libgtk-3-0t64` / `pkexec` / `polkitd`。脚本不安装 deb、不运行 `pkexec`、不执行清理。
+- **AppImage**：`tool/package_appimage.sh` 生成单文件便携包，`AppRun` 从 `usr/lib/broom` 启动同一 Flutter bundle。appimagetool 固定为 1.9.1 并校验 SHA-256，首次构建会下载到 `build/tools`；可用 `APPIMAGETOOL=/path/to/appimagetool` 覆盖。AppImage 不包含系统助手与 Polkit policy，因此系统缓存入口会自动隐藏。
+- **签名与更新清单**：设置 `BROOM_GPG_KEY` 后，deb / AppImage 会生成分离签名，AppImage 还会内嵌签名；`tool/sign_linux_release.sh` 为 dist 中的全部包（tar.gz、deb、AppImage、RPM）生成 `SHA256SUMS`、`broom-linux.json` 及对应 `.asc`。清单协议见 `LinuxAppUpdateService`（`schemaVersion: 1`），默认下载地址指向 AppImage，可用 `--artifact` 或 `--url` 覆盖；应用只读取版本与链接，不下载或安装。脚本不上传任何文件，也不提交到发行版官方仓库。
+- **安装**：
+  ```bash
+  sudo apt install ./dist/broom_0.4.0-1_amd64.deb
+  chmod +x dist/broom-0.4.0-linux-x64.AppImage && ./dist/broom-0.4.0-linux-x64.AppImage
+  sudo dnf install ./dist/broom-0.4.0-1.fc44.x86_64.rpm
+  ```
+  卸载不会删除 `$XDG_DATA_HOME/Broom` 中的隔离区、设置与清理历史。
 
 - **核心可用范围**：规则扫描、预览、隔离区撤销 / 永久释放、设置与配置导入导出、重复文件与大文件分析可用；内置 48 条 Linux 规则（33 条 Safe、15 条 Review），覆盖应用日志与 Xorg 日志、浏览器脚本与扩展旧版本、Flatpak / Snap 用户缓存、Teams、AUR 助手、vcpkg 及常用开发工具缓存。
 - **桌面集成**：
@@ -351,12 +377,12 @@ bash tool/package_rpm.sh
   - **卸载残留**：只读查询 dpkg / rpm / Flatpak / Snap 与 `.desktop` 文件，结合策划的 XDG 数据目录清单生成 Review 级残留规则；清单读取不完整时失败关闭。
   - **规则在线更新**：可从 HTTPS 清单加载经过 HMAC 签名校验的规则目录并回滚；构建时需注入 `--dart-define=BROOM_RULE_SIGNING_KEY=...`，未配置时入口会提示禁用。
   - **软件更新检查**：读取 HTTPS JSON 清单，展示当前版本、最新版本与下载地址，不下载或安装；默认源为 `https://melaine-iceberg.github.io/broom/broom-linux.json`，可用 `--dart-define=BROOM_LINUX_UPDATE_FEED=...` 覆盖。
-- **系统级缓存**：安装 `broom-system-helper` 与 Polkit policy 的 RPM 后，系统缓存入口会出现，可在一次 `pkexec` 授权后清理 APT / DNF 包缓存与 7 天前的 systemd journal。助手、policy 或 `pkexec` 缺失时入口自动隐藏；操作不传路径、不进入隔离区、不可撤销。设计与 VM 验证清单见 [docs/linux-system-cache.md](docs/linux-system-cache.md)。
+- **系统级缓存**：安装 `broom-system-helper` 与 Polkit policy 的 RPM 或 deb 后，系统缓存入口会出现，可在一次 `pkexec` 授权后清理 APT / DNF 包缓存与 7 天前的 systemd journal。助手、policy 或 `pkexec` 缺失时入口自动隐藏，因此 tar.gz 与 AppImage 版本不提供系统级清理；操作不传路径、不进入隔离区、不可撤销。设计与 VM 验证清单见 [docs/linux-system-cache.md](docs/linux-system-cache.md)。
 - **数据位置**：隔离区在 `$XDG_DATA_HOME/Broom/quarantine`（默认 `~/.local/share/Broom/quarantine`），配置、历史、日志与激活规则目录同样位于该目录；规则使用 `$XDG_CACHE_HOME`、`$XDG_CONFIG_HOME`、`$XDG_DATA_HOME` 与 `$HOME`。
 - **原生能力**：文件选择器、磁盘空间（`statvfs`）、定位文件、recycle bin（freedesktop Trash）、进程优先级（`getpriority` / `setpriority`）、POSIX 权限与时间戳恢复（`chmod` / `utimensat`）都由 `linux/runner/native_channels.cc` 提供，不依赖 zenity 或外部命令。
 - **跨卷判断**：隔离区通过 `st_dev` 批量探测判断是否跨卷；无法探测时保守按跨卷复制处理，避免空间预检低估。
-- **分发**：tar.gz 解压后直接运行 `./broom`；`com.broom.Broom.desktop` 与 `broom-256.png`、`broom-512.png` 一并提供，可把图标复制到 `~/.local/share/icons/hicolor/{256x256,512x512}/apps`、桌面文件复制到 `~/.local/share/applications` 完成菜单集成。桌面文件名与应用的 Wayland app id 一致，面板才能关联到正确图标。
-- **CI**：`.github/workflows/linux.yml` 在 Ubuntu 22.04 上执行格式校验、严格静态检查、完整测试、C++ 系统助手测试、Release 构建与 tar.gz 打包，并在 Fedora 44 容器中复用该 bundle 构建 RPM、校验许可证和文件权限后上传产物。
+- **分发**：提供四种自托管产物，均可配合 `SHA256SUMS` 与分离签名使用；不提交 Fedora / Ubuntu 官方仓库、Flathub、Snap Store 或 AUR。tar.gz 解压后直接运行 `./broom`；deb / RPM 通过系统包管理器安装并集成菜单、图标与系统助手；AppImage 单文件运行，适合无法安装包的场景。桌面文件名与应用的 Wayland app id 一致，面板才能关联到正确图标。
+- **CI**：`.github/workflows/linux.yml` 在 Ubuntu 22.04 上执行格式校验、严格静态检查、完整测试、C++ 系统助手测试、Release 构建，并打包 tar.gz、deb 与 AppImage；Fedora 44 容器复用同一 bundle 构建 RPM、校验许可证和文件权限；最后由独立任务汇总全部产物、生成 `SHA256SUMS` 与 `broom-linux.json`。CI 不保存签名密钥，签名在本地发布时执行。
 
 ## 工程、测试与诊断
 
@@ -384,6 +410,8 @@ bash tool/package_rpm.sh
 - Docker 规则只处理 Windows 侧日志，WSL 规则只处理 `%LOCALAPPDATA%\Temp\wsl-crashes` 中超过 7 天的崩溃转储；镜像、容器、构建缓存、Linux 发行版文件系统与 `ext4.vhdx` 均由各自工具管理，Broom 不会直接删除或压缩虚拟磁盘。
 - 开发工具缓存按默认安装路径声明。自定义 GOPATH、WSL 内缓存、容器内部缓存或非默认包管理器路径不会被猜测或扫描；vcpkg 额外识别 `VCPKG_ROOT`、`VCPKG_DOWNLOADS` 与 `VCPKG_DEFAULT_BINARY_CACHE`，未导出的自定义路径仍不会被扫描。
 - Linux 的 Flatpak / Snap 规则只处理用户缓存（`~/.cache/flatpak`、`~/.var/app/*/cache`、`~/snap/*/*/.cache`）。系统级 `/var/lib/flatpak`、`/var/lib/snapd`、`/var/cache/snapd` 与旧 revision 由 Flatpak / snapd 自己管理，普通规则不会触碰。
+- Linux 的 deb / AppImage 以 Ubuntu 22.04 为构建基线，产物要求 glibc 2.34+ 与 libstdc++ 11+；在 Fedora 等更新工具链上直接构建的 deb 不能兼容 Ubuntu 22.04。AppImage 不含系统助手与 Polkit policy，因此没有系统级缓存入口；需要该功能请安装 deb 或 RPM。
+- Linux 更新清单默认指向 AppImage，只用于提示新版本与下载地址；应用不会自动下载或安装，也不会提交到发行版官方仓库、Flathub、Snap Store 或 AUR。
 - 缩略图 / 图标缓存通常被资源管理器占用；Broom 会跳过占用文件，不重启或强制解锁 Explorer。日志规则保留最近 7 天，且不处理受保护的 Windows 事件日志与 CBS 日志。
 - 应用缓存规则只覆盖 Teams / Slack / Discord / Spotify / VS Code 的明确缓存目录，以及 Linux 的 Flatpak 应用沙箱缓存（`~/.var/app/*/cache`）；不同版本路径可能变化，未识别的新路径不会被扫描。Linux 的浏览器扩展规则会读取 Chromium profile 的 `Preferences`，只清理不再使用的扩展版本目录；`Preferences` 缺失或无法解析时跳过，不触碰扩展程序、设置与本地存储。Firefox 扩展旧版本不在范围内。
 - 提权流程依赖交互式 UAC；自动化测试覆盖通道解析、路径校验、服务状态机与页面流程，真实 UAC 授权需手动验证。

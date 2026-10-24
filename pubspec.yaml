@@ -1,5 +1,5 @@
 name: broom
-description: "A safe, reversible cache cleaner for Windows."
+description: "A safe, reversible cache cleaner for Windows and Linux desktops."
 publish_to: 'none'
 version: 0.4.0+4
 

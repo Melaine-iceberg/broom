@@ -2,7 +2,7 @@
 
 > 评估对象：Broom 0.4.0（`pubspec.yaml`，0.4.0+4）
 > 评估日期：2026-10-24
-> 结论：Linux 已具备“规则扫描 → 预览 → 隔离区 → 撤销 / 永久释放”的完整核心闭环，并补齐回收站、卸载残留、规则在线更新与软件更新检查入口。文件占用预检、原生目录枚举、POSIX 元数据、低优先级扫描与自绘标题栏已按平台语义实现；剩余差距集中在 NTFS 索引（无等价实现）、分发与自动更新，以及真实窗口 / 实机回归。
+> 结论：Linux 已具备“规则扫描 → 预览 → 隔离区 → 撤销 / 永久释放”的完整核心闭环，并补齐回收站、卸载残留、规则在线更新与软件更新检查入口。文件占用预检、原生目录枚举、POSIX 元数据、低优先级扫描与自绘标题栏已按平台语义实现；tar.gz、deb、AppImage 与 RPM 四种自托管产物、签名和更新清单也已就绪。剩余差距集中在 NTFS 索引（无等价实现）、Flatpak / Snap 沙箱分发、自动安装更新，以及真实窗口 / 实机回归。
 
 ## 1. 总览
 
@@ -12,7 +12,7 @@
 | 隔离区撤销、永久释放、清理历史、保留策略 | 支持 | 支持 | 已对齐 |
 | 设置、配置导入导出、排除列表、国际化 | 支持 | 支持 | 已对齐 |
 | 重复文件、大文件分析 | 支持 | 支持 | 已对齐 |
-| 系统缓存（Windows Update / 传递优化 / Windows.old） | 支持，需 UAC | 支持 APT / DNF 包缓存与 systemd journal，需 Polkit 助手 | Fedora VM 已验证；APT / SELinux 待补测 |
+| 系统缓存（Windows Update / 传递优化 / Windows.old） | 支持，需 UAC | 支持 APT / DNF 包缓存与 systemd journal，需 Polkit 助手 | Fedora VM 与 Ubuntu 容器已验证安装 / 探测；交互授权与 SELinux 仍待 VM |
 | 回收站查看与清空 | 支持 | 支持 freedesktop Trash（用户回收站 + 可访问磁盘） | 已对齐，平台语义不同 |
 | 卸载残留检测 | 支持，依赖注册表 | 支持 dpkg / rpm / Flatpak / Snap 清单与桌面文件 | 已对齐，采用策划清单 |
 | 规则在线更新、签名校验、回滚 | 支持 | 支持，需构建时签名密钥与 HTTPS 清单 | 已对齐，发布配置需提供 |
@@ -23,7 +23,7 @@
 | 元数据恢复 | 时间 / 只读 / DACL 尽力恢复 | 权限位 / 时间 / 所有者 / btime / xattr 尽力恢复 | 已对齐，创建时间只读 |
 | 扫描低优先级 | 后台模式 + 低 CPU 优先级 | `nice 10` + I/O idle | 已对齐，实现手段不同 |
 | 自定义窗口标题栏 | 支持 | 支持（无边框 + GTK 原生缩放边缘） | 已对齐 |
-| 安装器与自动更新 | MSIX + App Installer | tar.gz | 分发差距 |
+| 安装器与自动更新 | MSIX + App Installer | tar.gz / deb / AppImage / RPM + 只读更新清单 | 已缩小，无自动安装 |
 | 真实窗口集成测试 | 支持，手动触发 | 无 | 验证差距 |
 
 ## 2. 仍缺失或需要降级的入口
@@ -201,23 +201,29 @@ Windows：
 - 便携 ZIP 与 SHA-256
 - 详见 [README.md](../README.md#L309-L329) 与 [packaging.md](packaging.md)
 
-Linux：
+Linux（全部为自托管产物，不提交发行版官方仓库）：
 
-- `flutter build linux --release` + [tool/package_linux.sh](../tool/package_linux.sh)
-- tar.gz 便携版，附带 `.desktop` 与图标，需要用户手动复制到应用目录
-- Fedora / RHEL 系 RPM，包含系统助手与 Polkit policy，可用 `BROOM_RPM_SIGN_KEY` 签名（[tool/package_rpm.sh](../tool/package_rpm.sh)）
+- `flutter build linux --release` + [tool/package_linux.sh](../tool/package_linux.sh)：tar.gz 便携版，附带 `.desktop` 与图标
+- [tool/package_deb.sh](../tool/package_deb.sh)：Debian / Ubuntu 包，安装 bundle、系统助手与 Polkit policy；依赖同时兼容 Ubuntu 22.04 与 24.04
+- [tool/package_appimage.sh](../tool/package_appimage.sh)：单文件 AppImage，使用固定版本的 appimagetool 并校验 SHA-256；不含系统助手
+- [tool/package_rpm.sh](../tool/package_rpm.sh)：Fedora / RHEL 系 RPM，包含系统助手与 Polkit policy，可用 `BROOM_RPM_SIGN_KEY` 签名
+- [tool/sign_linux_release.sh](../tool/sign_linux_release.sh)：为全部产物生成 `SHA256SUMS`、GPG 分离签名与 `broom-linux.json`；可用 `--base-url` / `--url` 指定下载地址，不负责上传
 - 设置页提供只读软件更新检查（HTTPS JSON 清单），不自动下载或安装
-- 没有软件源、自动更新安装、Flatpak / Snap / AppImage 或沙箱包
+- 没有软件源、自动更新安装、Flatpak / Snap 或沙箱包
 
-路线图仍待办：Flatpak / Snap / AppImage、Wayland 下“打开文件位置”验证、Snap 沙箱内的隔离区路径约定（[roadmap.md](roadmap.md#L235-L244)）。
+路线图仍待办：Flatpak / Snap、Wayland 下“打开文件位置”验证、Snap 沙箱内的隔离区路径约定（[roadmap.md](roadmap.md#L235-L244)）。
 
 ### 5.2 测试与 CI
 
-- Linux CI 执行格式校验、严格静态检查、单元 / Widget 测试、C++ 助手测试、Release 构建、tar.gz 与 Fedora RPM 打包（[.github/workflows/linux.yml](../.github/workflows/linux.yml)）
+- Linux CI 执行格式校验、严格静态检查、单元 / Widget 测试、C++ 助手测试、Release 构建，并打包 tar.gz、deb 与 AppImage；Fedora 44 容器复用同一 bundle 构建 RPM；汇总任务生成并校验 `SHA256SUMS` 与 `broom-linux.json`（[.github/workflows/linux.yml](../.github/workflows/linux.yml)）
 - Windows CI 额外提供真实窗口冒烟测试与帧率基准，手动触发（[.github/workflows/windows.yml](../.github/workflows/windows.yml#L67-L90)）
 - Linux 平台逻辑已有测试覆盖：[linux_platform_test.dart](../test/linux_platform_test.dart)、[posix_quarantine_test.dart](../test/posix_quarantine_test.dart)、[linux_rule_audit_test.dart](../test/linux_rule_audit_test.dart)
 - 新增入口的测试：[linux_installed_apps_test.dart](../test/linux_installed_apps_test.dart)、[linux_leftover_catalog_test.dart](../test/linux_leftover_catalog_test.dart)、[linux_leftover_service_test.dart](../test/linux_leftover_service_test.dart)、[linux_rule_update_test.dart](../test/linux_rule_update_test.dart)、[linux_app_update_service_test.dart](../test/linux_app_update_service_test.dart)
-- Linux 没有真实窗口的 UI 集成测试，也没有 GTK / Wayland 下的手工回归记录；回收站、卸载残留与更新入口的实机行为仍由维护者验证
+- 打包契约测试：[linux_distribution_packaging_test.dart](../test/linux_distribution_packaging_test.dart)、[linux_rpm_packaging_test.dart](../test/linux_rpm_packaging_test.dart)
+- 2026-10-24 在 Ubuntu 22.04 容器（与 CI 同基线）构建并在 Ubuntu 22.04 / 24.04 中完成 deb 安装、覆盖安装、卸载、系统助手 `--list` / `--self-test` 与依赖解析验证；卸载后 `$XDG_DATA_HOME/Broom` 保持不变
+- 同日在 Fedora 44 容器中完成 RPM 安装、助手探测与卸载；AppImage 与 deb bundle 在 WSLg（XWayland）下均检测到真实的 `Broom` 窗口
+- GPG 签名流程已实测：deb / AppImage / tar.gz / RPM 的分离签名、AppImage 内嵌 `.sha256_sig` / `.sig_key`、`SHA256SUMS` 与 `broom-linux.json` 签名均可验证
+- Linux 仍没有自动化真实窗口集成测试，也没有 GNOME / KDE 下 Wayland、回收站多磁盘和交互式 `pkexec` 授权的手工回归记录
 
 ## 6. 已对齐的能力
 
@@ -248,10 +254,10 @@ Linux：
 
 按投入产出排序：
 
-1. **系统缓存实机验证**：Fedora VM 已覆盖安装、授权、DNF 与 journal；剩余 Debian / Ubuntu 的 APT、SELinux enforcing、卸载回滚与负向认证场景。见 [linux-system-cache.md](linux-system-cache.md)。
+1. **系统缓存实机验证**：Fedora VM 已覆盖安装、授权、DNF 与 journal；Ubuntu 22.04 / 24.04 容器已验证 deb 安装、助手探测与 APT 路径可用性。剩余交互式 `pkexec` 授权、取消 / 错误密码、SELinux enforcing 与真实卸载回滚场景。见 [linux-system-cache.md](linux-system-cache.md)。
 2. **Linux 原生能力实机回归**：在 GNOME / KDE、X11 / Wayland 下验证自绘标题栏的拖动、缩放与系统菜单，以及 `/proc/locks` 占用提示、跨卷元数据恢复和 `ionice` 的实际效果。
 3. **回收站、卸载残留与更新入口的实机回归**：在 GNOME / KDE 上验证 freedesktop Trash 的多磁盘与权限场景、包管理器清单与实际卸载应用，以及规则 / 软件更新清单的 HTTPS 流程。
-4. **规则目录扩容与分发**：系统级 Flatpak / Snap revision 与 pacman / zypper 需要扩展提权助手；决定 Flatpak / Snap / AppImage 路线，补真实窗口冒烟与帧率测试。
+4. **规则目录扩容与新分发格式**：系统级 Flatpak / Snap revision 与 pacman / zypper 需要扩展提权助手；如需沙箱分发，再推进 Flatpak / Snap，并补 Wayland 真实窗口冒烟与帧率测试。
 
 ## 8. 代码索引
 

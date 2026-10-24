@@ -405,6 +405,7 @@ void main() {
       expect(applied.metadata.acl, acl);
       expect(await file.readAsString(), 'alpha');
     },
+    skip: _windowsOnly,
   );
 
   test(

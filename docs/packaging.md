@@ -2,7 +2,7 @@
 
 本文说明如何把 Broom 打成可分发的 Windows 产物：签名 MSIX 安装包、便携 ZIP，以及安装 / 升级 / 卸载的完整路径。打包流程建立在微软的 Windows App CLI（`winapp`）之上，清单、磁贴资源与打包脚本都在仓库内，可重复执行。
 
-Linux 的 tar.gz 与 RPM 打包是独立流程，见 [README 的 Linux 构建与打包](../README.md#linux-构建与打包) 与 [linux-system-cache.md](linux-system-cache.md#9-第三阶段rpm-打包已实现)。
+Linux 的 tar.gz、deb、AppImage 与 RPM 打包、签名和更新清单是独立流程，见 [README 的 Linux 构建与打包](../README.md#linux-构建与打包) 与 [linux-system-cache.md](linux-system-cache.md#9-第三阶段rpm-与-deb-打包已实现)。
 
 ## 产物
 

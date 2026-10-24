@@ -1,0 +1,19 @@
+Package: broom
+Version: @VERSION@-1
+Architecture: amd64
+Maintainer: Broom maintainers <maintainers@example.invalid>
+Installed-Size: @INSTALLED_SIZE@
+Depends: libc6 (>= 2.34), libstdc++6 (>= 11), libgtk-3-0 | libgtk-3-0t64, libglib2.0-0 | libglib2.0-0t64, liblzma5, systemd, pkexec | policykit-1, polkitd | policykit-1
+Section: utils
+Priority: optional
+Homepage: https://melaine-iceberg.github.io/broom/
+Description: Safe, reversible cache cleaner for Linux desktops
+ Broom scans declared cache locations, previews the results, and moves
+ files to a per-user quarantine so a clean can be undone. The optional
+ system helper cleans APT or DNF package caches and the systemd journal
+ after one Polkit authorization.
+ .
+ The package installs the desktop entry, hicolor icons, the
+ broom-system-helper and its Polkit policy. Removing the package does not
+ delete the user's quarantine, settings or clean history under
+ $XDG_DATA_HOME/Broom.

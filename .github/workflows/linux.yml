@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      base_url:
+        description: HTTPS base URL used by the generated update manifest
+        required: false
+        default: https://melaine-iceberg.github.io/broom/
 
 permissions:
   contents: read
@@ -29,8 +34,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            clang cmake ninja-build pkg-config libxml2-utils \
-            libgtk-3-dev liblzma-dev libstdc++-12-dev
+            clang cmake ninja-build pkg-config libxml2-utils file \
+            libgtk-3-dev liblzma-dev libstdc++-12-dev squashfs-tools
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -63,7 +68,10 @@ jobs:
       - name: Validate packaging scripts
         run: |
           bash -n tool/package_linux.sh
+          bash -n tool/package_deb.sh
+          bash -n tool/package_appimage.sh
           bash -n tool/package_rpm.sh
+          bash -n tool/sign_linux_release.sh
 
       - name: Build Linux release
         run: flutter build linux --release
@@ -74,7 +82,7 @@ jobs:
       - name: Upload Linux bundle
         uses: actions/upload-artifact@v7
         with:
-          name: broom-linux-bundle
+          name: broom-bundle
           path: build/broom-linux-bundle.tar.gz
           if-no-files-found: error
           retention-days: 1
@@ -82,11 +90,46 @@ jobs:
       - name: Package tar.gz
         run: bash tool/package_linux.sh
 
+      - name: Package Debian package
+        run: bash tool/package_deb.sh --skip-flutter-build
+
+      - name: Package AppImage
+        run: bash tool/package_appimage.sh --skip-flutter-build
+
+      - name: Verify package contents
+        run: |
+          set -euo pipefail
+          deb="$(find dist -maxdepth 1 -name 'broom_*_amd64.deb' -type f | head -n 1)"
+          test -n "$deb"
+          dpkg-deb --info "$deb"
+          dpkg-deb --contents "$deb" | grep -q 'usr/libexec/broom/broom-system-helper'
+          dpkg-deb --contents "$deb" | grep -q 'usr/share/polkit-1/actions/com.broom.Broom.policy'
+          dpkg-deb --contents "$deb" | grep -q 'usr/bin/broom'
+          appimage="$(find dist -maxdepth 1 -name 'broom-*-linux-x64.AppImage' -type f | head -n 1)"
+          test -n "$appimage"
+          "$appimage" --appimage-extract >/dev/null
+          test -x squashfs-root/AppRun
+          test -x squashfs-root/usr/lib/broom/broom
+          test -f squashfs-root/broom.desktop
+          test -f squashfs-root/broom.png
+          test ! -e squashfs-root/usr/libexec/broom/broom-system-helper
+          rm -rf squashfs-root
+
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v7
         with:
           name: broom-linux-x64
           path: dist/broom-*-linux-x64.tar.gz*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Debian and AppImage artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: broom-linux-packages
+          path: |
+            dist/broom_*_amd64.deb*
+            dist/broom-*-linux-x64.AppImage*
           if-no-files-found: error
           retention-days: 14
 
@@ -108,7 +151,7 @@ jobs:
       - name: Download Linux bundle
         uses: actions/download-artifact@v7
         with:
-          name: broom-linux-bundle
+          name: broom-bundle
           path: build
 
       - name: Extract Linux bundle
@@ -140,5 +183,58 @@ jobs:
         with:
           name: broom-linux-rpm
           path: dist/broom-*.rpm*
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Assemble release metadata
+    needs: [quality, rpm]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download all Linux artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: broom-linux-*
+          path: dist
+          merge-multiple: true
+
+      - name: Write SHA256SUMS and update manifest
+        # Signing is a local release step. CI only produces and validates the
+        # unsigned metadata; see tool/sign_linux_release.sh.
+        env:
+          BASE_URL: ${{ inputs.base_url || 'https://melaine-iceberg.github.io/broom/' }}
+        run: |
+          bash tool/sign_linux_release.sh --base-url "$BASE_URL"
+
+      - name: Validate the update manifest
+        run: |
+          set -euo pipefail
+          python3 - <<'EOF'
+          import json
+          with open('dist/broom-linux.json', encoding='utf-8') as feed:
+              data = json.load(feed)
+          assert data['schemaVersion'] == 1
+          assert data['version']
+          assert data['url'].startswith('https://')
+          assert len(data['sha256']) == 64
+          formats = {item['format'] for item in data['artifacts']}
+          assert formats == {'appimage', 'deb', 'rpm', 'tar.gz'}, formats
+          EOF
+          (cd dist && sha256sum -c SHA256SUMS)
+          if ls dist/*.asc >/dev/null 2>&1 && command -v gpg >/dev/null 2>&1; then
+            for signature in dist/*.asc; do
+              gpg --verify "$signature" "${signature%.asc}"
+            done
+          fi
+
+      - name: Upload self-hosted release bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: broom-linux-release
+          path: dist/*
           if-no-files-found: error
           retention-days: 14

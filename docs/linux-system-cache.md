@@ -1,8 +1,8 @@
-# Linux 系统级缓存清理：提权模型、保护根与 RPM 交付
+# Linux 系统级缓存清理：提权模型、保护根与 RPM / deb 交付
 
-> 状态：阶段 1–3 已实现；仓库测试、Fedora WSL 构建与 Fedora Hyper-V VM 验证（GNOME/KDE 的安装、入口、pkexec 认证、DNF/journal 清理与图标）均已通过。APT、SELinux enforcing、卸载回滚与负向认证场景仍待补测。
+> 状态：阶段 1–3 已实现；仓库测试、Fedora WSL 构建、Fedora Hyper-V VM 验证（GNOME/KDE 的安装、入口、pkexec 认证、DNF/journal 清理与图标）与 Ubuntu / Fedora 容器验收均已通过。真实 APT 清理、SELinux enforcing 与负向认证场景仍待补测。
 > 日期：2026-10-24
-> 范围：Linux 桌面版；最终只交付 RPM，实机验证由项目维护者在虚拟机中完成
+> 范围：Linux 桌面版；交付 RPM、deb 与不含助手的 AppImage，交互授权验证由项目维护者在虚拟机中完成
 
 ## 1. 结论
 
@@ -10,7 +10,7 @@
 - MVP 使用 **`pkexec` + 一次性助手**，不实现常驻 D-Bus 服务；后续需要进度信号、长任务或 Flatpak 支持时再迁移到 D-Bus。
 - **保护根不调整**。`/var`、`/snap`、`/nix`、`/run`、`/opt` 继续由 `PathGuard` 保护；系统缓存不进入普通 `CleanerRule`，也不允许路径从 UI 穿过提权边界。
 - 当前实现三个操作：**APT 包缓存**、**DNF 包缓存**与 **systemd journal**；Flatpak、Snap、pacman、zypper 暂不实现。APT 与 DNF 是否出现在 UI 中由助手探测固定工具路径后决定，不按发行版名称硬编码。
-- 第三阶段只产出 **RPM**，不产出 deb、Flatpak、Snap 或 AppImage；不在打包过程中安装或运行系统级操作，VM 中的安装、授权、SELinux 与回滚验证由维护者执行。
+- 第三阶段产出 **RPM** 与 **deb**（含助手与 policy），以及不含助手的 **AppImage**；不产出 Flatpak 或 Snap。不在打包过程中安装或运行系统级操作，交互授权、SELinux 与真实 VM 回滚验证由维护者执行。
 
 ## 2. 背景与约束
 
@@ -38,7 +38,7 @@ Linux 端目前只做用户级缓存清理。系统级缓存入口在 Linux 上�
 | `sudo` + NOPASSWD / setuid 助手 | 拒绝。绕过 Polkit、审计差、风险高 |
 | 把 `/var` 从保护根移除，复用普通扫描 | 拒绝。普通规则错误会直接影响系统目录 |
 | PackageKit 作为唯一后端 | 不采用。缓存清理语义因后端而异，且不覆盖 journald |
-| 不做提权，只展示提示 | 可作为 tar.gz / Flatpak 版本的降级行为，但不是完整功能 |
+| 不做提权，只展示提示 | 可作为 tar.gz / AppImage / Flatpak 版本的降级行为，但不是完整功能 |
 
 ### 3.1 为什么选择 `pkexec` 而不是 D-Bus
 
@@ -274,7 +274,7 @@ broom-system-helper --self-test
 - 侧边栏拆成两个能力位：
   - `showRecycleBin`：Windows 与 Linux 都显示（Linux 使用 freedesktop Trash）；
   - `showSystemCache`：Windows 或 Linux 系统助手可用时显示。
-- `main.dart` 只在 Linux 助手/policy/`pkexec` 均可用时创建 `LinuxSystemCacheController`；否则不创建控制器，入口隐藏。tar.gz 便携版默认不可用。
+- `main.dart` 只在 Linux 助手/policy/`pkexec` 均可用时创建 `LinuxSystemCacheController`；否则不创建控制器，入口隐藏。tar.gz 与 AppImage 便携版默认不可用。
 - 可用性探测只检查助手可执行、policy 文件存在、`/usr/bin/pkexec` 存在；不要用一次真实 `pkexec` 试运行来探测，否则会无谓弹出授权框。
 - 独立的 `LinuxSystemCacheController` 和 `LinuxSystemCachePage`，不复用 Windows 的逐文件 `SystemCacheController`。
 - 页面卡片只包含助手报告为可用的操作：
@@ -289,40 +289,44 @@ broom-system-helper --self-test
 - 助手缺失、policy 缺失、`pkexec` 缺失或助手探测失败时，页面显示对应降级说明与“重新检测”，不展示可执行操作。
 - 清理完成后可重新检测；无法准确计算释放空间时，显示逐项操作结果而不是猜测字节数。
 
-## 9. 第三阶段：RPM 打包（已实现）
+## 9. 第三阶段：RPM 与 deb 打包（已实现）
 
 ### 9.1 范围
 
-本阶段只产出 RPM：
+本阶段产出 RPM 与 deb：
 
-- 目标：Fedora / RHEL 系 x86_64；
-- 不产出 deb、Flatpak、Snap、AppImage；
-- 不修改现有 tar.gz 产物；tar.gz 版本隐藏系统缓存入口；
-- 不在打包脚本中执行系统清理、不安装 RPM、不要求 root；
-- VM 中的安装与授权验证由维护者完成。
+- RPM：Fedora / RHEL 系 x86_64；
+- deb：Debian / Ubuntu amd64，依赖同时兼容 Ubuntu 22.04 与 24.04；
+- AppImage 作为不含助手的跨发行版便携包，由 `tool/package_appimage.sh` 单独产出；
+- 不产出 Flatpak、Snap；
+- 不修改现有 tar.gz 产物；tar.gz 与 AppImage 版本隐藏系统缓存入口；
+- 不在打包脚本中执行系统清理、不安装包、不要求 root；
+- VM 中的交互授权验证由维护者完成，容器用于安装、依赖与助手探测验证。
 
 实现文件：
 
 - `packaging/rpm/broom.spec`：安装预构建 bundle、助手、policy、desktop、图标与文档；
-- `tool/package_rpm.sh`：构建 Flutter bundle（可跳过）与助手，生成 policy，调用 `rpmbuild -bb`，输出 `.rpm` 与 `.sha256`。
+- `tool/package_rpm.sh`：构建 Flutter bundle（可跳过）与助手，生成 policy，调用 `rpmbuild -bb`，输出 `.rpm` 与 `.sha256`；
+- `packaging/deb/control.in`、`postinst`、`prerm`、`copyright`：deb 元数据、菜单缓存刷新与 MIT 许可证；
+- `tool/package_deb.sh`：构建 Flutter bundle（可跳过）与助手，生成 policy，用 `dpkg-deb --build` 输出 `.deb` 与 `.sha256`。
 
 ### 9.2 包内布局
 
-| 内容 | 路径 |
-| --- | --- |
-| Flutter bundle | `%{_libdir}/broom/`（含 `broom`、`lib/`、`data/`） |
-| 启动入口 | `%{_bindir}/broom` → `%{_libdir}/broom/broom` |
-| 桌面文件 | `%{_datadir}/applications/com.broom.Broom.desktop` |
-| 图标 | `%{_datadir}/icons/hicolor/{256x256,512x512,256x256@2,512x512@2}/apps/broom.png` |
-| 系统助手 | `%{_libexecdir}/broom/broom-system-helper` |
-| Polkit policy | `%{_datadir}/polkit-1/actions/com.broom.Broom.policy` |
-| 文档 | `%{_docdir}/broom/`（README、本设计文档） |
-| 许可证 | `%{_datadir}/licenses/broom/LICENSE` |
+| 内容 | RPM 路径 | deb 路径 |
+| --- | --- | --- |
+| Flutter bundle | `%{_libdir}/broom/`（含 `broom`、`lib/`、`data/`） | `/usr/lib/broom/` |
+| 启动入口 | `%{_bindir}/broom` → `%{_libdir}/broom/broom` | `/usr/bin/broom` → `/usr/lib/broom/broom` |
+| 桌面文件 | `%{_datadir}/applications/com.broom.Broom.desktop` | `/usr/share/applications/com.broom.Broom.desktop` |
+| 图标 | `%{_datadir}/icons/hicolor/{256x256,512x512,256x256@2,512x512@2}/apps/broom.png` | 同左 |
+| 系统助手 | `%{_libexecdir}/broom/broom-system-helper` | `/usr/libexec/broom/broom-system-helper` |
+| Polkit policy | `%{_datadir}/polkit-1/actions/com.broom.Broom.policy` | 同左 |
+| 文档 | `%{_docdir}/broom/`（README、本设计文档） | `/usr/share/doc/broom/` |
+| 许可证 | `%{_datadir}/licenses/broom/LICENSE` | `/usr/share/doc/broom/copyright` |
 
 说明：
 
-- 助手和 policy 必须由 RPM 以 root 所有权安装，不能由应用自行写入。
-- 入口符号链接是否影响 Flutter 查找 `data/` / `lib/` 必须在 VM 中验证；如果 `/proc/self/exe` 解析不符合预期，改为安装一个极小的 shell wrapper 或直接 `Exec=%{_libdir}/broom/broom`。
+- 助手和 policy 必须由包管理器以 root 所有权安装，不能由应用自行写入；Dart 客户端固定读取 `/usr/libexec/broom/broom-system-helper`，因此 deb 也安装到 `/usr/libexec`。
+- 入口符号链接已验证不会影响 Flutter 查找 `data/` / `lib/`；deb 与 RPM 的启用路径都通过应用内 `appVersion` 与真实窗口启动验证。
 - 图标按 256 / 512 以及对应的 `@2` 目录安装；不要在 `hicolor` 下新建 1024×1024 目录，Fedora 的 `index.theme` 不索引它，GTK 会直接忽略该图标。
 
 ### 9.3 Spec
@@ -338,6 +342,13 @@ broom-system-helper --self-test
 - `License: MIT`；仓库根目录的 `LICENSE` 通过 `%license` 安装到 `%{_datadir}/licenses/broom/LICENSE`。
 - `URL`、维护者邮箱与 changelog 身份仍需在正式出包前替换。
 
+deb 元数据位于 `packaging/deb/`：
+
+- `control.in` 声明 `Package: broom`、`Version: <pubspec 版本>-1`、`Architecture: amd64`、`Section: utils`；脚本在打包时填入 `Installed-Size`。
+- `Depends` 同时覆盖两代包名：`libgtk-3-0 | libgtk-3-0t64`、`libglib2.0-0 | libglib2.0-0t64`、`pkexec | policykit-1`、`polkitd | policykit-1`，并声明 `libc6 (>= 2.34)`、`libstdc++6 (>= 11)`、`liblzma5` 与 `systemd`。
+- `postinst` / `prerm` 仅在工具存在时刷新 hicolor 图标缓存与 desktop database，不启动助手、不执行清理。
+- `copyright` 使用 DEP-5 格式并包含 MIT 全文；不另放 `/usr/share/licenses`。
+
 ### 9.4 构建脚本
 
 `tool/package_rpm.sh` 的流程：
@@ -350,6 +361,16 @@ broom-system-helper --self-test
 6. `rpmbuild -bb packaging/rpm/broom.spec --define "_topdir ..." --define "broom_version ..."`；
 7. 输出 `dist/broom-<version>-1.<dist>.x86_64.rpm` 与 `.sha256`；
 8. 可选：设置 `BROOM_RPM_SIGN_KEY` 时用 `rpm --addsign` 签名，并重新生成 `.sha256`。
+
+`tool/package_deb.sh` 的流程：
+
+1. 读取 `pubspec.yaml` 版本，校验 Linux x86_64、`dpkg-deb` 与文件系统权限；
+2. 默认执行 `flutter build linux --release`；`--skip-flutter-build` 可复用已有 bundle；
+3. 用 `-DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBEXECDIR=libexec` 构建助手，确保 policy 指向 `/usr/libexec/broom/broom-system-helper`；
+4. 暂存 `DEBIAN/`、`/usr/lib/broom`、`/usr/libexec/broom`、policy、desktop、图标与文档；
+5. 用 `dpkg-deb --root-owner-group --build` 输出 `dist/broom_<version>-1_amd64.deb` 与 `.sha256`；
+6. 可选：设置 `BROOM_GPG_KEY` 时为 deb 及其 `.sha256` 生成 GPG 分离签名；
+7. 可选：`tool/sign_linux_release.sh` 汇总全部格式并生成 `SHA256SUMS` 与更新清单。
 
 约束：
 
@@ -370,7 +391,8 @@ broom-system-helper --self-test
 - 预构建 bundle 关闭了 RPM 的自动 ELF 依赖生成（`AutoReqProv: no`），因此 GTK/GLib 运行时依赖由上面的显式 `Requires` 承担；出包后用 `rpm -qpR` 核对。
 - 安装包中的助手为 `0755 root:root`，policy 为 `0644 root:root`，均不 setuid。
 - 安装后不需要启用 systemd 服务、不需要 D-Bus 重新加载、不需要 `polkitd` 重启；policy 放入标准目录即可被识别。
-- 卸载 RPM 删除助手、policy 和桌面入口；`$XDG_DATA_HOME/Broom` 中的配置、隔离区与历史继续保留，遵循现有数据保留策略。
+- deb 的 `Depends` 负责安装 GTK / GLib / Polkit / systemd 运行时；`pkexec` 在 Ubuntu 22.04 由 `policykit-1` 提供，在 24.04 由独立的 `pkexec` / `polkitd` 提供。
+- 卸载 RPM 或 deb 都会删除助手、policy 和桌面入口；`$XDG_DATA_HOME/Broom` 中的配置、隔离区与历史继续保留，遵循现有数据保留策略。容器验证已确认卸载后用户数据文件仍存在。
 - 卸载不会恢复已被永久清理的 APT / DNF 缓存或 journal；这一点在卸载文档与 UI 中都要说明。
 
 ## 10. 验证计划
@@ -383,14 +405,16 @@ broom-system-helper --self-test
 - Dart 测试：可用性探测不启动进程、`--list` / `--self-test` 直接调用助手、pkexec 参数只含固定 operation id、APT → DNF → journal 顺序、认证取消与失败映射、部分失败与异常 JSON 的拒绝。
 - Dart UI fake 测试：只显示助手报告可用的操作、入口按能力位隐藏、默认不勾选、确认勾选门槛、认证取消无副作用、助手缺失降级。
 - policy：Linux CI 用 `xmllint` 校验 CMake 生成的 policy。
-- RPM：`test/linux_rpm_packaging_test.dart` 检查 spec 的安装路径、依赖与脚本的只读约束；Linux CI 对打包脚本执行 `bash -n`。
+- RPM / deb：`test/linux_rpm_packaging_test.dart` 与 `test/linux_distribution_packaging_test.dart` 检查 spec / control 的安装路径、依赖、签名开关与脚本的只读约束；Linux CI 对全部打包脚本执行 `bash -n`。
 - Fedora WSL 冒烟（2026-10-24）：本地 `rpmbuild` 成功；`%attr` 与权限探针确保助手 `0755`、policy / desktop / 图标 `0644`；GTK 能从 hicolor 的 256×256 目录解析到应用图标。
+- 容器验收（2026-10-24）：Ubuntu 22.04 / 24.04 中 `apt install` deb、覆盖安装、`apt remove`、助手 `--list` / `--self-test` 与 APT 路径可用性通过；Fedora 44 中 RPM 安装、助手探测与卸载通过。AppImage 与 deb bundle 在 WSLg 下均启动真实 `Broom` 窗口。
+- 签名验收（2026-10-24）：临时 GPG 密钥下 deb / AppImage / tar.gz / RPM 的分离签名、AppImage 内嵌 `.sha256_sig` / `.sig_key`、`SHA256SUMS` 与 `broom-linux.json` 签名全部通过 `gpg --verify` 与 `sha256sum -c`。
 
 后续阶段待补：
 
 - 输出截断与真实包管理器忙锁的 VM 验证。
 - SELinux enforcing 下的助手域与 AVC 检查。
-- Debian / Ubuntu 的 APT 路径与 RPM 卸载回滚验证。
+- 交互式 `pkexec` 授权、取消 / 错误密码 / 无 agent，以及真实 `apt-get clean`；容器只验证了安装与助手探测。
 
 CI 不运行真实 `pkexec` / APT / DNF / journald；这些留给 VM。
 
@@ -398,7 +422,7 @@ CI 不运行真实 `pkexec` / APT / DNF / journald；这些留给 VM。
 
 建议使用 Fedora Workstation（DNF5）或等价 RHEL 系虚拟机；APT 路径另用 Debian / Ubuntu 虚拟机验证。
 
-> 2026-10-24 Fedora Hyper-V VM 结果：RPM 安装与覆盖安装、`/usr/bin/broom` 菜单启动、系统缓存入口、pkexec 认证框、DNF 缓存与 journal 清理、GNOME 与 KDE 的应用图标均通过。仍待补测：APT（Debian / Ubuntu）、SELinux enforcing、卸载回滚、负向认证（取消 / 错误密码 / 无 agent / 非活跃会话）、tar.gz 在无助手环境的入口隐藏。
+> 2026-10-24 Fedora Hyper-V VM 结果：RPM 安装与覆盖安装、`/usr/bin/broom` 菜单启动、系统缓存入口、pkexec 认证框、DNF 缓存与 journal 清理、GNOME 与 KDE 的应用图标均通过。同日容器补测：Ubuntu 22.04 / 24.04 的 deb 安装、覆盖安装、卸载、助手探测与 APT 路径；Fedora 44 的 RPM 安装、助手探测与卸载；AppImage 与 deb bundle 在 WSLg 下启动真实窗口；GPG 签名与更新清单校验。仍待补测：交互式 `pkexec` 授权与真实 APT 清理（Debian / Ubuntu VM）、SELinux enforcing、负向认证（取消 / 错误密码 / 无 agent / 非活跃会话）、真实 VM 的 RPM 卸载回滚、tar.gz / AppImage 在无助手环境的入口隐藏。
 
 阶段 2 已实现真实执行，仓库测试不会运行系统工具。可先运行
 
@@ -411,8 +435,8 @@ sudo cmake --install build/system-helper
 
 再执行下面第 3、4、6 步。`--run` 在授权成功后执行白名单工具；未在 VM 中验证前不要对生产系统执行。
 
-1. `dnf install ./broom-<version>-1.<dist>.x86_64.rpm`。本地测试包不签名；若 VM 的仓库策略阻止未签名包，仅在隔离 VM 中使用 `rpm -i`，不要把这个流程带到正式分发。
-2. `rpm -qpl broom` 与 `rpm -qpR broom` 检查文件列表和依赖。
+1. `dnf install ./broom-<version>-1.<dist>.x86_64.rpm`，或 Debian / Ubuntu 上 `sudo apt install ./broom_<version>-1_amd64.deb`。本地测试包不签名；若 VM 的仓库策略阻止未签名包，仅在隔离 VM 中使用 `rpm -i`，不要把这个流程带到正式分发。
+2. `rpm -qpl broom` / `rpm -qpR broom` 或 `dpkg -L broom` / `dpkg -s broom` 检查文件列表和依赖。
 3. `stat` 检查助手、policy 为 root 所有、不可被普通用户写。
 4. `pkaction --action-id com.broom.Broom.clean-system-cache --verbose` 应能看到 action。
 5. 启动应用，确认系统缓存入口出现；普通用户触发 DNF 与 journal 清理（Debian / Ubuntu VM 用 APT 与 journal）。
@@ -421,8 +445,8 @@ sudo cmake --install build/system-helper
 8. 清理 journal 前后比较 `journalctl --disk-usage`，确认 7 天内/当前日志仍在。
 9. 在 SELinux enforcing 下检查 `ausearch -m avc` / `journalctl -t audit`，记录是否有 AVC；如有，先修复或补策略，不带着拒绝上线。
 10. 检查应用 bundle 通过 `/usr/bin/broom` 符号链接启动时，`data/`、`lib/` 与图标正常。
-11. 卸载 RPM，确认助手、policy 和桌面入口被移除，用户配置/隔离区保留。
-12. 用 tar.gz 版本确认系统缓存入口隐藏；用缺少 `pkexec` 或缺少 policy 的环境确认降级行为。
+11. 卸载 RPM / deb，确认助手、policy 和桌面入口被移除，用户配置/隔离区保留。
+12. 用 tar.gz 或 AppImage 版本确认系统缓存入口隐藏；用缺少 `pkexec` 或缺少 policy 的环境确认降级行为。
 
 VM 验证中发现的问题应回写到本文件“已知风险 / 开放问题”一节，再进入下一步。
 
@@ -445,34 +469,39 @@ VM 验证中发现的问题应回写到本文件“已知风险 / 开放问题�
 - [x] 验收：fake / CTest 测试覆盖全部状态；`flutter analyze` 与仓库测试通过。
 - [x] VM 验收：Fedora VM 的 DNF 缓存与 journal 清理通过；APT 路径待 Debian / Ubuntu VM 补测。
 
-### 阶段 3：RPM 打包（已实现，VM 验证通过）
+### 阶段 3：RPM / deb / AppImage 打包（已实现，VM 与容器验证通过）
 
 - [x] 新增 `packaging/rpm/broom.spec`、`tool/package_rpm.sh`。
-- [x] 生成包含助手、policy、desktop、图标、bundle 与文档的 RPM。
-- [x] 输出 `.rpm` 与 `.sha256`。
-- [x] 脚本不安装或运行 RPM；不实现 deb/Flatpak/Snap/AppImage。
-- [x] 仓库内验收：Fedora WSL 可重复构建；`rpm -qpl` / `rpm -qpR` / 文件权限与校验和冒烟通过。
+- [x] 新增 `packaging/deb/` 元数据与 `tool/package_deb.sh`。
+- [x] 新增 `packaging/appimage/AppRun` 与 `tool/package_appimage.sh`，appimagetool 固定版本并校验 SHA-256。
+- [x] 生成包含助手、policy、desktop、图标、bundle 与文档的 RPM / deb；AppImage 不含助手。
+- [x] 输出 `.rpm` / `.deb` / `.AppImage` 与 `.sha256`。
+- [x] 脚本不安装或运行包；不实现 Flatpak / Snap。
+- [x] 仓库内验收：Ubuntu 22.04 容器可重复构建 deb / AppImage；Fedora 44 可重复构建 RPM；`dpkg-deb --info`、`rpm -qpl` / `rpm -qpR`、文件权限与校验和冒烟通过。
+- [x] 容器验收：Ubuntu 22.04 / 24.04 安装 / 覆盖安装 / 卸载 deb 与助手探测；Fedora 44 安装 / 卸载 RPM；AppImage 与 deb bundle 在 WSLg 下启动真实窗口。
 - [x] VM 验收：安装 RPM、从 `/usr/bin/broom` 启动并验证 Polkit 授权；GNOME / KDE 的图标与认证框均正常（`rpm -V` 已在 WSL 安装验证）。
+- [x] 签名与清单：`tool/sign_linux_release.sh` 生成 `SHA256SUMS`、分离签名与 `broom-linux.json`；AppImage 内嵌签名已验证；产物只做自托管分发。
 
 ### 后续（不在本次范围）
 
-- Flatpak / Snap / AppImage 分发与沙箱内宿主助手方案；
+- Flatpak / Snap 分发与沙箱内宿主助手方案；
 - zypper / pacman 操作；
 - D-Bus system helper、进度信号、长任务；
-- RPM 签名、软件源、自动更新。
+- 自建软件源与自动安装更新（当前只有只读更新检查与手动升级）。
 
 ## 12. 已知风险与开放问题
 
-1. **许可证**：已采用 MIT，`LICENSE` 随 RPM 安装；若未来更改许可证，需要同步 spec、README 与发布产物。
+1. **许可证**：已采用 MIT，RPM 安装 `LICENSE`，deb 安装 DEP-5 `copyright`；若未来更改许可证，需要同步 spec、control、README 与发布产物。
 2. **SELinux**：`pkexec` 启动自定义助手后的 domain 与写入 `/var/cache/dnf`、`/var/log/journal` 的权限仍需在 SELinux enforcing 的 Fedora VM 中实测；若有 AVC，可能需要 SELinux policy 或改用 systemd service。
-3. **包管理器兼容性**：DNF 路径已在 Fedora VM 验证；`apt-get clean` 仍待 Debian / Ubuntu VM 验证。实现只以退出码与固定参数为准，不解析本地化文本。
-4. **Polkit agent**：GNOME / KDE 的正常认证框已通过；取消、错误密码、无 agent 与非活跃会话仍需补测，系统缓存入口应优雅降级。
-5. **符号链接启动**：Flutter 通过 `/proc/self/exe` 定位 bundle；`/usr/bin/broom` 已通过 GNOME / KDE 菜单启动验证。
-6. **授权面**：`pkexec` 本身是 setuid 组件，历史上出现过漏洞；助手必须保持最小、无可配置路径、无 shell，并跟随发行版的 polkit 更新。
-7. **不可撤销**：DNF 缓存和 journal 都是永久删除，不进入隔离区；UI 必须明确说明。
-8. **未来 D-Bus 迁移**：如果 Flatpak 或长任务成为近期目标，尽早切换到 D-Bus helper，避免两套授权入口长期并存。
-9. **RPM 来源构建**：本阶段是预构建 binary RPM，不适合直接提交 Fedora 官方仓库；若要走官方源，需要补 from-source 构建、许可证与打包规范。
-10. **VM 验证范围**：Fedora Hyper-V VM 已覆盖安装、菜单启动、pkexec 认证、DNF / journal 清理与 GNOME / KDE 图标；APT 路径、SELinux enforcing、卸载回滚和负向认证场景仍待补测，完成前不宣称这些路径已验证。
+3. **包管理器兼容性**：DNF 路径已在 Fedora VM 验证；Ubuntu 22.04 / 24.04 容器已确认 APT 路径与助手探测可用，但真实 `apt-get clean` 仍需交互式 `pkexec` 的 VM 验证。实现只以退出码与固定参数为准，不解析本地化文本。
+4. **构建基线**：deb / AppImage 以 Ubuntu 22.04 构建，产物要求 glibc 2.34+、libstdc++ 11+；Fedora 44 直接构建的 bundle 要求 glibc 2.38，只能用于 RPM 或本机测试，不能作为 Debian / Ubuntu 产物。CI 已按该基线拆分构建任务。
+5. **Polkit agent**：GNOME / KDE 的正常认证框已通过；取消、错误密码、无 agent 与非活跃会话仍需补测，系统缓存入口应优雅降级。
+6. **符号链接启动**：Flutter 通过 `/proc/self/exe` 定位 bundle；`/usr/bin/broom` 已通过 GNOME / KDE 菜单启动验证，deb 与 AppImage 也已在 WSLg 下启动真实窗口。
+7. **授权面**：`pkexec` 本身是 setuid 组件，历史上出现过漏洞；助手必须保持最小、无可配置路径、无 shell，并跟随发行版的 polkit 更新。
+8. **不可撤销**：DNF 缓存和 journal 都是永久删除，不进入隔离区；UI 必须明确说明。
+9. **未来 D-Bus 迁移**：如果 Flatpak 或长任务成为近期目标，尽早切换到 D-Bus helper，避免两套授权入口长期并存。
+10. **官方源构建**：本阶段是预构建 binary RPM / deb，不适合直接提交 Fedora / Debian 官方仓库；若要走官方源，需要补 from-source 构建、许可证与打包规范。当前明确只做自托管分发。
+11. **VM 验证范围**：Fedora Hyper-V VM 已覆盖安装、菜单启动、pkexec 认证、DNF / journal 清理与 GNOME / KDE 图标；容器已覆盖 deb / RPM 安装卸载、助手探测与 AppImage 启动；交互式 APT 清理、SELinux enforcing、真实 VM 卸载回滚和负向认证仍待补测。
 
 ## 13. 代码与文档索引
 

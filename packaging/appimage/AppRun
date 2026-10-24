@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+
+appdir="$(CDPATH= cd -- "$(dirname -- "$(readlink -f -- "$0")")" && pwd)"
+export LD_LIBRARY_PATH="$appdir/usr/lib/broom/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+exec "$appdir/usr/lib/broom/broom" "$@"
