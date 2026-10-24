@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "operations.h"
 
@@ -43,6 +44,16 @@ class OperationRunner {
 };
 
 std::unique_ptr<OperationRunner> CreateSystemOperationRunner();
+
+struct SnapRevision {
+  std::string name;
+  std::string revision;
+};
+
+// Parses `snap list --all` output and returns only the disabled revisions.
+// Lines that do not have the expected shape, or that contain names or revisions
+// outside the strict character set, are skipped.
+std::vector<SnapRevision> ParseDisabledSnapRevisions(const std::string& output);
 
 }  // namespace broom
 

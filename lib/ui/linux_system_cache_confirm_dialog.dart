@@ -38,7 +38,14 @@ class _LinuxSystemCacheConfirmDialogState
     final hasPackageCache = widget.operations.any(
       (operation) =>
           operation == LinuxSystemOperation.aptCache ||
-          operation == LinuxSystemOperation.dnfPackages,
+          operation == LinuxSystemOperation.dnfPackages ||
+          operation == LinuxSystemOperation.pacmanCache ||
+          operation == LinuxSystemOperation.zypperCache,
+    );
+    final hasRuntimeCleanup = widget.operations.any(
+      (operation) =>
+          operation == LinuxSystemOperation.flatpakUnused ||
+          operation == LinuxSystemOperation.snapRevisions,
     );
     final hasJournal = widget.operations.contains(
       LinuxSystemOperation.journal7d,
@@ -92,6 +99,19 @@ class _LinuxSystemCacheConfirmDialogState
               const SizedBox(height: 8),
               Text(
                 context.t('已下载的安装包会被删除，之后重新安装或升级时需要重新下载；已安装软件不会被卸载。'),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  height: 1.5,
+                ),
+              ),
+            ],
+            if (hasRuntimeCleanup) ...[
+              const SizedBox(height: 8),
+              Text(
+                context.t(
+                  '未使用的 Flatpak 运行时与已禁用的 Snap 旧修订会被删除；'
+                  '当前使用的版本和应用数据不受影响，但被删除的旧版本无法回退。',
+                ),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: scheme.onSurfaceVariant,
                   height: 1.5,

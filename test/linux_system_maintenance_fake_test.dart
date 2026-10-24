@@ -18,7 +18,7 @@ void main() {
 
       expect(availability.isAvailable, isTrue);
       expect(capabilities.helperVersion, 'test');
-      expect(capabilities.operations, hasLength(3));
+      expect(capabilities.operations, hasLength(7));
       expect(
         capabilities.capabilityFor(LinuxSystemOperation.aptCache)!.available,
         isTrue,

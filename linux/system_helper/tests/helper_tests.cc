@@ -12,6 +12,7 @@
 #include "json.h"
 #include "operations.h"
 #include "probe.h"
+#include "runner.h"
 #include "self_test.h"
 
 namespace {
@@ -75,6 +76,10 @@ constexpr char kPolicyPath[] =
 constexpr char kPkexecPath[] = "/usr/bin/pkexec";
 constexpr char kAptGetPath[] = "/usr/bin/apt-get";
 constexpr char kDnfPath[] = "/usr/bin/dnf";
+constexpr char kPacmanPath[] = "/usr/bin/pacman";
+constexpr char kZypperPath[] = "/usr/bin/zypper";
+constexpr char kFlatpakPath[] = "/usr/bin/flatpak";
+constexpr char kSnapPath[] = "/usr/bin/snap";
 constexpr char kJournalctlPath[] = "/usr/bin/journalctl";
 
 FileFacts SecureExecutable() {
@@ -146,6 +151,10 @@ struct Fixture {
   void InstallTools() {
     environment.files[kAptGetPath] = SecureExecutable();
     environment.files[kDnfPath] = SecureExecutable();
+    environment.files[kPacmanPath] = SecureExecutable();
+    environment.files[kZypperPath] = SecureExecutable();
+    environment.files[kFlatpakPath] = SecureExecutable();
+    environment.files[kSnapPath] = SecureExecutable();
     environment.files[kJournalctlPath] = SecureExecutable();
   }
 
@@ -250,6 +259,14 @@ void TestOperationSelection() {
          "apt-cache is known");
   Expect(broom::FindOperation("dnf-packages") != nullptr,
          "dnf-packages is known");
+  Expect(broom::FindOperation("pacman-cache") != nullptr,
+         "pacman-cache is known");
+  Expect(broom::FindOperation("zypper-cache") != nullptr,
+         "zypper-cache is known");
+  Expect(broom::FindOperation("flatpak-unused") != nullptr,
+         "flatpak-unused is known");
+  Expect(broom::FindOperation("snap-revisions") != nullptr,
+         "snap-revisions is known");
   Expect(broom::FindOperation("journal-7d") != nullptr,
          "journal-7d is known");
   Expect(broom::FindOperation("dnf") == nullptr, "short names are rejected");
@@ -258,15 +275,24 @@ void TestOperationSelection() {
 
   const std::vector<const broom::OperationSpec*> selected =
       broom::SelectOperations(
-          {"journal-7d", "dnf-packages", "apt-cache", "journal-7d",
+          {"snap-revisions", "journal-7d", "flatpak-unused", "zypper-cache",
+           "dnf-packages", "pacman-cache", "apt-cache", "journal-7d",
            "unknown"});
-  Expect(selected.size() == 3, "selection deduplicates and drops unknown ids");
+  Expect(selected.size() == 7, "selection deduplicates and drops unknown ids");
   Expect(std::string(selected[0]->id) == "apt-cache",
          "apt runs first regardless of input order");
   Expect(std::string(selected[1]->id) == "dnf-packages",
          "dnf runs second");
-  Expect(std::string(selected[2]->id) == "journal-7d",
-         "journal runs third");
+  Expect(std::string(selected[2]->id) == "pacman-cache",
+         "pacman runs third");
+  Expect(std::string(selected[3]->id) == "zypper-cache",
+         "zypper runs fourth");
+  Expect(std::string(selected[4]->id) == "flatpak-unused",
+         "flatpak runs fifth");
+  Expect(std::string(selected[5]->id) == "snap-revisions",
+         "snap runs sixth");
+  Expect(std::string(selected[6]->id) == "journal-7d",
+         "journal runs last");
 }
 
 void TestList() {
@@ -287,6 +313,18 @@ void TestList() {
                    "\"id\":\"dnf-packages\",\"available\":true", "dnf listed");
     ExpectContains(outcome.out, "\"reason\":null,\"timeoutSeconds\":600",
                    "dnf timeout");
+    ExpectContains(outcome.out,
+                   "\"id\":\"pacman-cache\",\"available\":true",
+                   "pacman listed");
+    ExpectContains(outcome.out,
+                   "\"id\":\"zypper-cache\",\"available\":true",
+                   "zypper listed");
+    ExpectContains(outcome.out,
+                   "\"id\":\"flatpak-unused\",\"available\":true",
+                   "flatpak listed");
+    ExpectContains(outcome.out,
+                   "\"id\":\"snap-revisions\",\"available\":true",
+                   "snap listed");
     ExpectContains(outcome.out,
                    "\"id\":\"journal-7d\",\"available\":true",
                    "journal listed");
@@ -471,6 +509,18 @@ void TestSelfTest() {
                    "\"id\":\"operation.dnf-packages\",\"status\":\"pass\"",
                    "dnf passes");
     ExpectContains(outcome.out,
+                   "\"id\":\"operation.pacman-cache\",\"status\":\"pass\"",
+                   "pacman passes");
+    ExpectContains(outcome.out,
+                   "\"id\":\"operation.zypper-cache\",\"status\":\"pass\"",
+                   "zypper passes");
+    ExpectContains(outcome.out,
+                   "\"id\":\"operation.flatpak-unused\",\"status\":\"pass\"",
+                   "flatpak passes");
+    ExpectContains(outcome.out,
+                   "\"id\":\"operation.snap-revisions\",\"status\":\"pass\"",
+                   "snap passes");
+    ExpectContains(outcome.out,
                    "\"id\":\"operation.journal-7d\",\"status\":\"pass\"",
                    "journal passes");
   }
@@ -594,6 +644,82 @@ void TestSystemRunner() {
            "timeout is a failure");
     ExpectContains(result.message, "timed out", "timeout message");
   }
+  {
+    const broom::OperationSpec operation{
+        "test-snap-empty",
+        "/usr/bin/true",
+        {"list", "--all"},
+        {},
+        "/tmp",
+        5,
+        broom::OperationKind::kSnapRevisions};
+    const broom::OperationRunResult result = runner->Run(operation);
+    Expect(result.status == broom::OperationStatus::kOk,
+           "empty snap listing succeeds");
+    Expect(result.exit_code == 0, "empty snap listing exit code");
+    ExpectContains(result.message, "No disabled snap revisions",
+                   "empty snap listing reports nothing to do");
+  }
+  {
+    const broom::OperationSpec operation{
+        "test-snap-list-fails",
+        "/usr/bin/false",
+        {"list", "--all"},
+        {},
+        "/tmp",
+        5,
+        broom::OperationKind::kSnapRevisions};
+    const broom::OperationRunResult result = runner->Run(operation);
+    Expect(result.status == broom::OperationStatus::kFailed,
+           "snap listing failure is reported");
+    Expect(result.exit_code == 1, "snap listing failure exit code");
+    ExpectContains(result.message, "Could not list snap revisions",
+                   "snap listing failure message");
+  }
+}
+
+void TestSnapRevisionParsing() {
+  {
+    const std::vector<broom::SnapRevision> revisions =
+        broom::ParseDisabledSnapRevisions("");
+    Expect(revisions.empty(), "empty snap output yields no revisions");
+  }
+  {
+    const std::vector<broom::SnapRevision> revisions =
+        broom::ParseDisabledSnapRevisions(
+            "Name      Version   Rev    Tracking       Publisher   Notes\n"
+            "core22    20240408  1380   latest/stable  canonical  base\n"
+            "firefox   124.0.2   3950   latest/stable  mozilla    disabled\n"
+            "snapd     2.63      23771  latest/stable  canonical  snapd\n");
+    Expect(revisions.size() == 1, "only disabled revisions are selected");
+    Expect(revisions[0].name == "firefox", "disabled snap name is parsed");
+    Expect(revisions[0].revision == "3950", "disabled snap revision is parsed");
+  }
+  {
+    const std::vector<broom::SnapRevision> revisions =
+        broom::ParseDisabledSnapRevisions(
+            "foo    1.0  12  latest/stable  publisher  disabled,classic\r\n"
+            "bar    2.0  13  latest/stable  publisher  disabled\r\n"
+            "bar    2.0  13  latest/stable  publisher  disabled\r\n");
+    Expect(revisions.size() == 2, "CRLF output and duplicates are handled");
+    Expect(revisions[0].name == "foo" && revisions[1].name == "bar",
+           "comma-separated notes and duplicates are parsed");
+  }
+  {
+    const std::vector<broom::SnapRevision> revisions =
+        broom::ParseDisabledSnapRevisions(
+            "Name  Version  Rev  Tracking  Publisher  Notes\n"
+            "-rf   1.0      10   latest/stable  evil     disabled\n"
+            "UPPER 1.0      11   latest/stable  evil     disabled\n"
+            "ok    1.0      x    latest/stable  evil     disabled\n"
+            "ok2   1.0      12   latest/stable  evil     disabled\n"
+            "ok3   1.0      13   latest/stable\n");
+    Expect(revisions.size() == 1,
+           "unsafe names, non-numeric revisions and malformed rows are "
+           "skipped");
+    Expect(revisions[0].name == "ok2" && revisions[0].revision == "12",
+           "only the valid row survives");
+  }
 }
 
 void TestArgumentErrorsAndHelp() {
@@ -614,6 +740,10 @@ void TestArgumentErrorsAndHelp() {
     ExpectContains(outcome.out, "--self-test", "help lists self-test");
     ExpectContains(outcome.out, "--run", "help lists run");
     ExpectContains(outcome.out, "apt-cache", "help lists apt-cache");
+    ExpectContains(outcome.out, "pacman-cache", "help lists pacman-cache");
+    ExpectContains(outcome.out, "zypper-cache", "help lists zypper-cache");
+    ExpectContains(outcome.out, "flatpak-unused", "help lists flatpak-unused");
+    ExpectContains(outcome.out, "snap-revisions", "help lists snap-revisions");
     Expect(outcome.out.find("\"schemaVersion\"") == std::string::npos,
            "help is not JSON");
   }
@@ -642,6 +772,7 @@ int main() {
   TestRunBoundary();
   TestSelfTest();
   TestSystemRunner();
+  TestSnapRevisionParsing();
   TestArgumentErrorsAndHelp();
   TestJsonQuoting();
 

@@ -23,6 +23,22 @@ class FakeLinuxSystemMaintenance implements LinuxSystemMaintenance {
             available: true,
           ),
           LinuxSystemOperationCapability(
+            operation: LinuxSystemOperation.pacmanCache,
+            available: true,
+          ),
+          LinuxSystemOperationCapability(
+            operation: LinuxSystemOperation.zypperCache,
+            available: true,
+          ),
+          LinuxSystemOperationCapability(
+            operation: LinuxSystemOperation.flatpakUnused,
+            available: true,
+          ),
+          LinuxSystemOperationCapability(
+            operation: LinuxSystemOperation.snapRevisions,
+            available: true,
+          ),
+          LinuxSystemOperationCapability(
             operation: LinuxSystemOperation.journal7d,
             available: true,
           ),

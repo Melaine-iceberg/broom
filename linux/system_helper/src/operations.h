@@ -9,6 +9,15 @@
 
 namespace broom {
 
+enum class OperationKind {
+  // Runs the fixed command once.
+  kSingleCommand,
+  // Lists disabled snap revisions with the fixed command and removes each one
+  // through `snap remove`. Revision names and numbers come from snap itself and
+  // are validated before use; nothing from the UI reaches the arguments.
+  kSnapRevisions,
+};
+
 // A fixed operation. Paths, arguments and additional environment entries are
 // compile-time constants: no value from the command line or the UI may be
 // substituted here.
@@ -22,6 +31,7 @@ struct OperationSpec {
   // tool and never writable by the caller.
   const char* storage_path;
   unsigned int timeout_seconds;
+  OperationKind kind = OperationKind::kSingleCommand;
 };
 
 const std::vector<OperationSpec>& AllOperations();

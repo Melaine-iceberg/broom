@@ -295,8 +295,9 @@ class _SelectionView extends StatelessWidget {
                               const SizedBox(height: 3),
                               Text(
                                 context.t(
-                                  '通过一次 Polkit 授权，调用系统助手清理包管理器缓存与 '
-                                  'systemd journal。默认不勾选任何操作。',
+                                  '通过一次 Polkit 授权，调用系统助手清理包管理器缓存、'
+                                  '系统级 Flatpak 运行时、Snap 旧版本与 systemd journal。'
+                                  '默认不勾选任何操作。',
                                 ),
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: scheme.onSurfaceVariant,
@@ -340,7 +341,8 @@ class _SelectionView extends StatelessWidget {
                               const SizedBox(height: 4),
                               Text(
                                 context.t(
-                                  '系统助手已安装，但没有找到 APT、DNF 或 journalctl。',
+                                  '系统助手已安装，但没有找到 APT、DNF、pacman、zypper、'
+                                  'Flatpak、Snap 或 journalctl。',
                                 ),
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: scheme.onSurfaceVariant,
@@ -560,7 +562,7 @@ class _ReviewWarning extends StatelessWidget {
           Expanded(
             child: Text(
               context.t(
-                '系统缓存操作直接调用包管理器与 journald，不经过隔离区，也没有撤销入口；'
+                '系统级操作直接调用包管理器与系统工具，不经过隔离区，也没有撤销入口；'
                 '确认前请先看清每一项会影响什么。',
               ),
               style: theme.textTheme.labelSmall?.copyWith(
@@ -599,7 +601,7 @@ class _BoundaryNote extends StatelessWidget {
             child: Text(
               context.t(
                 'Broom 只通过 pkexec 提交固定的操作名称，不接受路径、命令或自由文本；'
-                '助手只执行白名单中的系统工具。已安装软件、个人文件、用户 journal 与普通日志不受影响。',
+                '助手只执行白名单中的系统工具。已安装的应用、个人文件、用户 journal 与普通日志不受影响。',
               ),
               style: theme.textTheme.labelSmall?.copyWith(
                 color: BroomColors.inkFaint(context),
@@ -666,7 +668,7 @@ class _CleaningView extends StatelessWidget {
               Expanded(
                 child: Text(
                   context.t(
-                    '请保持此窗口打开。包管理器缓存较大时可能需要几分钟；'
+                    '请保持此窗口打开。包缓存或旧版本较多时可能需要几分钟；'
                     '如果操作被其他包管理任务占用，助手会返回“忙碌”而不会等待。',
                   ),
                   style: theme.textTheme.bodySmall?.copyWith(

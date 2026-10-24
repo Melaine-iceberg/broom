@@ -63,6 +63,10 @@ String _capabilitiesJson({
         [
           _capability('apt-cache'),
           _capability('dnf-packages'),
+          _capability('pacman-cache'),
+          _capability('zypper-cache'),
+          _capability('flatpak-unused'),
+          _capability('snap-revisions'),
           _capability('journal-7d', timeoutSeconds: 120),
         ],
   });
@@ -164,6 +168,10 @@ void main() {
     test('maps stable wire ids to operations', () {
       expect(LinuxSystemOperation.aptCache.id, 'apt-cache');
       expect(LinuxSystemOperation.dnfPackages.id, 'dnf-packages');
+      expect(LinuxSystemOperation.pacmanCache.id, 'pacman-cache');
+      expect(LinuxSystemOperation.zypperCache.id, 'zypper-cache');
+      expect(LinuxSystemOperation.flatpakUnused.id, 'flatpak-unused');
+      expect(LinuxSystemOperation.snapRevisions.id, 'snap-revisions');
       expect(LinuxSystemOperation.journal7d.id, 'journal-7d');
       expect(
         LinuxSystemOperation.fromId('apt-cache'),
@@ -172,6 +180,22 @@ void main() {
       expect(
         LinuxSystemOperation.fromId('dnf-packages'),
         LinuxSystemOperation.dnfPackages,
+      );
+      expect(
+        LinuxSystemOperation.fromId('pacman-cache'),
+        LinuxSystemOperation.pacmanCache,
+      );
+      expect(
+        LinuxSystemOperation.fromId('zypper-cache'),
+        LinuxSystemOperation.zypperCache,
+      );
+      expect(
+        LinuxSystemOperation.fromId('flatpak-unused'),
+        LinuxSystemOperation.flatpakUnused,
+      );
+      expect(
+        LinuxSystemOperation.fromId('snap-revisions'),
+        LinuxSystemOperation.snapRevisions,
       );
       expect(
         LinuxSystemOperation.fromId('journal-7d'),
@@ -279,6 +303,10 @@ void main() {
       expect(capabilities.operations.map((entry) => entry.operation), [
         LinuxSystemOperation.aptCache,
         LinuxSystemOperation.dnfPackages,
+        LinuxSystemOperation.pacmanCache,
+        LinuxSystemOperation.zypperCache,
+        LinuxSystemOperation.flatpakUnused,
+        LinuxSystemOperation.snapRevisions,
         LinuxSystemOperation.journal7d,
       ]);
       expect(capabilities.operations.first.available, isTrue);
@@ -300,6 +328,10 @@ void main() {
                 available: false,
                 reason: 'tool_missing',
               ),
+              _capability('pacman-cache'),
+              _capability('zypper-cache'),
+              _capability('flatpak-unused'),
+              _capability('snap-revisions'),
               _capability('journal-7d'),
             ],
           ),
@@ -335,11 +367,11 @@ void main() {
             operations: [
               _capability('apt-cache'),
               _capability('dnf-packages'),
-              _capability(
-                'pacman-cache',
-                available: false,
-                reason: 'tool_missing',
-              ),
+              _capability('pacman-cache'),
+              _capability('zypper-cache'),
+              _capability('flatpak-unused'),
+              _capability('snap-revisions'),
+              _capability('apt-get', available: false, reason: 'tool_missing'),
               _capability('journal-7d'),
             ],
           ),
@@ -349,7 +381,7 @@ void main() {
       final availability = await clientFor(runner).probe();
 
       expect(availability.isAvailable, isTrue);
-      expect(availability.capabilities!.operations, hasLength(3));
+      expect(availability.capabilities!.operations, hasLength(7));
       expect(
         availability.capabilities!.capabilityFor(
           LinuxSystemOperation.dnfPackages,
@@ -371,7 +403,7 @@ void main() {
 
       expect(availability.isAvailable, isFalse);
       expect(availability.reason, LinuxSystemUnavailableReason.helperFailed);
-      expect(availability.detail, contains('journal-7d'));
+      expect(availability.detail, contains('pacman-cache'));
     });
 
     test('fails on malformed JSON', () async {
@@ -593,6 +625,31 @@ void main() {
       },
     );
 
+    test('sends every selection in the full canonical order', () async {
+      final runner = _FakeRunner(
+        (executable, arguments) async => _result(
+          _reportJson([
+            _operationResult('apt-cache', 'ok'),
+            _operationResult('dnf-packages', 'ok'),
+            _operationResult('pacman-cache', 'ok'),
+            _operationResult('zypper-cache', 'ok'),
+            _operationResult('flatpak-unused', 'ok'),
+            _operationResult('snap-revisions', 'ok'),
+            _operationResult('journal-7d', 'ok'),
+          ]),
+        ),
+      );
+
+      await clientFor(runner).clean(LinuxSystemOperation.values.toSet());
+
+      expect(runner.calls.single.arguments, [
+        helperPath,
+        '--run',
+        'apt-cache,dnf-packages,pacman-cache,zypper-cache,flatpak-unused,snap-revisions,journal-7d',
+        '--json',
+      ]);
+    });
+
     test('sends only the selected operation', () async {
       final runner = _FakeRunner(
         (executable, arguments) async =>
@@ -786,7 +843,7 @@ void main() {
         (executable, arguments) async => _result(
           _reportJson([
             _operationResult('dnf-packages', 'ok'),
-            _operationResult('pacman-cache', 'ok'),
+            _operationResult('apt-get', 'ok'),
           ]),
         ),
       );

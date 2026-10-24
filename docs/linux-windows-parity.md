@@ -2,7 +2,7 @@
 
 > 评估对象：Broom 0.4.0（`pubspec.yaml`，0.4.0+4）
 > 评估日期：2026-10-24
-> 结论：Linux 已具备“规则扫描 → 预览 → 隔离区 → 撤销 / 永久释放”的完整核心闭环，并补齐回收站、卸载残留、规则在线更新与软件更新检查入口。文件占用预检、原生目录枚举、POSIX 元数据、低优先级扫描与自绘标题栏已按平台语义实现；tar.gz、deb、AppImage 与 RPM 四种自托管产物、签名和更新清单也已就绪。剩余差距集中在 NTFS 索引（无等价实现）、Flatpak / Snap 沙箱分发、自动安装更新，以及真实窗口 / 实机回归。
+> 结论：Linux 已具备“规则扫描 → 预览 → 隔离区 → 撤销 / 永久释放”的完整核心闭环，并补齐回收站、卸载残留、规则在线更新与软件更新检查入口。文件占用预检、原生目录枚举、POSIX 元数据、低优先级扫描与自绘标题栏已按平台语义实现；系统级清理已覆盖 APT / DNF / pacman / zypper、系统级 Flatpak / Snap 与 systemd journal；tar.gz、deb、AppImage 与 RPM 四种自托管产物、签名和更新清单也已就绪。剩余差距集中在 NTFS 索引（无等价实现）、Flatpak / Snap 沙箱分发、自动安装更新，以及真实窗口 / 实机回归。
 
 ## 1. 总览
 
@@ -12,7 +12,7 @@
 | 隔离区撤销、永久释放、清理历史、保留策略 | 支持 | 支持 | 已对齐 |
 | 设置、配置导入导出、排除列表、国际化 | 支持 | 支持 | 已对齐 |
 | 重复文件、大文件分析 | 支持 | 支持 | 已对齐 |
-| 系统缓存（Windows Update / 传递优化 / Windows.old） | 支持，需 UAC | 支持 APT / DNF 包缓存与 systemd journal，需 Polkit 助手 | Fedora VM 与 Ubuntu 容器已验证安装 / 探测；交互授权与 SELinux 仍待 VM |
+| 系统缓存（Windows Update / 传递优化 / Windows.old） | 支持，需 UAC | 支持 APT / DNF / pacman / zypper 缓存、系统级 Flatpak / Snap 与 systemd journal，需 Polkit 助手 | Fedora VM 与 Ubuntu 容器已验证 DNF / journal / 探测；其余操作待实机补测 |
 | 回收站查看与清空 | 支持 | 支持 freedesktop Trash（用户回收站 + 可访问磁盘） | 已对齐，平台语义不同 |
 | 卸载残留检测 | 支持，依赖注册表 | 支持 dpkg / rpm / Flatpak / Snap 清单与桌面文件 | 已对齐，采用策划清单 |
 | 规则在线更新、签名校验、回滚 | 支持 | 支持，需构建时签名密钥与 HTTPS 清单 | 已对齐，发布配置需提供 |
@@ -38,7 +38,7 @@ Windows 侧由 `SystemCacheController` 承担，依赖 UAC 提权、Windows Upda
 - 平台实现只支持 Windows：[lib/core/platform/system_cache_platform.dart](../lib/core/platform/system_cache_platform.dart#L82-L86)
 - 权限与目录定位只支持 Windows：[lib/core/platform/system_access.dart](../lib/core/platform/system_access.dart#L122-L125)
 
-Linux 不复用逐文件控制器，而是通过独立的 Polkit 助手执行固定操作：APT 包缓存、DNF 包缓存与 7 天前的 systemd journal。入口只在助手、policy 与 `pkexec` 均可用时显示；`/var`、`/snap`、`/nix` 等目录仍是保护根，路径不会从 UI 穿过提权边界。实现与 VM 验证清单见 [linux-system-cache.md](linux-system-cache.md)。
+Linux 不复用逐文件控制器，而是通过独立的 Polkit 助手执行固定操作：APT / DNF / pacman / zypper 包缓存、系统级 Flatpak 未使用运行时、系统级 Snap 旧修订与 7 天前的 systemd journal。入口只在助手、policy 与 `pkexec` 均可用时显示；`/var`、`/snap`、`/nix` 等目录仍是保护根，路径不会从 UI 穿过提权边界。实现与 VM 验证清单见 [linux-system-cache.md](linux-system-cache.md)。
 
 ### 2.2 回收站
 
@@ -183,8 +183,8 @@ Windows 侧存在但 Linux 没有对应规则的包括：
 
 Linux 侧仍受平台语义限制、不能简单照搬为普通规则的目标：
 
-- Flatpak / Snap 的系统级旧 revision、`/var/lib/flatpak`、`/var/lib/snapd` 与 `/var/cache/snapd` 仍在保护根中，由各自工具管理；普通规则只覆盖用户级缓存
-- pacman 的系统缓存 `/var/cache/pacman/pkg` 属于保护根；普通规则只覆盖 yay / paru / pikaur 的用户缓存
+- Flatpak / Snap 的系统级旧 revision、`/var/lib/flatpak`、`/var/lib/snapd` 与 `/var/cache/snapd` 仍在保护根中，由各自工具管理；系统级清理通过助手执行，普通规则只覆盖用户级缓存
+- pacman 的系统缓存 `/var/cache/pacman/pkg` 属于保护根，由系统助手清理；普通规则只覆盖 yay / paru / pikaur 的用户缓存
 - 回收站不作为普通清理规则，而是独立工具（见 2.2）
 - systemd journal 与 `/var/log` 由系统助手处理或受保护，不进入普通规则（见 2.1）
 - vcpkg 的自定义克隆路径只有在导出 `VCPKG_ROOT`、`VCPKG_DOWNLOADS` 或 `VCPKG_DEFAULT_BINARY_CACHE` 时才能被发现
@@ -213,7 +213,7 @@ Linux（全部为自托管产物，不提交发行版官方仓库）：
 - 设置页提供只读软件更新检查（HTTPS JSON 清单），不自动下载或安装
 - 没有软件源、自动更新安装、Flatpak / Snap 或沙箱包
 
-路线图仍待办：Flatpak / Snap、Wayland 下“打开文件位置”验证、Snap 沙箱内的隔离区路径约定（[roadmap.md](roadmap.md#L235-L244)）。
+路线图仍待办：Flatpak / Snap 分发、Wayland 下“打开文件位置”验证、Snap 沙箱内的隔离区路径约定（[roadmap.md](roadmap.md#L235-L244)）。
 
 ### 5.2 测试与 CI
 
@@ -256,10 +256,10 @@ Linux（全部为自托管产物，不提交发行版官方仓库）：
 
 按投入产出排序：
 
-1. **系统缓存实机验证**：Fedora VM 已覆盖安装、授权、DNF 与 journal；Ubuntu 22.04 / 24.04 容器已验证 deb 安装、助手探测与 APT 路径可用性。剩余交互式 `pkexec` 授权、取消 / 错误密码、SELinux enforcing 与真实卸载回滚场景。见 [linux-system-cache.md](linux-system-cache.md)。
+1. **系统缓存实机验证**：Fedora VM 已覆盖安装、授权、DNF 与 journal；Ubuntu 22.04 / 24.04 容器已验证 deb 安装、助手探测与 APT 路径可用性。剩余交互式 `pkexec` 授权、取消 / 错误密码、SELinux enforcing、真实卸载回滚，以及 Arch / openSUSE / Ubuntu 上的 pacman、zypper、Flatpak、Snap 清理。见 [linux-system-cache.md](linux-system-cache.md)。
 2. **Linux 原生能力实机回归**：在 GNOME / KDE、X11 / Wayland 下验证自绘标题栏的拖动、缩放与系统菜单，以及 `/proc/locks` 占用提示、跨卷元数据恢复和 `ionice` 的实际效果。
 3. **回收站、卸载残留与更新入口的实机回归**：在 GNOME / KDE 上验证 freedesktop Trash 的多磁盘与权限场景、包管理器清单与实际卸载应用，以及规则 / 软件更新清单的 HTTPS 流程。
-4. **规则目录扩容与新分发格式**：系统级 Flatpak / Snap revision 与 pacman / zypper 需要扩展提权助手；如需沙箱分发，再推进 Flatpak / Snap，并补 Wayland 真实窗口冒烟与帧率测试。
+4. **规则目录扩容与新分发格式**：系统级清理已覆盖 pacman / zypper 与系统级 Flatpak / Snap；剩余是 Flatpak / Snap 沙箱分发，以及 Wayland 真实窗口冒烟与帧率测试。
 
 ## 8. 代码索引
 

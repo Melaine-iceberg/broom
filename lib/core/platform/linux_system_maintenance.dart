@@ -9,6 +9,10 @@ import 'dart:io';
 enum LinuxSystemOperation {
   aptCache('apt-cache'),
   dnfPackages('dnf-packages'),
+  pacmanCache('pacman-cache'),
+  zypperCache('zypper-cache'),
+  flatpakUnused('flatpak-unused'),
+  snapRevisions('snap-revisions'),
   journal7d('journal-7d');
 
   const LinuxSystemOperation(this.id);
@@ -207,10 +211,10 @@ class PkexecLinuxSystemMaintenance implements LinuxSystemMaintenance {
 
   static const Duration _probeTimeout = Duration(seconds: 15);
   static const Duration _selfTestTimeout = Duration(seconds: 30);
-  // The helper owns the per-operation timeouts (APT 10m + DNF 10m + journal
-  // 2m). This final guard must stay above their sum so pkexec is not killed
-  // while a legitimate helper run is still working.
-  static const Duration _cleanTimeout = Duration(minutes: 25);
+  // The helper owns the per-operation timeouts (six 10m operations plus the
+  // 2m journal vacuum). This final guard must stay above their sum so pkexec is
+  // not killed while a legitimate helper run is still working.
+  static const Duration _cleanTimeout = Duration(minutes: 70);
 
   final String helperPath;
   final String policyPath;

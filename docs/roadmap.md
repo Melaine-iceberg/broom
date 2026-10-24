@@ -238,7 +238,7 @@
 - [x] 路径与权限：`PosixPathSemantics`、大小写敏感、`$VAR` / `${VAR}` / `~` 规则展开、`PathGuard.forPosix` 保护 `/usr`、`/etc`、`/boot` 等系统目录。
 - [x] 隔离区：`$XDG_DATA_HOME/Broom/quarantine`；跨卷通过 `st_dev` 探测，不可探测时保守复制。
 - [x] 原生桥接：`statvfs` 磁盘空间、`GtkFileChooserNative` 选择器、Gio 定位文件、`getpriority` / `setpriority` 扫描优先级、`chmod` / `utimensat` 元数据恢复。
-- [x] 系统级缓存：通过 Polkit / `pkexec` 调用固定功能助手，清理 APT / DNF 包缓存与 7 天前的 systemd journal；助手、policy 或 pkexec 缺失时不显示入口。
+- [x] 系统级缓存：通过 Polkit / `pkexec` 调用固定功能助手，清理 APT / DNF / pacman / zypper 包缓存、系统级 Flatpak 未使用运行时、系统级 Snap 旧修订与 7 天前的 systemd journal；助手、policy 或 pkexec 缺失时不显示入口。
 - [x] 回收站：freedesktop Trash 用户回收站与可访问挂载点的 `.Trash/$uid` / `.Trash-$uid`，只统计与清空属于当前用户的真实目录，不跟随符号链接；永久删除、需确认。
 - [x] 卸载残留：只读查询 dpkg / rpm / Flatpak / Snap 与 `.desktop` 文件，结合策划的 XDG 数据目录清单生成 Review 级 `leftover.*` 规则；清单不完整时失败关闭。
 - [x] 规则在线更新：Linux 加载 `$XDG_DATA_HOME/Broom/rules` 中的签名目录，支持回滚与恢复内置规则；未配置构建密钥时禁用并提示。
@@ -247,7 +247,7 @@
 - [x] 打包与 CI：tar.gz + `.desktop` + 图标，Fedora / RHEL 系 x86_64 的 RPM，Debian / Ubuntu 的 deb 与跨发行版 AppImage；`tool/package_linux.sh`、`tool/package_deb.sh`、`tool/package_appimage.sh`、`tool/package_rpm.sh`，Ubuntu 22.04 CI 构建全部格式，Fedora 44 容器构建 RPM。
 - [x] 自托管签名与更新清单：`tool/sign_linux_release.sh` 生成 `SHA256SUMS`、GPG 分离签名与 `schemaVersion: 1` 的 `broom-linux.json`；AppImage 支持内嵌签名。产物只面向自托管分发，不提交发行版官方仓库、Flathub、Snap Store 或 AUR。
 - [x] 分发验证：Ubuntu 22.04 / 24.04 容器完成 deb 安装、覆盖安装、卸载与助手探测；Fedora 44 容器完成 RPM 安装 / 卸载；AppImage 与 deb bundle 在 WSLg 下启动真实窗口；GPG 签名与更新清单校验通过。
-- [ ] 后续：Flatpak / Snap 分发、Wayland 下的定位行为验证、Snap 沙箱内的隔离区路径约定；系统级 Flatpak / Snap revision 与 pacman / zypper 仍需要扩展提权助手；交互式 `pkexec` 授权、SELinux enforcing、真实 RPM 卸载回滚与负向认证仍待 VM 验证，见 [linux-system-cache.md](linux-system-cache.md)。
+- [ ] 后续：Flatpak / Snap 分发、Wayland 下的定位行为验证、Snap 沙箱内的隔离区路径约定；系统级 pacman / zypper / Flatpak / Snap 清理已完成实现，仍需对应发行版的实机补测；交互式 `pkexec` 授权、SELinux enforcing、真实 RPM 卸载回滚与负向认证仍待 VM 验证，见 [linux-system-cache.md](linux-system-cache.md)。
 
 ### 移动端
 

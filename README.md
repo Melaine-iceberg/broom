@@ -378,7 +378,7 @@ BROOM_GPG_KEY="<key-id>" bash tool/sign_linux_release.sh \
   - **卸载残留**：只读查询 dpkg / rpm / Flatpak / Snap 与 `.desktop` 文件，结合策划的 XDG 数据目录清单生成 Review 级残留规则；清单读取不完整时失败关闭。
   - **规则在线更新**：可从 HTTPS 清单加载经过 HMAC 签名校验的规则目录并回滚；构建时需注入 `--dart-define=BROOM_RULE_SIGNING_KEY=...`，未配置时入口会提示禁用。
   - **软件更新检查**：读取 HTTPS JSON 清单，展示当前版本、最新版本与下载地址，不下载或安装；默认源为 `https://melaine-iceberg.github.io/broom/broom-linux.json`，可用 `--dart-define=BROOM_LINUX_UPDATE_FEED=...` 覆盖。
-- **系统级缓存**：安装 `broom-system-helper` 与 Polkit policy 的 RPM 或 deb 后，系统缓存入口会出现，可在一次 `pkexec` 授权后清理 APT / DNF 包缓存与 7 天前的 systemd journal。助手、policy 或 `pkexec` 缺失时入口自动隐藏，因此 tar.gz 与 AppImage 版本不提供系统级清理；操作不传路径、不进入隔离区、不可撤销。设计与 VM 验证清单见 [docs/linux-system-cache.md](docs/linux-system-cache.md)。
+- **系统级缓存**：安装 `broom-system-helper` 与 Polkit policy 的 RPM 或 deb 后，系统缓存入口会出现，可在一次 `pkexec` 授权后清理 APT / DNF / pacman / zypper 包缓存、系统级 Flatpak 未使用运行时、系统级 Snap 旧修订与 7 天前的 systemd journal。助手、policy 或 `pkexec` 缺失时入口自动隐藏，因此 tar.gz 与 AppImage 版本不提供系统级清理；操作不传路径、不进入隔离区、不可撤销。设计与 VM 验证清单见 [docs/linux-system-cache.md](docs/linux-system-cache.md)。
 - **数据位置**：隔离区在 `$XDG_DATA_HOME/Broom/quarantine`（默认 `~/.local/share/Broom/quarantine`），配置、历史、日志与激活规则目录同样位于该目录；规则使用 `$XDG_CACHE_HOME`、`$XDG_CONFIG_HOME`、`$XDG_DATA_HOME` 与 `$HOME`。
 - **原生能力**：文件选择器、磁盘空间（`statvfs`）、定位文件、recycle bin（freedesktop Trash）、进程优先级（`getpriority` / `setpriority`）、POSIX 权限与时间戳恢复（`chmod` / `utimensat`）都由 `linux/runner/native_channels.cc` 提供，不依赖 zenity 或外部命令。
 - **跨卷判断**：隔离区通过 `st_dev` 批量探测判断是否跨卷；无法探测时保守按跨卷复制处理，避免空间预检低估。
@@ -405,12 +405,12 @@ BROOM_GPG_KEY="<key-id>" bash tool/sign_linux_release.sh \
 
 ## 已知限制
 
-- Windows 与 Linux 均支持规则扫描、隔离区撤销与释放、设置和只读分析；Linux 还支持 freedesktop Trash 回收站、基于包管理器清单的卸载残留检测、签名规则在线更新与只读软件更新检查，以及由 Polkit 助手提供的 APT / DNF 包缓存与 systemd journal 清理。NTFS 索引仍为 Windows 专属，Linux 界面会隐藏 NTFS 选项；自绘标题栏、文件占用预检、原生目录枚举、低优先级扫描与跨卷元数据恢复在两个桌面平台均可用，Linux 的探测与元数据能力按 POSIX 语义尽力而为。普通扫描同时包含 Safe 与 Review 规则；Review 默认不勾选并需要额外确认，但仍通过隔离区清理。
+- Windows 与 Linux 均支持规则扫描、隔离区撤销与释放、设置和只读分析；Linux 还支持 freedesktop Trash 回收站、基于包管理器清单的卸载残留检测、签名规则在线更新与只读软件更新检查，以及由 Polkit 助手提供的 APT / DNF / pacman / zypper 包缓存、系统级 Flatpak / Snap 与 systemd journal 清理。NTFS 索引仍为 Windows 专属，Linux 界面会隐藏 NTFS 选项；自绘标题栏、文件占用预检、原生目录枚举、低优先级扫描与跨卷元数据恢复在两个桌面平台均可用，Linux 的探测与元数据能力按 POSIX 语义尽力而为。普通扫描同时包含 Safe 与 Review 规则；Review 默认不勾选并需要额外确认，但仍通过隔离区清理。
 - 系统级工具覆盖 Windows Update 的 `SoftwareDistribution\Download`、传递优化的 `DeliveryOptimization\Cache` 与系统盘 `Windows.old`，均为永久删除、无撤销；更新缓存清理期间会临时停止相关服务，服务恢复失败需手动启动或重启系统。
 - Windows.old 可能包含旧用户配置文件副本与旧程序；即使以管理员运行，部分文件仍可能因 TrustedInstaller 权限或占用而删除失败，因此可能只清理已找到的部分。
 - Docker 规则只处理 Windows 侧日志，WSL 规则只处理 `%LOCALAPPDATA%\Temp\wsl-crashes` 中超过 7 天的崩溃转储；镜像、容器、构建缓存、Linux 发行版文件系统与 `ext4.vhdx` 均由各自工具管理，Broom 不会直接删除或压缩虚拟磁盘。
 - 开发工具缓存按默认安装路径声明。自定义 GOPATH、WSL 内缓存、容器内部缓存或非默认包管理器路径不会被猜测或扫描；vcpkg 额外识别 `VCPKG_ROOT`、`VCPKG_DOWNLOADS` 与 `VCPKG_DEFAULT_BINARY_CACHE`，未导出的自定义路径仍不会被扫描。
-- Linux 的 Flatpak / Snap 规则只处理用户缓存（`~/.cache/flatpak`、`~/.var/app/*/cache`、`~/snap/*/*/.cache`）。系统级 `/var/lib/flatpak`、`/var/lib/snapd`、`/var/cache/snapd` 与旧 revision 由 Flatpak / snapd 自己管理，普通规则不会触碰。
+- Linux 的 Flatpak / Snap 规则只处理用户缓存（`~/.cache/flatpak`、`~/.var/app/*/cache`、`~/snap/*/*/.cache`）。系统级 `/var/lib/flatpak`、`/var/lib/snapd`、`/var/cache/snapd` 与旧 revision 不会被普通规则触碰；系统级 Flatpak 未使用运行时与 Snap 旧修订只由安装后的系统助手通过各自 CLI 清理。
 - Linux 的 deb / AppImage 以 Ubuntu 22.04 为构建基线，产物要求 glibc 2.34+ 与 libstdc++ 11+；在 Fedora 等更新工具链上直接构建的 deb 不能兼容 Ubuntu 22.04。AppImage 不含系统助手与 Polkit policy，因此没有系统级缓存入口；需要该功能请安装 deb 或 RPM。
 - Linux 更新清单默认指向 AppImage，只用于提示新版本与下载地址；应用不会自动下载或安装，也不会提交到发行版官方仓库、Flathub、Snap Store 或 AUR。
 - 缩略图 / 图标缓存通常被资源管理器占用；Broom 会跳过占用文件，不重启或强制解锁 Explorer。日志规则保留最近 7 天，且不处理受保护的 Windows 事件日志与 CBS 日志。

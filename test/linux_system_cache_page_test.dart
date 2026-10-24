@@ -10,6 +10,10 @@ import 'support/linux_system_maintenance_fakes.dart';
 LinuxSystemAvailability _availability({
   bool apt = true,
   bool dnf = true,
+  bool pacman = true,
+  bool zypper = true,
+  bool flatpak = true,
+  bool snap = true,
   bool journal = true,
 }) {
   return LinuxSystemAvailability.available(
@@ -25,6 +29,26 @@ LinuxSystemAvailability _availability({
           operation: LinuxSystemOperation.dnfPackages,
           available: dnf,
           reason: dnf ? null : 'tool_missing',
+        ),
+        LinuxSystemOperationCapability(
+          operation: LinuxSystemOperation.pacmanCache,
+          available: pacman,
+          reason: pacman ? null : 'tool_missing',
+        ),
+        LinuxSystemOperationCapability(
+          operation: LinuxSystemOperation.zypperCache,
+          available: zypper,
+          reason: zypper ? null : 'tool_missing',
+        ),
+        LinuxSystemOperationCapability(
+          operation: LinuxSystemOperation.flatpakUnused,
+          available: flatpak,
+          reason: flatpak ? null : 'tool_missing',
+        ),
+        LinuxSystemOperationCapability(
+          operation: LinuxSystemOperation.snapRevisions,
+          available: snap,
+          reason: snap ? null : 'tool_missing',
         ),
         LinuxSystemOperationCapability(
           operation: LinuxSystemOperation.journal7d,
@@ -82,6 +106,10 @@ void main() {
       );
 
       expect(find.text('APT 包缓存'), findsOneWidget);
+      expect(find.text('pacman 包缓存'), findsOneWidget);
+      expect(find.text('zypper 包缓存'), findsOneWidget);
+      expect(find.text('Flatpak 系统运行时'), findsOneWidget);
+      expect(find.text('Snap 旧版本修订'), findsOneWidget);
       expect(find.text('systemd journal（7 天）'), findsOneWidget);
       expect(find.text('DNF 包缓存'), findsNothing);
       expect(find.text('已选择 0 项操作'), findsOneWidget);
@@ -130,6 +158,31 @@ void main() {
     expect(find.text('清理完成'), findsOneWidget);
     expect(find.text('完成'), findsOneWidget);
     expect(find.text('共释放约 2.0 KB'), findsOneWidget);
+  });
+
+  testWidgets('warns that Flatpak and Snap cleanup cannot be rolled back', (
+    tester,
+  ) async {
+    await _pumpPage(tester, FakeLinuxSystemMaintenance());
+
+    await tester.tap(
+      find.byKey(const ValueKey('linux-system-operation-flatpak-unused')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('清理 1 项'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        '未使用的 Flatpak 运行时与已禁用的 Snap 旧修订会被删除；'
+        '当前使用的版本和应用数据不受影响，但被删除的旧版本无法回退。',
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.text('清理系统缓存？'), findsNothing);
   });
 
   testWidgets('a cancelled authorization keeps the page unchanged', (

@@ -7,6 +7,10 @@ import 'support/linux_system_maintenance_fakes.dart';
 LinuxSystemAvailability _availability({
   bool apt = true,
   bool dnf = true,
+  bool pacman = true,
+  bool zypper = true,
+  bool flatpak = true,
+  bool snap = true,
   bool journal = true,
 }) {
   return LinuxSystemAvailability.available(
@@ -22,6 +26,26 @@ LinuxSystemAvailability _availability({
           operation: LinuxSystemOperation.dnfPackages,
           available: dnf,
           reason: dnf ? null : 'tool_missing',
+        ),
+        LinuxSystemOperationCapability(
+          operation: LinuxSystemOperation.pacmanCache,
+          available: pacman,
+          reason: pacman ? null : 'tool_missing',
+        ),
+        LinuxSystemOperationCapability(
+          operation: LinuxSystemOperation.zypperCache,
+          available: zypper,
+          reason: zypper ? null : 'tool_missing',
+        ),
+        LinuxSystemOperationCapability(
+          operation: LinuxSystemOperation.flatpakUnused,
+          available: flatpak,
+          reason: flatpak ? null : 'tool_missing',
+        ),
+        LinuxSystemOperationCapability(
+          operation: LinuxSystemOperation.snapRevisions,
+          available: snap,
+          reason: snap ? null : 'tool_missing',
         ),
         LinuxSystemOperationCapability(
           operation: LinuxSystemOperation.journal7d,
@@ -52,6 +76,10 @@ void main() {
     expect(controller.isAvailable, isTrue);
     expect(controller.availableOperations.map((entry) => entry.operation), [
       LinuxSystemOperation.dnfPackages,
+      LinuxSystemOperation.pacmanCache,
+      LinuxSystemOperation.zypperCache,
+      LinuxSystemOperation.flatpakUnused,
+      LinuxSystemOperation.snapRevisions,
       LinuxSystemOperation.journal7d,
     ]);
     expect(controller.unavailableReason, isNull);

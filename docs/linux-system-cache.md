@@ -1,6 +1,6 @@
 # Linux 系统级缓存清理：提权模型、保护根与 RPM / deb 交付
 
-> 状态：阶段 1–3 已实现；仓库测试、Fedora WSL 构建、Fedora Hyper-V VM 验证（GNOME/KDE 的安装、入口、pkexec 认证、DNF/journal 清理与图标）与 Ubuntu / Fedora 容器验收均已通过。真实 APT 清理、SELinux enforcing 与负向认证场景仍待补测。
+> 状态：阶段 1–4 已实现；仓库测试、Fedora WSL 构建、Fedora Hyper-V VM 验证（GNOME/KDE 的安装、入口、pkexec 认证、DNF/journal 清理与图标）与 Ubuntu / Fedora 容器验收均已通过。真实 APT / pacman / zypper / Flatpak / Snap 清理、SELinux enforcing 与负向认证场景仍待补测。
 > 日期：2026-10-24
 > 范围：Linux 桌面版；交付 RPM、deb 与不含助手的 AppImage，交互授权验证由项目维护者在虚拟机中完成
 
@@ -9,7 +9,7 @@
 - **采用 Polkit 作为唯一授权通道**，由 root 所有的固定功能助手执行系统级操作。
 - MVP 使用 **`pkexec` + 一次性助手**，不实现常驻 D-Bus 服务；后续需要进度信号、长任务或 Flatpak 支持时再迁移到 D-Bus。
 - **保护根不调整**。`/var`、`/snap`、`/nix`、`/run`、`/opt` 继续由 `PathGuard` 保护；系统缓存不进入普通 `CleanerRule`，也不允许路径从 UI 穿过提权边界。
-- 当前实现三个操作：**APT 包缓存**、**DNF 包缓存**与 **systemd journal**；Flatpak、Snap、pacman、zypper 暂不实现。APT 与 DNF 是否出现在 UI 中由助手探测固定工具路径后决定，不按发行版名称硬编码。
+- 当前实现七个操作：**APT 包缓存**、**DNF 包缓存**、**pacman 包缓存**、**zypper 包缓存**、**系统级 Flatpak 运行时**、**系统级 Snap 旧修订**与 **systemd journal**。每项是否出现在 UI 中，由助手探测固定工具路径后决定，不按发行版名称硬编码。
 - 第三阶段产出 **RPM** 与 **deb**（含助手与 policy），以及不含助手的 **AppImage**；不产出 Flatpak 或 Snap。不在打包过程中安装或运行系统级操作，交互授权、SELinux 与真实 VM 回滚验证由维护者执行。
 
 ## 2. 背景与约束
@@ -42,7 +42,7 @@ Linux 端目前只做用户级缓存清理。系统级缓存入口在 Linux 上�
 
 ### 3.1 为什么选择 `pkexec` 而不是 D-Bus
 
-- 两个操作都是短时的一次性任务，不需要常驻进程。
+- 这些操作都是短时的一次性任务，不需要常驻进程。
 - `pkexec` 直接完成“认证 + 以 root 执行一次”的流程，代码量和打包项都更少。
 - 助手的授权通过 `org.freedesktop.policykit.exec.path` 绑定到专用 Polkit action，不使用通用的 `org.freedesktop.policykit.exec`。
 - 官方 `pkexec` 没有 `--action-id` 参数；网上部分示例使用它并不可靠。正确做法是让 action 的 `exec.path` 注解指向助手绝对路径。
@@ -61,6 +61,10 @@ Flutter UI（普通用户）
   │  只接受白名单操作；拒绝任意参数
   ├─ /usr/bin/apt-get clean            （DEBIAN_FRONTEND=noninteractive）
   ├─ /usr/bin/dnf clean packages
+  ├─ /usr/bin/pacman -Sc --noconfirm
+  ├─ /usr/bin/zypper --non-interactive clean
+  ├─ /usr/bin/flatpak uninstall --unused --system --noninteractive --assumeyes
+  ├─ /usr/bin/snap list --all → snap remove <name> --revision=<rev>
   └─ /usr/bin/journalctl --vacuum-time=7d
   ▼
 JSON 结果 → Flutter UI
@@ -69,7 +73,7 @@ JSON 结果 → Flutter UI
 关键原则：
 
 - **UI 与 root 之间只传枚举操作名**，不传文件路径、不传命令、不传环境变量。
-- 助手不接受“清理某个目录”这样的参数；DNF 和 journald 的路径由助手自己固定解析。
+- 助手不接受“清理某个目录”这样的参数；每个操作的路径与参数都由助手自己固定解析。
 - 助手不直接遍历并删除 `/var` 下的文件，而是调用对应的系统工具，保留包管理器/ journald 自身的元数据与锁语义。
 - 普通扫描器和 `PathGuard` 不接触这些路径；系统缓存有独立的操作白名单。
 
@@ -93,7 +97,7 @@ JSON 结果 → Flutter UI
 
 ```text
 broom-system-helper --list --json
-broom-system-helper --run dnf-packages,journal-7d --json
+broom-system-helper --run dnf-packages,flatpak-unused,journal-7d --json
 broom-system-helper --self-test
 ```
 
@@ -102,9 +106,13 @@ broom-system-helper --self-test
 - 操作使用稳定 id：
   - `apt-cache`
   - `dnf-packages`
+  - `pacman-cache`
+  - `zypper-cache`
+  - `flatpak-unused`
+  - `snap-revisions`
   - `journal-7d`
 - 不接受 `--path`、`--command`、`--shell` 或任意自由文本参数。
-- 一次调用最多执行一组已列出的操作，去重后按固定顺序执行；Polkit 只认证一次。
+- 一次调用最多执行一组已列出的操作（上限 8 个），去重后按固定顺序执行：APT → DNF → pacman → zypper → Flatpak → Snap → journal；Polkit 只认证一次。
 - 输出只走 stdout，诊断走 stderr；stdout 必须是可解析 JSON。
 
 建议结果格式：
@@ -143,10 +151,11 @@ broom-system-helper --self-test
   - `LC_ALL=C`、`LANG=C`
   - APT 操作额外设置 `DEBIAN_FRONTEND=noninteractive`
   - 清除 `LD_*`、`BASH_ENV` 等可注入变量；pkexec 的环境清理不能替代助手自身的防御。
-- 设置超时：APT / DNF 10 分钟、journal 2 分钟；超时后终止整个进程组并报告失败。
+- 设置超时：APT / DNF / pacman / zypper / Flatpak 各 10 分钟，Snap 整个多步流程共享 10 分钟，journal 2 分钟；超时后终止整个进程组并报告失败。
+- Snap 的移除对象来自 `snap list --all` 输出，只接受形如 `[a-z0-9][a-z0-9-]*` 的名称与纯数字修订号；解析失败的行直接跳过，UI 无法影响这些参数。
 - 限制捕获输出大小（每路 1 MiB），避免恶意/异常输出耗尽内存。
 - 使用 `/run/broom-system-helper.lock` + `flock` 串行化 Broom 自己的系统清理；锁被占用时逐项返回 `busy`。
-- 不自行实现“删除目录内容”；APT / DNF / journald 的锁与状态由工具自己维护。
+- 不自行实现“删除目录内容”；APT / DNF / pacman / zypper / Flatpak / Snap / journald 的锁与状态由工具自己维护。
 - 每个操作执行前再次校验固定工具路径；某个工具不可用时该项返回 `unavailable`，其他操作继续。
 - 释放空间通过操作前后 `statvfs` 估算；无法测量时 `freedBytes` 为 `null`，UI 只显示操作结果。
 - 所有路径都在助手内固定；不读取用户提供的配置路径，不读取 `$HOME`。
@@ -183,6 +192,60 @@ broom-system-helper --self-test
 - Review 级：已下载包会被永久删除，之后重新安装需要重新下载；已安装软件不受影响。
 - DNF 正被占用时返回 `busy`，不等待、不杀进程。
 
+#### `pacman-cache`
+
+执行：
+
+```text
+/usr/bin/pacman -Sc --noconfirm
+```
+
+- 只清理 `/var/cache/pacman/pkg` 中对应软件已卸载的包文件；已安装版本对应的包保留，便于离线重装或降级。
+- 不使用 `pacman -Scc`，避免连同已安装版本的包一起删除。`--noconfirm` 用默认答案应答 pacman 的交互提示（包括清理未使用的同步仓库），这些元数据可由 `pacman -Sy` 重新获取。
+- 固定工具路径为 `/usr/bin/pacman`；Arch 系之外通常标记为不可用，UI 不显示这一项。
+- Review 级：被删除的旧包之后需要重新下载；已安装软件不受影响。
+
+#### `zypper-cache`
+
+执行：
+
+```text
+/usr/bin/zypper --non-interactive clean
+```
+
+- 只清理 `/var/cache/zypp/packages` 中已下载的 RPM 包，保留仓库元数据；不使用 `clean --all`。
+- 使用固定的 `--non-interactive`，不通过 shell，也不接受额外参数。
+- 固定工具路径为 `/usr/bin/zypper`；openSUSE / SLES 之外通常标记为不可用。
+- Review 级：已下载包会被永久删除，之后重新安装需要重新下载；已安装软件不受影响。
+
+#### `flatpak-unused`
+
+执行：
+
+```text
+/usr/bin/flatpak uninstall --unused --system --noninteractive --assumeyes
+```
+
+- 只处理系统级安装（`--system`），移除不再被任何应用依赖的运行时。
+- 这是工具级的“未使用运行时”清理，不枚举或删除 `/var/lib/flatpak` 下的文件；运行时与应用管理的元数据由 Flatpak 自己维护。
+- 固定工具路径为 `/usr/bin/flatpak`；未安装 Flatpak 的系统标记为不可用。
+- Review 级：未使用运行时会被卸载，之后需要时会重新下载；已安装应用与用户数据不受影响。
+
+#### `snap-revisions`
+
+执行两步固定流程：
+
+```text
+/usr/bin/snap list --all
+/usr/bin/snap remove <name> --revision=<revision>
+```
+
+- 第一步列出所有修订，只选择 Notes 为 `disabled` 的行；第二步逐条移除，`<name>` 与 `<revision>` 均来自 snap 输出并通过严格字符校验，UI 不能传入。
+- 当前启用的修订不会被选中；只清理 Snap 自己标记为 disabled 的旧版本。
+- 固定工具路径为 `/usr/bin/snap`；没有该工具的系统标记为不可用，snapd 未运行或列表失败时该项返回失败。
+- Review 级：旧修订删除后无法回退到该版本；应用自身数据不受影响。
+- 多步流程共享 10 分钟总预算；任一步超时会终止进程组，已成功移除的数量会写入结果消息。
+
 #### `journal-7d`
 
 执行：
@@ -205,6 +268,7 @@ broom-system-helper --self-test
 | 助手不存在 / policy 不存在 / `pkexec` 不存在 | 系统缓存入口隐藏，或显示“未安装系统助手” |
 | 助手参数非法 | 助手返回非零，不执行任何工具 |
 | DNF 锁被占用 | 返回 `busy`，提示稍后再试 |
+| pacman 数据库锁或 snapd 有变更进行中 | 返回 `busy`，提示稍后再试 |
 | SELinux 拒绝写入 | 返回失败和 stderr 摘要；VM 验证阶段记录 AVC |
 | 工具执行失败 | 保留其他已执行操作的结果，逐项报告 |
 
@@ -280,10 +344,15 @@ broom-system-helper --self-test
 - 页面卡片只包含助手报告为可用的操作：
   - APT 包缓存（Debian / Ubuntu）；
   - DNF 包缓存（Fedora / RHEL）；
+  - pacman 包缓存（Arch）；
+  - zypper 包缓存（openSUSE / SLES）；
+  - Flatpak 系统运行时；
+  - Snap 旧版本修订；
   - systemd journal（7 天）。
 - 默认全部不勾选，属于 Review 级；确认框明确：
   - 永久删除、无隔离区、不可撤销；
-  - APT / DNF 包需要重新下载；
+  - APT / DNF / pacman / zypper 包需要重新下载；
+  - Flatpak 未使用运行时会卸载，Snap 旧修订删除后无法回退；
   - journal 日志会丢失。
 - 认证取消时不做任何更改，保留当前选择并提示；失败按操作逐项展示，不把整批结果伪装成成功。
 - 助手缺失、policy 缺失、`pkexec` 缺失或助手探测失败时，页面显示对应降级说明与“重新检测”，不展示可执行操作。
@@ -399,10 +468,10 @@ deb 元数据位于 `packaging/deb/`：
 
 ### 10.1 仓库内自动化
 
-阶段 1–2 已覆盖：
+阶段 1–4 已覆盖：
 
-- C++ CTest：参数解析、操作白名单、未知操作、非 root 拒绝、JSON 结构与转义、自检的 root 所有权 / 权限规则；锁被占用时逐项报告 `busy`；固定执行器用真实 `/usr/bin/true`、`/usr/bin/false` 与超时进程验证进程组终止和状态映射。
-- Dart 测试：可用性探测不启动进程、`--list` / `--self-test` 直接调用助手、pkexec 参数只含固定 operation id、APT → DNF → journal 顺序、认证取消与失败映射、部分失败与异常 JSON 的拒绝。
+- C++ CTest：参数解析、操作白名单（7 个固定操作与执行顺序）、未知操作、非 root 拒绝、JSON 结构与转义、自检的 root 所有权 / 权限规则；锁被占用时逐项报告 `busy`；固定执行器用真实 `/usr/bin/true`、`/usr/bin/false` 与超时进程验证进程组终止和状态映射；Snap 流程覆盖列表为空、列表失败与输出解析（表头、启用行、disabled 行、CRLF、重复行、恶意名称 / 修订号）。
+- Dart 测试：可用性探测不启动进程、`--list` / `--self-test` 直接调用助手、pkexec 参数只含固定 operation id、APT → DNF → pacman → zypper → Flatpak → Snap → journal 顺序、认证取消与失败映射、部分失败与异常 JSON 的拒绝。
 - Dart UI fake 测试：只显示助手报告可用的操作、入口按能力位隐藏、默认不勾选、确认勾选门槛、认证取消无副作用、助手缺失降级。
 - policy：Linux CI 用 `xmllint` 校验 CMake 生成的 policy。
 - RPM / deb：`test/linux_rpm_packaging_test.dart` 与 `test/linux_distribution_packaging_test.dart` 检查 spec / control 的安装路径、依赖、签名开关与脚本的只读约束；Linux CI 对全部打包脚本执行 `bash -n`。
@@ -442,11 +511,12 @@ sudo cmake --install build/system-helper
 5. 启动应用，确认系统缓存入口出现；普通用户触发 DNF 与 journal 清理（Debian / Ubuntu VM 用 APT 与 journal）。
 6. 分别测试：取消认证、错误密码、成功、无 Polkit agent、非活跃会话（如 SSH）。
 7. 成功清理 DNF / APT 后确认只删除了包缓存，未卸载软件，仓库元数据策略符合预期。
-8. 清理 journal 前后比较 `journalctl --disk-usage`，确认 7 天内/当前日志仍在。
-9. 在 SELinux enforcing 下检查 `ausearch -m avc` / `journalctl -t audit`，记录是否有 AVC；如有，先修复或补策略，不带着拒绝上线。
-10. 检查应用 bundle 通过 `/usr/bin/broom` 符号链接启动时，`data/`、`lib/` 与图标正常。
-11. 卸载 RPM / deb，确认助手、policy 和桌面入口被移除，用户配置/隔离区保留。
-12. 用 tar.gz 或 AppImage 版本确认系统缓存入口隐藏；用缺少 `pkexec` 或缺少 policy 的环境确认降级行为。
+8. Arch / openSUSE VM 中确认 pacman `-Sc` 保留已安装版本、zypper `clean` 保留元数据；Ubuntu VM 中确认 Flatpak 仅卸载未使用运行时，Snap 仅移除 disabled 修订。
+9. 清理 journal 前后比较 `journalctl --disk-usage`，确认 7 天内/当前日志仍在。
+10. 在 SELinux enforcing 下检查 `ausearch -m avc` / `journalctl -t audit`，记录是否有 AVC；如有，先修复或补策略，不带着拒绝上线。
+11. 检查应用 bundle 通过 `/usr/bin/broom` 符号链接启动时，`data/`、`lib/` 与图标正常。
+12. 卸载 RPM / deb，确认助手、policy 和桌面入口被移除，用户配置/隔离区保留。
+13. 用 tar.gz 或 AppImage 版本确认系统缓存入口隐藏；用缺少 `pkexec` 或缺少 policy 的环境确认降级行为。
 
 VM 验证中发现的问题应回写到本文件“已知风险 / 开放问题”一节，再进入下一步。
 
@@ -482,10 +552,19 @@ VM 验证中发现的问题应回写到本文件“已知风险 / 开放问题�
 - [x] VM 验收：安装 RPM、从 `/usr/bin/broom` 启动并验证 Polkit 授权；GNOME / KDE 的图标与认证框均正常（`rpm -V` 已在 WSL 安装验证）。
 - [x] 签名与清单：`tool/sign_linux_release.sh` 生成 `SHA256SUMS`、分离签名与 `broom-linux.json`；AppImage 内嵌签名已验证；产物只做自托管分发。
 
+### 阶段 4：pacman / zypper / 系统级 Flatpak / Snap（已实现，仓库验证通过；真实发行版待补测）
+
+- [x] 新增 `pacman-cache`：固定执行 `pacman -Sc --noconfirm`，只移除已卸载软件的包文件。
+- [x] 新增 `zypper-cache`：固定执行 `zypper --non-interactive clean`，保留仓库元数据。
+- [x] 新增 `flatpak-unused`：固定执行 `flatpak uninstall --unused --system --noninteractive --assumeyes`。
+- [x] 新增 `snap-revisions` 两步流程：`snap list --all` 解析 disabled 修订后逐条 `snap remove --revision=<rev>`，名称与修订号严格校验，共享 10 分钟总预算。
+- [x] 操作顺序、能力探测、自检、UI 卡片、确认提示、Dart 契约与测试 fake 同步扩展为 7 项；客户端最终超时上调到 70 分钟。
+- [x] 验收：C++ CTest（含 Snap 输出解析用例）与 Dart 单元 / UI 测试通过，`flutter analyze` 无问题。
+- [ ] 真实发行版补测：Arch 的 pacman、openSUSE 的 zypper、Ubuntu 的 Flatpak / Snap（需要交互式 pkexec）。
+
 ### 后续（不在本次范围）
 
 - Flatpak / Snap 分发与沙箱内宿主助手方案；
-- zypper / pacman 操作；
 - D-Bus system helper、进度信号、长任务；
 - 自建软件源与自动安装更新（当前只有只读更新检查与手动升级）。
 
@@ -493,15 +572,16 @@ VM 验证中发现的问题应回写到本文件“已知风险 / 开放问题�
 
 1. **许可证**：已采用 MIT，RPM 安装 `LICENSE`，deb 安装 DEP-5 `copyright`；若未来更改许可证，需要同步 spec、control、README 与发布产物。
 2. **SELinux**：`pkexec` 启动自定义助手后的 domain 与写入 `/var/cache/dnf`、`/var/log/journal` 的权限仍需在 SELinux enforcing 的 Fedora VM 中实测；若有 AVC，可能需要 SELinux policy 或改用 systemd service。
-3. **包管理器兼容性**：DNF 路径已在 Fedora VM 验证；Ubuntu 22.04 / 24.04 容器已确认 APT 路径与助手探测可用，但真实 `apt-get clean` 仍需交互式 `pkexec` 的 VM 验证。实现只以退出码与固定参数为准，不解析本地化文本。
+3. **包管理器与运行时工具兼容性**：DNF 路径已在 Fedora VM 验证；Ubuntu 22.04 / 24.04 容器已确认 APT 路径与助手探测可用。pacman / zypper / Flatpak / Snap 的真实清理仍需对应发行版的交互式 `pkexec` 验证，尤其是 pacman `-Sc` 的保留策略、zypper 无缓存时的退出码，以及 Snap 在 snapd 有并行变更时的错误文本。实现只以退出码与固定参数为准，不解析本地化文本。
 4. **构建基线**：deb / AppImage 以 Ubuntu 22.04 构建，产物要求 glibc 2.34+、libstdc++ 11+；Fedora 44 直接构建的 bundle 要求 glibc 2.38，只能用于 RPM 或本机测试，不能作为 Debian / Ubuntu 产物。CI 已按该基线拆分构建任务。
 5. **Polkit agent**：GNOME / KDE 的正常认证框已通过；取消、错误密码、无 agent 与非活跃会话仍需补测，系统缓存入口应优雅降级。
 6. **符号链接启动**：Flutter 通过 `/proc/self/exe` 定位 bundle；`/usr/bin/broom` 已通过 GNOME / KDE 菜单启动验证，deb 与 AppImage 也已在 WSLg 下启动真实窗口。
 7. **授权面**：`pkexec` 本身是 setuid 组件，历史上出现过漏洞；助手必须保持最小、无可配置路径、无 shell，并跟随发行版的 polkit 更新。
-8. **不可撤销**：DNF 缓存和 journal 都是永久删除，不进入隔离区；UI 必须明确说明。
+8. **不可撤销**：APT / DNF / pacman / zypper 缓存、Flatpak 未使用运行时、Snap 旧修订和 journal 都是永久删除，不进入隔离区；UI 必须明确说明，并在确认框中区分“包缓存”和“运行时/旧版本”。
 9. **未来 D-Bus 迁移**：如果 Flatpak 或长任务成为近期目标，尽早切换到 D-Bus helper，避免两套授权入口长期并存。
 10. **官方源构建**：本阶段是预构建 binary RPM / deb，不适合直接提交 Fedora / Debian 官方仓库；若要走官方源，需要补 from-source 构建、许可证与打包规范。当前明确只做自托管分发。
-11. **VM 验证范围**：Fedora Hyper-V VM 已覆盖安装、菜单启动、pkexec 认证、DNF / journal 清理与 GNOME / KDE 图标；容器已覆盖 deb / RPM 安装卸载、助手探测与 AppImage 启动；交互式 APT 清理、SELinux enforcing、真实 VM 卸载回滚和负向认证仍待补测。
+11. **VM 验证范围**：Fedora Hyper-V VM 已覆盖安装、菜单启动、pkexec 认证、DNF / journal 清理与 GNOME / KDE 图标；容器已覆盖 deb / RPM 安装卸载、助手探测与 AppImage 启动；交互式 APT 清理、pacman / zypper / Flatpak / Snap 清理、SELinux enforcing、真实 VM 卸载回滚和负向认证仍待补测。
+12. **Snap 输出格式**：`snap list --all` 的解析要求每行恰好六列且 Notes 含 `disabled`；版本号带空格或 Snap 调整列顺序时该行会被跳过，清理退化为空操作而不是误删。升级 snapd 后应重新检查解析测试；`flatpak uninstall --unused` 的语义同样由 Flatpak 自身定义，助手不枚举 `/var/lib/flatpak`。
 
 ## 13. 代码与文档索引
 
@@ -533,3 +613,7 @@ VM 验证中发现的问题应回写到本文件“已知风险 / 开放问题�
 - Polkit 与 privileged D-Bus service 模型：[Polkit - Gentoo Wiki](https://wiki.gentoo.org/wiki/Polkit)
 - Polkit 系统守护进程与 setuid 风险说明：[polkitd package description](https://packages.debian.org/trixie/amd64/polkitd)
 - PackageKit 的 Polkit/D-Bus 抽象（后续评估）：[PackageKit introduction](https://www.freedesktop.org/software/PackageKit/pk-intro.html)
+- pacman 缓存清理（`-Sc` / `-Scc`）：[pacman(8)](https://man.archlinux.org/man/pacman.8)
+- zypper 缓存清理（`clean` / `clean --all`）：[zypper reference](https://documentation.suse.com/smart/systems-management/html/reference-zypper/index.html)
+- Flatpak 未使用运行时（`uninstall --unused`）：[flatpak command reference](https://docs.flatpak.org/en/latest/flatpak-command-reference.html#flatpak-uninstall)
+- Snap 旧修订与 `snap remove --revision`：[snap documentation](https://snapcraft.io/docs/using-snapd)
