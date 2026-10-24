@@ -5,20 +5,22 @@
 #include <vector>
 
 #include "probe.h"
+#include "runner.h"
 
 namespace broom {
 
 struct HelperContext {
   Environment* environment = nullptr;
+  // Owned by main() in production and by the caller in tests. --run requires a
+  // runner; --list and --self-test do not touch it.
+  OperationRunner* runner = nullptr;
   std::string helper_install_path;
   std::string policy_path;
   std::string pkexec_path;
   std::string version;
 };
 
-// Runs one helper invocation and fills the streams that main() prints. The
-// function performs no filesystem mutation: stage 1 only lists, self-tests,
-// validates arguments, and reports that cleanup is not implemented.
+// Runs one helper invocation and fills the streams that main() prints.
 int RunHelper(const std::vector<std::string>& arguments,
               HelperContext* context,
               std::string* stdout_text,

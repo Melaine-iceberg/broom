@@ -15,6 +15,7 @@ import 'ui/broom_fonts.dart';
 import 'ui/clean_controller.dart';
 import 'ui/glass_ui.dart';
 import 'ui/home_page.dart';
+import 'ui/linux_system_cache_controller.dart';
 import 'ui/rule_update_controller.dart';
 import 'ui/settings_controller.dart';
 import 'ui/system_cache_controller.dart';
@@ -27,6 +28,7 @@ class BroomApp extends StatefulWidget {
     this.settingsController,
     this.systemShell,
     this.systemCacheController,
+    this.linuxSystemCacheController,
     this.quarantineRetention,
     this.analysisRunnerFactory,
     this.analysisInitialDirectory,
@@ -41,6 +43,7 @@ class BroomApp extends StatefulWidget {
   final SettingsController? settingsController;
   final SystemShell? systemShell;
   final SystemCacheController? systemCacheController;
+  final LinuxSystemCacheController? linuxSystemCacheController;
   final QuarantineRetentionService? quarantineRetention;
   final AnalysisRunner Function()? analysisRunnerFactory;
   final String? analysisInitialDirectory;
@@ -105,6 +108,7 @@ class _BroomAppState extends State<BroomApp> {
             settingsController: _settings,
             shell: widget.systemShell ?? createSystemShell(),
             systemCacheController: widget.systemCacheController,
+            linuxSystemCacheController: widget.linuxSystemCacheController,
             quarantineRetention: widget.quarantineRetention,
             analysisRunnerFactory:
                 widget.analysisRunnerFactory ?? AnalysisService.new,
@@ -115,6 +119,10 @@ class _BroomAppState extends State<BroomApp> {
             appUpdates: widget.appUpdates,
             logger: widget.logger,
             showWindowsTools: Platform.isWindows,
+            showSystemCache:
+                widget.systemCacheController != null ||
+                widget.linuxSystemCacheController != null,
+            showRecycleBin: Platform.isWindows,
           ),
         );
       },

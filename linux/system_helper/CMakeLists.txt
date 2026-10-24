@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(broom_system_helper VERSION 0.1.0 LANGUAGES CXX)
+project(broom_system_helper VERSION 0.2.0 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 
@@ -17,6 +17,7 @@ set(BROOM_HELPER_SOURCES
   src/json.cc
   src/operations.cc
   src/probe.cc
+  src/runner.cc
   src/self_test.cc
 )
 

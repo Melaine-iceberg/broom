@@ -7,13 +7,23 @@ namespace broom {
 
 const std::vector<OperationSpec>& AllOperations() {
   static const std::vector<OperationSpec> operations = {
+      OperationSpec{"apt-cache",
+                    "/usr/bin/apt-get",
+                    {"clean"},
+                    {"DEBIAN_FRONTEND=noninteractive"},
+                    "/var/cache/apt",
+                    600},
       OperationSpec{"dnf-packages",
                     "/usr/bin/dnf",
                     {"clean", "packages"},
+                    {},
+                    "/var/cache/dnf",
                     600},
       OperationSpec{"journal-7d",
                     "/usr/bin/journalctl",
                     {"--vacuum-time=7d"},
+                    {},
+                    "/var/log/journal",
                     120},
   };
   return operations;

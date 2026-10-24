@@ -1,7 +1,7 @@
 # Linux 系统级缓存清理：提权模型、保护根与 RPM 交付
 
-> 状态：阶段 1 已实现（仓库侧测试通过）；pkexec 授权与安装布局的 VM 验证待维护者执行
-> 日期：2026-10-23
+> 状态：阶段 1–2 已实现（仓库侧测试通过）；pkexec 授权、安装布局与真实清理的 VM 验证待维护者执行
+> 日期：2026-10-24
 > 范围：Linux 桌面版；最终只交付 RPM，实机验证由项目维护者在虚拟机中完成
 
 ## 1. 结论
@@ -9,7 +9,7 @@
 - **采用 Polkit 作为唯一授权通道**，由 root 所有的固定功能助手执行系统级操作。
 - MVP 使用 **`pkexec` + 一次性助手**，不实现常驻 D-Bus 服务；后续需要进度信号、长任务或 Flatpak 支持时再迁移到 D-Bus。
 - **保护根不调整**。`/var`、`/snap`、`/nix`、`/run`、`/opt` 继续由 `PathGuard` 保护；系统缓存不进入普通 `CleanerRule`，也不允许路径从 UI 穿过提权边界。
-- 第一阶段只做 **DNF 包缓存**与 **systemd journal** 两个操作；APT、Flatpak、Snap、pacman、zypper 暂不实现。
+- 当前实现三个操作：**APT 包缓存**、**DNF 包缓存**与 **systemd journal**；Flatpak、Snap、pacman、zypper 暂不实现。APT 与 DNF 是否出现在 UI 中由助手探测固定工具路径后决定，不按发行版名称硬编码。
 - 第三阶段只产出 **RPM**，不产出 deb、Flatpak、Snap 或 AppImage；不在打包过程中安装或运行系统级操作，VM 中的安装、授权、SELinux 与回滚验证由维护者执行。
 
 ## 2. 背景与约束
@@ -59,6 +59,7 @@ Flutter UI（普通用户）
   ▼
 /usr/libexec/broom/broom-system-helper（root，一次性进程）
   │  只接受白名单操作；拒绝任意参数
+  ├─ /usr/bin/apt-get clean            （DEBIAN_FRONTEND=noninteractive）
   ├─ /usr/bin/dnf clean packages
   └─ /usr/bin/journalctl --vacuum-time=7d
   ▼
@@ -99,6 +100,7 @@ broom-system-helper --self-test
 - `--list` / `--self-test` 可以普通用户运行，只做能力探测和只读校验。
 - `--run` 必须以 root 运行；非 root 返回明确的错误码，不尝试自我提权。
 - 操作使用稳定 id：
+  - `apt-cache`
   - `dnf-packages`
   - `journal-7d`
 - 不接受 `--path`、`--command`、`--shell` 或任意自由文本参数。
@@ -139,17 +141,33 @@ broom-system-helper --self-test
 - 环境变量最小化：
   - `PATH=/usr/sbin:/usr/bin:/sbin:/bin`
   - `LC_ALL=C`、`LANG=C`
-  - 未来 APT 操作额外设置 `DEBIAN_FRONTEND=noninteractive`
+  - APT 操作额外设置 `DEBIAN_FRONTEND=noninteractive`
   - 清除 `LD_*`、`BASH_ENV` 等可注入变量；pkexec 的环境清理不能替代助手自身的防御。
-- 设置超时：DNF 10 分钟、journal 2 分钟；超时后终止整个进程组并报告失败。
-- 限制捕获输出大小（例如 1 MiB），避免恶意/异常输出耗尽内存。
-- 使用 `/run/broom-system-helper.lock` + `flock` 串行化 Broom 自己的系统清理。
-- 不自行实现“删除目录内容”；DNF/ journald 的锁与状态由工具自己维护。
+- 设置超时：APT / DNF 10 分钟、journal 2 分钟；超时后终止整个进程组并报告失败。
+- 限制捕获输出大小（每路 1 MiB），避免恶意/异常输出耗尽内存。
+- 使用 `/run/broom-system-helper.lock` + `flock` 串行化 Broom 自己的系统清理；锁被占用时逐项返回 `busy`。
+- 不自行实现“删除目录内容”；APT / DNF / journald 的锁与状态由工具自己维护。
+- 每个操作执行前再次校验固定工具路径；某个工具不可用时该项返回 `unavailable`，其他操作继续。
+- 释放空间通过操作前后 `statvfs` 估算；无法测量时 `freedBytes` 为 `null`，UI 只显示操作结果。
 - 所有路径都在助手内固定；不读取用户提供的配置路径，不读取 `$HOME`。
 - 记录日志到 syslog/stderr，不写入用户目录，不记录包内容或用户路径明文。
 - 助手退出后不保留状态；重复调用必须幂等或返回可用性错误。
 
 ### 5.4 操作语义
+
+#### `apt-cache`
+
+执行：
+
+```text
+/usr/bin/apt-get clean
+```
+
+- 额外设置 `DEBIAN_FRONTEND=noninteractive`，不通过 shell，也不接受额外参数。
+- 只清理 `/var/cache/apt/archives` 中已下载的 `.deb` 包，不执行 `autoremove`，不卸载任何已安装软件。
+- 固定工具路径为 `/usr/bin/apt-get`；Debian / Ubuntu 之外通常标记为不可用，UI 不显示这一项。
+- Review 级：已下载包会被永久删除，之后重新安装需要重新下载；已安装软件不受影响。
+- 包管理器正被占用时返回 `busy`，不等待、不杀其他进程。
 
 #### `dnf-packages`
 
@@ -251,24 +269,25 @@ broom-system-helper --self-test
 - 如果未来需要显示体积，只做只读探测；探测结果不作为删除输入。
 - 需要一个回归测试，明确断言 `/var/cache/dnf`、`/var/log/journal`、`/snap/...` 仍是受保护路径，防止后续“为了方便”误放开。
 
-## 8. Linux UI 与控制器
+## 8. Linux UI 与控制器（已实现）
 
-- 侧边栏把现有 `showWindowsTools` 拆成两个能力位：
+- 侧边栏拆成两个能力位：
   - `showRecycleBin`：仍然仅 Windows；
   - `showSystemCache`：Windows 或 Linux 系统助手可用时显示。
-- `main.dart` 只在 Linux 助手/policy/`pkexec` 均可用时创建 `LinuxSystemMaintenance`；否则传 `null`，入口隐藏。tar.gz 便携版默认不可用。
-- 可用性探测只检查助手可执行、policy 文件存在、`/usr/bin/pkexec` 存在；不要用一次真实 `pkexec` 试运行来探测，否则会无谓弹出授权框。可选地用 `pkaction --action-id` 做只读校验。
-- 新增独立的 `LinuxSystemCacheController` 和页面，不复用 Windows 的逐文件 `SystemCacheController`。
-- 页面卡片只包含操作级信息：
-  - DNF 包缓存；
+- `main.dart` 只在 Linux 助手/policy/`pkexec` 均可用时创建 `LinuxSystemCacheController`；否则不创建控制器，入口隐藏。tar.gz 便携版默认不可用。
+- 可用性探测只检查助手可执行、policy 文件存在、`/usr/bin/pkexec` 存在；不要用一次真实 `pkexec` 试运行来探测，否则会无谓弹出授权框。
+- 独立的 `LinuxSystemCacheController` 和 `LinuxSystemCachePage`，不复用 Windows 的逐文件 `SystemCacheController`。
+- 页面卡片只包含助手报告为可用的操作：
+  - APT 包缓存（Debian / Ubuntu）；
+  - DNF 包缓存（Fedora / RHEL）；
   - systemd journal（7 天）。
-- 默认全部不勾选，属于 Review 级；确认框必须明确：
+- 默认全部不勾选，属于 Review 级；确认框明确：
   - 永久删除、无隔离区、不可撤销；
-  - DNF 包需要重新下载；
+  - APT / DNF 包需要重新下载；
   - journal 日志会丢失。
-- 认证取消时不做任何更改；失败按操作逐项展示，不把整批结果伪装成成功。
-- 估算体积可以只读扫描 `/var/cache/dnf`、调用 `journalctl --disk-usage`；读不到时显示“需要管理员权限”，不要为了估算而先弹一次授权。
-- 清理完成后可重新探测；无法准确计算释放空间时，显示操作结果而不是猜测字节数。
+- 认证取消时不做任何更改，保留当前选择并提示；失败按操作逐项展示，不把整批结果伪装成成功。
+- 助手缺失、policy 缺失、`pkexec` 缺失或助手探测失败时，页面显示对应降级说明与“重新检测”，不展示可执行操作。
+- 清理完成后可重新检测；无法准确计算释放空间时，显示逐项操作结果而不是猜测字节数。
 
 ## 9. 第三阶段：RPM 打包
 
@@ -392,26 +411,25 @@ ln -sf %{_libdir}/broom/broom %{buildroot}%{_bindir}/broom
 
 ### 10.1 仓库内自动化
 
-阶段 1 已覆盖：
+阶段 1–2 已覆盖：
 
-- C++ CTest：参数解析、操作白名单、未知操作、非 root 拒绝、JSON 结构与转义、自检的 root 所有权 / 权限规则。断言 `--run` 在阶段 1 不会启动任何系统工具。
-- Dart 测试：可用性探测不启动进程、`--list` / `--self-test` 直接调用助手、pkexec 参数只含固定 operation id、认证取消与失败映射、部分失败与异常 JSON 的拒绝。
+- C++ CTest：参数解析、操作白名单、未知操作、非 root 拒绝、JSON 结构与转义、自检的 root 所有权 / 权限规则；锁被占用时逐项报告 `busy`；固定执行器用真实 `/usr/bin/true`、`/usr/bin/false` 与超时进程验证进程组终止和状态映射。
+- Dart 测试：可用性探测不启动进程、`--list` / `--self-test` 直接调用助手、pkexec 参数只含固定 operation id、APT → DNF → journal 顺序、认证取消与失败映射、部分失败与异常 JSON 的拒绝。
+- Dart UI fake 测试：只显示助手报告可用的操作、入口按能力位隐藏、默认不勾选、确认勾选门槛、认证取消无副作用、助手缺失降级。
 - policy：Linux CI 用 `xmllint` 校验 CMake 生成的 policy。
 
 后续阶段待补：
 
-- 超时、输出截断、忙锁与真实执行路径的单元测试。
-- 建立 argv 的路径 / 命令拼接测试（阶段 2 引入执行代码后）。
-- Dart UI fake 测试：入口隐藏、认证取消无副作用、部分失败、确认文案、tar.gz 构建不显示入口。
+- 输出截断与真实包管理器忙锁的 VM 验证。
 - RPM 构建冒烟：`rpm -qpl`、`rpm -qpR`、`rpm -V`。
 
-CI 不运行真实 `pkexec` / DNF / journald；这些留给 VM。
+CI 不运行真实 `pkexec` / APT / DNF / journald；这些留给 VM。
 
 ### 10.2 VM 手工验证（维护者执行）
 
-建议使用 Fedora Workstation（DNF5）或等效 RHEL 系虚拟机。
+建议使用 Fedora Workstation（DNF5）或等价 RHEL 系虚拟机；APT 路径另用 Debian / Ubuntu 虚拟机验证。
 
-阶段 1 尚无 RPM，也不执行真实清理：可先运行
+阶段 2 已实现真实执行，仓库测试不会运行系统工具。可先运行
 
 ```bash
 cmake -S linux/system_helper -B build/system-helper \
@@ -420,15 +438,15 @@ cmake --build build/system-helper
 sudo cmake --install build/system-helper
 ```
 
-再执行下面第 3、4、6 步。阶段 1 的 `--run` 在认证成功后返回 `not_implemented`（退出码 69），不会运行 DNF 或 journalctl；第 5、7、8 步留到阶段 2。
+再执行下面第 3、4、6 步。`--run` 在授权成功后执行白名单工具；未在 VM 中验证前不要对生产系统执行。
 
 1. `dnf install ./broom-<version>-1.<dist>.x86_64.rpm`。本地测试包不签名；若 VM 的仓库策略阻止未签名包，仅在隔离 VM 中使用 `rpm -i`，不要把这个流程带到正式分发。
 2. `rpm -qpl broom` 与 `rpm -qpR broom` 检查文件列表和依赖。
 3. `stat` 检查助手、policy 为 root 所有、不可被普通用户写。
 4. `pkaction --action-id com.broom.Broom.clean-system-cache --verbose` 应能看到 action。
-5. 启动应用，确认系统缓存入口出现；普通用户触发 DNF 与 journal 清理。
+5. 启动应用，确认系统缓存入口出现；普通用户触发 DNF 与 journal 清理（Debian / Ubuntu VM 用 APT 与 journal）。
 6. 分别测试：取消认证、错误密码、成功、无 Polkit agent、非活跃会话（如 SSH）。
-7. 成功清理 DNF 后确认只删除了包缓存，未卸载软件，仓库元数据策略符合预期。
+7. 成功清理 DNF / APT 后确认只删除了包缓存，未卸载软件，仓库元数据策略符合预期。
 8. 清理 journal 前后比较 `journalctl --disk-usage`，确认 7 天内/当前日志仍在。
 9. 在 SELinux enforcing 下检查 `ausearch -m avc` / `journalctl -t audit`，记录是否有 AVC；如有，先修复或补策略，不带着拒绝上线。
 10. 检查应用 bundle 通过 `/usr/bin/broom` 符号链接启动时，`data/`、`lib/` 与图标正常。
@@ -444,16 +462,17 @@ VM 验证中发现的问题应回写到本文件“已知风险 / 开放问题�
 - [x] 新增 `linux/system_helper/` 的 C++ 助手骨架、CMake 构建与 CTest。
 - [x] 新增 policy 模板、CMake 展开与 `/usr/libexec` / `/usr/share` 安装约定；CI 校验 XML。
 - [x] 新增 Dart `LinuxSystemMaintenance` 抽象、pkexec 客户端、严格 JSON 校验与 fake。
-- [x] 助手只支持 `--list` / `--self-test` / 参数校验，不执行真实清理；`--run` 返回 `not_implemented`。
+- [x] 助手支持 `--list` / `--self-test` / 参数校验；`--run` 在阶段 1 返回 `not_implemented`（该行为已被阶段 2 替换）。
 - [x] 仓库内验收：CTest、Dart 单元测试、`flutter analyze` 全部通过。
-- [ ] VM 验收：按第 10.2 节确认 policy 被识别，`pkexec` 能弹出认证框；阶段 1 不验证实际清理。
+- [ ] VM 验收：按第 10.2 节确认 policy 被识别，`pkexec` 能弹出认证框。
 
-### 阶段 2：DNF 与 journal 操作 + UI
+### 阶段 2：APT / DNF / journal 操作 + UI（已实现，VM 验证待执行）
 
-- 实现 `dnf-packages`、`journal-7d`；
-- 新增 Linux 系统缓存页、控制器、侧边栏能力位；
-- 实现确认、认证取消、部分失败、忙锁、超时；
-- 验收：fake 测试覆盖全部状态；真实操作在 VM 中按第 10.2 节验证。
+- [x] 实现 `apt-cache`、`dnf-packages`、`journal-7d` 与固定执行器（root 校验、串行锁、超时、输出上限、逐项状态）。
+- [x] 新增 Linux 系统缓存页、控制器、侧边栏 `showSystemCache` / `showRecycleBin` 能力位。
+- [x] 实现确认、认证取消、部分失败、忙锁、超时与助手缺失降级。
+- [x] 验收：fake / CTest 测试覆盖全部状态；`flutter analyze` 与仓库测试通过。
+- [ ] VM 验收：真实 APT / DNF / journal 清理按第 10.2 节执行。
 
 ### 阶段 3：RPM 打包（只出包）
 
@@ -465,7 +484,6 @@ VM 验证中发现的问题应回写到本文件“已知风险 / 开放问题�
 
 ### 后续（不在本次范围）
 
-- Debian/Ubuntu `deb` 与 APT 操作；
 - Flatpak / Snap / AppImage 分发与沙箱内宿主助手方案；
 - zypper / pacman 操作；
 - D-Bus system helper、进度信号、长任务；
@@ -475,7 +493,7 @@ VM 验证中发现的问题应回写到本文件“已知风险 / 开放问题�
 
 1. **许可证**：仓库没有 LICENSE，RPM `License` 字段暂为占位，正式发布前必须确认。
 2. **SELinux**：`pkexec` 启动自定义助手后的 domain 与写入 `/var/cache/dnf`、`/var/log/journal` 的权限需要 Fedora VM 实测；若有 AVC，可能需要 SELinux policy 或改用 systemd service。
-3. **DNF5 兼容性**：`dnf clean packages` 在不同版本上的行为和输出可能不同；以退出码为准，不解析本地化文本。
+3. **包管理器兼容性**：`dnf clean packages` 在 DNF4 / DNF5 上的行为和输出可能不同，`apt-get clean` 也可能受 APT 配置影响；实现只以退出码与固定参数为准，不解析本地化文本。VM 中需分别验证 APT 与 DNF 路径。
 4. **Polkit agent**：没有 authentication agent 的桌面/远程会话无法完成授权；系统缓存入口应优雅降级。
 5. **符号链接启动**：Flutter 通过 `/proc/self/exe` 定位 bundle；`/usr/bin/broom` 符号链接需在 VM 中验证，必要时改用 wrapper。
 6. **授权面**：`pkexec` 本身是 setuid 组件，历史上出现过漏洞；助手必须保持最小、无可配置路径、无 shell，并跟随发行版的 polkit 更新。
@@ -495,7 +513,10 @@ VM 验证中发现的问题应回写到本文件“已知风险 / 开放问题�
 | Linux 系统助手（C++ 骨架） | [linux/system_helper](../linux/system_helper) |
 | Polkit policy 模板 | [linux/system_helper/policy/com.broom.Broom.policy.in](../linux/system_helper/policy/com.broom.Broom.policy.in) |
 | 助手单元测试 | [linux/system_helper/tests/helper_tests.cc](../linux/system_helper/tests/helper_tests.cc) |
+| 固定操作执行器 | [linux/system_helper/src/runner.cc](../linux/system_helper/src/runner.cc) |
 | Linux 系统维护契约与 pkexec 客户端 | [lib/core/platform/linux_system_maintenance.dart](../lib/core/platform/linux_system_maintenance.dart) |
+| Linux 系统缓存控制器 | [lib/ui/linux_system_cache_controller.dart](../lib/ui/linux_system_cache_controller.dart) |
+| Linux 系统缓存页与确认框 | [lib/ui/linux_system_cache_page.dart](../lib/ui/linux_system_cache_page.dart)、[lib/ui/linux_system_cache_confirm_dialog.dart](../lib/ui/linux_system_cache_confirm_dialog.dart) |
 | Linux 系统维护测试 fake | [test/support/linux_system_maintenance_fakes.dart](../test/support/linux_system_maintenance_fakes.dart) |
 | Linux 用户规则 | [lib/core/rules/linux_rules.dart](../lib/core/rules/linux_rules.dart) |
 | Linux 规则与 Windows 差距 | [linux-windows-parity.md](linux-windows-parity.md) |

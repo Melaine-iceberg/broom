@@ -238,9 +238,10 @@
 - [x] 路径与权限：`PosixPathSemantics`、大小写敏感、`$VAR` / `${VAR}` / `~` 规则展开、`PathGuard.forPosix` 保护 `/usr`、`/etc`、`/boot` 等系统目录。
 - [x] 隔离区：`$XDG_DATA_HOME/Broom/quarantine`；跨卷通过 `st_dev` 探测，不可探测时保守复制。
 - [x] 原生桥接：`statvfs` 磁盘空间、`GtkFileChooserNative` 选择器、Gio 定位文件、`getpriority` / `setpriority` 扫描优先级、`chmod` / `utimensat` 元数据恢复。
-- [x] UI 平台裁剪：隐藏系统缓存、回收站、规则在线更新、软件更新、NTFS 索引与卸载残留。
+- [x] 系统级缓存：通过 Polkit / `pkexec` 调用固定功能助手，清理 APT / DNF 包缓存与 7 天前的 systemd journal；助手、policy 或 pkexec 缺失时不显示入口。
+- [x] UI 平台裁剪：回收站、规则在线更新、软件更新、NTFS 索引与卸载残留仍按平台隐藏；系统缓存入口改为按助手能力显示。
 - [x] 打包与 CI：tar.gz + `.desktop` + 图标，`tool/package_linux.sh`，Ubuntu 22.04 CI。
-- [ ] 后续：Flatpak / Snap / AppImage 分发、Wayland 下的定位行为验证、Snap 沙箱内的隔离区路径约定；系统级缓存的提权模型、保护根策略与 RPM 交付见 [linux-system-cache.md](linux-system-cache.md)。
+- [ ] 后续：Flatpak / Snap / AppImage 分发、Wayland 下的定位行为验证、Snap 沙箱内的隔离区路径约定；系统级缓存的 VM 安装、授权与真实清理验证见 [linux-system-cache.md](linux-system-cache.md)。
 
 ### 移动端
 

@@ -152,6 +152,7 @@ std::string UsageText() {
       "  --run        Validate and run operations as root.\n"
       "\n"
       "Operations:\n"
+      "  apt-cache     Clean downloaded APT package archives.\n"
       "  dnf-packages  Clean downloaded DNF package cache.\n"
       "  journal-7d    Vacuum systemd journal entries older than seven "
       "days.\n"

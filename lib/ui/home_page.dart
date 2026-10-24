@@ -24,6 +24,8 @@ import 'exclusions_page.dart';
 import 'format.dart';
 import 'glass_ui.dart';
 import 'large_files_page.dart';
+import 'linux_system_cache_controller.dart';
+import 'linux_system_cache_page.dart';
 import 'onboarding_dialog.dart';
 import 'quarantine_page.dart';
 import 'recycle_bin_page.dart';
@@ -42,6 +44,7 @@ class HomePage extends StatefulWidget {
     required this.shell,
     required this.analysisRunnerFactory,
     this.systemCacheController,
+    this.linuxSystemCacheController,
     this.quarantineRetention,
     this.analysisInitialDirectory,
     this.analysisExcludedPaths = const [],
@@ -50,12 +53,15 @@ class HomePage extends StatefulWidget {
     this.appUpdates,
     this.logger,
     this.showWindowsTools = true,
+    this.showSystemCache = true,
+    this.showRecycleBin = true,
   });
 
   final CleanController controller;
   final SettingsController settingsController;
   final SystemShell shell;
   final SystemCacheController? systemCacheController;
+  final LinuxSystemCacheController? linuxSystemCacheController;
   final QuarantineRetentionService? quarantineRetention;
   final AnalysisRunner Function() analysisRunnerFactory;
   final String? analysisInitialDirectory;
@@ -65,9 +71,16 @@ class HomePage extends StatefulWidget {
   final AppUpdateController? appUpdates;
   final AppLogger? logger;
 
-  /// Hides features that only exist on Windows (system cache, recycle bin,
-  /// app/rule updates and NTFS indexing).
+  /// Hides features that only exist on Windows (recycle bin, app/rule updates
+  /// and NTFS indexing).
   final bool showWindowsTools;
+
+  /// The system-cache entry is platform-independent: Windows uses the UAC
+  /// per-file tool and Linux uses the Polkit helper. Each controller is only
+  /// created when its prerequisites exist.
+  final bool showSystemCache;
+
+  final bool showRecycleBin;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -92,7 +105,9 @@ class _HomePageState extends State<HomePage> {
       _maybeScheduleOnboarding();
       _maybeScheduleUnfinishedPrompt();
     });
-    if (widget.startInSystemCache && widget.systemCacheController != null) {
+    if (widget.startInSystemCache &&
+        (widget.systemCacheController != null ||
+            widget.linuxSystemCacheController != null)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _openSystemCache();
@@ -248,7 +263,8 @@ class _HomePageState extends State<HomePage> {
                           quarantineCount: controller.pendingSessions.length,
                           showHistory:
                               controller.quarantine.historyStore != null,
-                          showWindowsTools: widget.showWindowsTools,
+                          showSystemCache: widget.showSystemCache,
+                          showRecycleBin: widget.showRecycleBin,
                           onSelected: _navigateTo,
                         ),
                       ),
@@ -313,10 +329,12 @@ class _HomePageState extends State<HomePage> {
         return _IdleView(
           controller: controller,
           onOpenQuarantine: _openQuarantine,
-          onOpenSystemCache: widget.systemCacheController == null
+          onOpenSystemCache:
+              widget.systemCacheController == null &&
+                  widget.linuxSystemCacheController == null
               ? null
               : _openSystemCache,
-          onOpenRecycleBin: widget.showWindowsTools ? _openRecycleBin : null,
+          onOpenRecycleBin: widget.showRecycleBin ? _openRecycleBin : null,
           onOpenDuplicateFinder: _openDuplicateFinder,
           onOpenLargeFiles: _openLargeFiles,
           onOpenExclusions: _openExclusions,
@@ -537,11 +555,15 @@ class _HomePageState extends State<HomePage> {
       case AppSection.clean:
         return null;
       case AppSection.systemCache:
+        final linuxController = widget.linuxSystemCacheController;
+        if (linuxController != null) {
+          return LinuxSystemCachePage(controller: linuxController);
+        }
         final cacheController = widget.systemCacheController;
         if (cacheController == null) return null;
         return SystemCachePage(controller: cacheController);
       case AppSection.recycleBin:
-        if (!widget.showWindowsTools) return null;
+        if (!widget.showRecycleBin) return null;
         return RecycleBinPage(shell: widget.shell);
       case AppSection.duplicates:
         return DuplicateFinderPage(

@@ -15,6 +15,10 @@ class FakeLinuxSystemMaintenance implements LinuxSystemMaintenance {
         helperVersion: 'test',
         operations: [
           LinuxSystemOperationCapability(
+            operation: LinuxSystemOperation.aptCache,
+            available: true,
+          ),
+          LinuxSystemOperationCapability(
             operation: LinuxSystemOperation.dnfPackages,
             available: true,
           ),

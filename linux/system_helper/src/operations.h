@@ -9,12 +9,18 @@
 
 namespace broom {
 
-// A fixed operation. Paths and arguments are compile-time constants: no value
-// from the command line or the UI may be substituted here.
+// A fixed operation. Paths, arguments and additional environment entries are
+// compile-time constants: no value from the command line or the UI may be
+// substituted here.
 struct OperationSpec {
   const char* id;
   const char* binary_path;
   std::vector<const char*> arguments;
+  // Extra environment entries appended to the minimal helper environment.
+  std::vector<const char*> environment;
+  // Used only to measure freed space around the operation. Never passed to the
+  // tool and never writable by the caller.
+  const char* storage_path;
   unsigned int timeout_seconds;
 };
 

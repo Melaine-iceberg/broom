@@ -7,6 +7,7 @@ import 'dart:io';
 /// The wire ids are the only values that may cross the pkexec boundary; paths,
 /// commands and free-form arguments are deliberately unrepresentable.
 enum LinuxSystemOperation {
+  aptCache('apt-cache'),
   dnfPackages('dnf-packages'),
   journal7d('journal-7d');
 
@@ -206,9 +207,10 @@ class PkexecLinuxSystemMaintenance implements LinuxSystemMaintenance {
 
   static const Duration _probeTimeout = Duration(seconds: 15);
   static const Duration _selfTestTimeout = Duration(seconds: 30);
-  // The helper owns the per-operation timeouts; this is only a final guard so
-  // a stuck pkexec cannot hang the controller forever.
-  static const Duration _cleanTimeout = Duration(minutes: 15);
+  // The helper owns the per-operation timeouts (APT 10m + DNF 10m + journal
+  // 2m). This final guard must stay above their sum so pkexec is not killed
+  // while a legitimate helper run is still working.
+  static const Duration _cleanTimeout = Duration(minutes: 25);
 
   final String helperPath;
   final String policyPath;

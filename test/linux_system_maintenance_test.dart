@@ -61,6 +61,7 @@ String _capabilitiesJson({
     'operations':
         operations ??
         [
+          _capability('apt-cache'),
           _capability('dnf-packages'),
           _capability('journal-7d', timeoutSeconds: 120),
         ],
@@ -161,8 +162,13 @@ void main() {
 
   group('models', () {
     test('maps stable wire ids to operations', () {
+      expect(LinuxSystemOperation.aptCache.id, 'apt-cache');
       expect(LinuxSystemOperation.dnfPackages.id, 'dnf-packages');
       expect(LinuxSystemOperation.journal7d.id, 'journal-7d');
+      expect(
+        LinuxSystemOperation.fromId('apt-cache'),
+        LinuxSystemOperation.aptCache,
+      );
       expect(
         LinuxSystemOperation.fromId('dnf-packages'),
         LinuxSystemOperation.dnfPackages,
@@ -171,7 +177,7 @@ void main() {
         LinuxSystemOperation.fromId('journal-7d'),
         LinuxSystemOperation.journal7d,
       );
-      expect(LinuxSystemOperation.fromId('apt-cache'), isNull);
+      expect(LinuxSystemOperation.fromId('apt-get'), isNull);
       expect(LinuxSystemOperation.fromId(''), isNull);
     });
 
@@ -271,6 +277,7 @@ void main() {
       final capabilities = availability.capabilities!;
       expect(capabilities.helperVersion, '0.1.0');
       expect(capabilities.operations.map((entry) => entry.operation), [
+        LinuxSystemOperation.aptCache,
         LinuxSystemOperation.dnfPackages,
         LinuxSystemOperation.journal7d,
       ]);
@@ -287,6 +294,7 @@ void main() {
         (executable, arguments) async => _result(
           _capabilitiesJson(
             operations: [
+              _capability('apt-cache'),
               _capability(
                 'dnf-packages',
                 available: false,
@@ -301,10 +309,23 @@ void main() {
       final availability = await clientFor(runner).probe();
 
       expect(availability.isAvailable, isTrue);
-      final operations = availability.capabilities!.operations;
-      expect(operations.first.available, isFalse);
-      expect(operations.first.reason, 'tool_missing');
-      expect(operations.last.available, isTrue);
+      final capabilities = availability.capabilities!;
+      expect(
+        capabilities.capabilityFor(LinuxSystemOperation.dnfPackages)!.available,
+        isFalse,
+      );
+      expect(
+        capabilities.capabilityFor(LinuxSystemOperation.dnfPackages)!.reason,
+        'tool_missing',
+      );
+      expect(
+        capabilities.capabilityFor(LinuxSystemOperation.aptCache)!.available,
+        isTrue,
+      );
+      expect(
+        capabilities.capabilityFor(LinuxSystemOperation.journal7d)!.available,
+        isTrue,
+      );
     });
 
     test('ignores unknown operations but requires the known ones', () async {
@@ -312,9 +333,10 @@ void main() {
         (executable, arguments) async => _result(
           _capabilitiesJson(
             operations: [
+              _capability('apt-cache'),
               _capability('dnf-packages'),
               _capability(
-                'apt-cache',
+                'pacman-cache',
                 available: false,
                 reason: 'tool_missing',
               ),
@@ -327,7 +349,7 @@ void main() {
       final availability = await clientFor(runner).probe();
 
       expect(availability.isAvailable, isTrue);
-      expect(availability.capabilities!.operations, hasLength(2));
+      expect(availability.capabilities!.operations, hasLength(3));
       expect(
         availability.capabilities!.capabilityFor(
           LinuxSystemOperation.dnfPackages,
@@ -339,7 +361,9 @@ void main() {
     test('fails when a known operation is missing from the report', () async {
       final runner = _FakeRunner(
         (executable, arguments) async => _result(
-          _capabilitiesJson(operations: [_capability('dnf-packages')]),
+          _capabilitiesJson(
+            operations: [_capability('apt-cache'), _capability('dnf-packages')],
+          ),
         ),
       );
 
@@ -541,6 +565,34 @@ void main() {
       expect(report.operations.first.freedBytes, 1024);
     });
 
+    test(
+      'sends every selection in canonical apt, dnf, journal order',
+      () async {
+        final runner = _FakeRunner(
+          (executable, arguments) async => _result(
+            _reportJson([
+              _operationResult('apt-cache', 'ok'),
+              _operationResult('dnf-packages', 'ok'),
+              _operationResult('journal-7d', 'ok'),
+            ]),
+          ),
+        );
+
+        await clientFor(runner).clean({
+          LinuxSystemOperation.journal7d,
+          LinuxSystemOperation.aptCache,
+          LinuxSystemOperation.dnfPackages,
+        });
+
+        expect(runner.calls.single.arguments, [
+          helperPath,
+          '--run',
+          'apt-cache,dnf-packages,journal-7d',
+          '--json',
+        ]);
+      },
+    );
+
     test('sends only the selected operation', () async {
       final runner = _FakeRunner(
         (executable, arguments) async =>
@@ -734,7 +786,7 @@ void main() {
         (executable, arguments) async => _result(
           _reportJson([
             _operationResult('dnf-packages', 'ok'),
-            _operationResult('apt-cache', 'ok'),
+            _operationResult('pacman-cache', 'ok'),
           ]),
         ),
       );

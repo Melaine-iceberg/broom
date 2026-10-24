@@ -12,7 +12,7 @@
 | 隔离区撤销、永久释放、清理历史、保留策略 | 支持 | 支持 | 已对齐 |
 | 设置、配置导入导出、排除列表、国际化 | 支持 | 支持 | 已对齐 |
 | 重复文件、大文件分析 | 支持 | 支持 | 已对齐 |
-| 系统缓存（Windows Update / 传递优化 / Windows.old） | 支持，需 UAC | 无入口 | 功能缺失 |
+| 系统缓存（Windows Update / 传递优化 / Windows.old） | 支持，需 UAC | 支持 APT / DNF 包缓存与 systemd journal，需 Polkit 助手 | 实现已接入，VM 验证待完成 |
 | 回收站查看与清空 | 支持 | 无入口 | 功能缺失 |
 | 卸载残留检测 | 支持，依赖注册表 | 无入口 | 功能缺失 |
 | 规则在线更新、签名校验、回滚 | 支持 | 无入口 | 功能缺失 |
@@ -26,11 +26,11 @@
 | 安装器与自动更新 | MSIX + App Installer | tar.gz | 分发差距 |
 | 真实窗口集成测试 | 支持，手动触发 | 无 | 验证差距 |
 
-## 2. 完全缺失的功能入口
+## 2. 仍缺失或需要降级的入口
 
-Linux 上这些入口不仅没有控制器，侧边栏和设置页也会直接隐藏或跳过渲染。
+Linux 上这些入口没有控制器，侧边栏和设置页会直接隐藏或跳过渲染。
 
-### 2.1 系统缓存
+### 2.1 系统缓存（Linux 已通过独立助手实现）
 
 Windows 侧由 `SystemCacheController` 承担，依赖 UAC 提权、Windows Update `SoftwareDistribution\Download`、传递优化 `DeliveryOptimization\Cache` 与 `Windows.old`：
 
@@ -38,7 +38,7 @@ Windows 侧由 `SystemCacheController` 承担，依赖 UAC 提权、Windows Upda
 - 平台实现只支持 Windows：[lib/core/platform/system_cache_platform.dart](../lib/core/platform/system_cache_platform.dart#L82-L86)
 - 权限与目录定位只支持 Windows：[lib/core/platform/system_access.dart](../lib/core/platform/system_access.dart#L122-L125)
 
-Linux 没有管理员系统清理模式，且 `/var`、`/snap`、`/nix` 等目录被列为保护根（[cleaner_platform.dart](../lib/core/platform/cleaner_platform.dart#L176-L193)）。因此 apt 缓存、journal 日志、Snap 旧版本等 Linux 侧系统缓存也没有对应入口。
+Linux 不复用逐文件控制器，而是通过独立的 Polkit 助手执行固定操作：APT 包缓存、DNF 包缓存与 7 天前的 systemd journal。入口只在助手、policy 与 `pkexec` 均可用时显示；`/var`、`/snap`、`/nix` 等目录仍是保护根，路径不会从 UI 穿过提权边界。实现与 VM 验证清单见 [linux-system-cache.md](linux-system-cache.md)。
 
 ### 2.2 回收站
 
@@ -230,7 +230,7 @@ Linux：
 
 1. **规则目录扩容与在线更新**：第一批用户级规则已补齐（24 → 39，含 12 条 Review）；下一步补系统级目标，并复用现有签名目录与回滚机制，让 Linux 也能更新规则。
 2. **文件占用预检与原生目录枚举**：前者提升预览可预期性，后者降低大目录扫描的系统调用次数。
-3. **回收站与系统级缓存**：需要先确定 Linux 的提权模型、保护根调整与 freedesktop Trash 语义，再接入 UI。系统缓存的 Polkit / `pkexec` 助手方案与 RPM 交付见 [linux-system-cache.md](linux-system-cache.md)。
+3. **回收站与系统缓存的实机验证**：系统缓存已接入 Polkit / `pkexec` 助手，剩余工作是 VM 中的安装、授权与真实清理验证；回收站仍需确定 freedesktop Trash 语义后再接入 UI。见 [linux-system-cache.md](linux-system-cache.md)。
 4. **安装包、自动更新与 Linux 集成测试**：决定 Flatpak / Snap / AppImage 路线，并补真实窗口冒烟与帧率测试。
 
 ## 8. 代码索引

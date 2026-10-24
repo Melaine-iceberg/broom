@@ -5,7 +5,7 @@ import 'support/linux_system_maintenance_fakes.dart';
 
 void main() {
   group('FakeLinuxSystemMaintenance', () {
-    test('defaults to a ready helper with both operations available', () async {
+    test('defaults to a ready helper with all operations available', () async {
       final fake = FakeLinuxSystemMaintenance();
 
       expect(fake.probeCalls, 0);
@@ -18,7 +18,11 @@ void main() {
 
       expect(availability.isAvailable, isTrue);
       expect(capabilities.helperVersion, 'test');
-      expect(capabilities.operations, hasLength(2));
+      expect(capabilities.operations, hasLength(3));
+      expect(
+        capabilities.capabilityFor(LinuxSystemOperation.aptCache)!.available,
+        isTrue,
+      );
       expect(
         capabilities.capabilityFor(LinuxSystemOperation.dnfPackages)!.available,
         isTrue,

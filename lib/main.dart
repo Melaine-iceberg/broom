@@ -17,6 +17,7 @@ import 'core/platform/app_version.dart';
 import 'core/platform/cleaner_platform.dart';
 import 'core/platform/file_lock_probe.dart';
 import 'core/platform/installed_apps.dart';
+import 'core/platform/linux_system_maintenance.dart';
 import 'core/platform/path_semantics.dart';
 import 'core/platform/system_access.dart';
 import 'core/platform/system_cache_platform.dart';
@@ -33,6 +34,7 @@ import 'core/shell/system_shell.dart';
 import 'platform/window_chrome.dart';
 import 'ui/app_update_controller.dart';
 import 'ui/clean_controller.dart';
+import 'ui/linux_system_cache_controller.dart';
 import 'ui/rule_update_controller.dart';
 import 'ui/settings_controller.dart';
 import 'ui/system_cache_controller.dart';
@@ -94,9 +96,7 @@ void main(List<String> args) {
         return null;
       }
     },
-    deviceIdProbe: Platform.isLinux
-        ? PosixFileMetadataAccess.deviceIds
-        : null,
+    deviceIdProbe: Platform.isLinux ? PosixFileMetadataAccess.deviceIds : null,
     historyStore: CleanHistoryStore(
       filePath: CleanHistoryStore.defaultFilePath(
         quarantineRoot,
@@ -211,20 +211,32 @@ void main(List<String> args) {
     );
   }
 
+  // The Linux entry exists only when the helper, Polkit policy and pkexec are
+  // all present. This check is synchronous and read-only; it never prompts.
+  LinuxSystemCacheController? linuxSystemCacheController;
+  if (Platform.isLinux) {
+    final maintenance = createLinuxSystemMaintenance();
+    if (maintenance != null) {
+      linuxSystemCacheController = LinuxSystemCacheController(
+        maintenance: maintenance,
+      );
+    }
+  }
+
   _runBroom(
     BroomApp(
       controller: controller,
       settingsController: settings,
       systemShell: systemShell,
       systemCacheController: systemCacheController,
+      linuxSystemCacheController: linuxSystemCacheController,
       quarantineRetention: retention,
       analysisInitialDirectory: _downloadsDirectory(
         platform.environment,
         semantics,
       ),
       analysisExcludedPaths: [quarantineRoot],
-      startInSystemCache:
-          Platform.isWindows && args.contains('--system-cache'),
+      startInSystemCache: Platform.isWindows && args.contains('--system-cache'),
       ruleUpdates: ruleUpdates,
       appUpdates: appUpdates,
       logger: logger,

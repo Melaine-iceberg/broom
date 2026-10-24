@@ -32,8 +32,11 @@ int main(int argc, char** argv) {
 
   const std::unique_ptr<broom::Environment> environment =
       broom::CreatePosixEnvironment();
+  const std::unique_ptr<broom::OperationRunner> runner =
+      broom::CreateSystemOperationRunner();
   broom::HelperContext context;
   context.environment = environment.get();
+  context.runner = runner.get();
   context.helper_install_path = BROOM_HELPER_INSTALL_PATH;
   context.policy_path = BROOM_POLICY_INSTALL_PATH;
   context.pkexec_path = BROOM_PKEXEC_PATH;

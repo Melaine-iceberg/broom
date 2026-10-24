@@ -23,7 +23,8 @@ class AppSidebar extends StatelessWidget {
     required this.onSelected,
     this.quarantineCount = 0,
     this.showHistory = true,
-    this.showWindowsTools = true,
+    this.showSystemCache = true,
+    this.showRecycleBin = true,
   });
 
   final AppSection section;
@@ -31,7 +32,8 @@ class AppSidebar extends StatelessWidget {
   final ValueChanged<AppSection> onSelected;
   final int quarantineCount;
   final bool showHistory;
-  final bool showWindowsTools;
+  final bool showSystemCache;
+  final bool showRecycleBin;
 
   static const double expandedWidth = 224;
   static const double compactWidth = 64;
@@ -74,7 +76,7 @@ class AppSidebar extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
               child: Text(context.t('工具'), style: labelStyle),
             ),
-          if (showWindowsTools) ...[
+          if (showSystemCache)
             _NavItem(
               key: const ValueKey('sidebar-system-cache'),
               icon: LucideIcons.database,
@@ -83,6 +85,7 @@ class AppSidebar extends StatelessWidget {
               selected: section == AppSection.systemCache,
               onTap: () => onSelected(AppSection.systemCache),
             ),
+          if (showRecycleBin)
             _NavItem(
               key: const ValueKey('sidebar-recycle-bin'),
               icon: LucideIcons.trash2,
@@ -91,7 +94,6 @@ class AppSidebar extends StatelessWidget {
               selected: section == AppSection.recycleBin,
               onTap: () => onSelected(AppSection.recycleBin),
             ),
-          ],
           _NavItem(
             key: const ValueKey('sidebar-duplicates'),
             icon: LucideIcons.copy,

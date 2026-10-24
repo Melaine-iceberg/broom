@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <map>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -72,6 +73,7 @@ constexpr char kHelperPath[] = "/usr/libexec/broom/broom-system-helper";
 constexpr char kPolicyPath[] =
     "/usr/share/polkit-1/actions/com.broom.Broom.policy";
 constexpr char kPkexecPath[] = "/usr/bin/pkexec";
+constexpr char kAptGetPath[] = "/usr/bin/apt-get";
 constexpr char kDnfPath[] = "/usr/bin/dnf";
 constexpr char kJournalctlPath[] = "/usr/bin/journalctl";
 
@@ -85,6 +87,38 @@ FileFacts SecureExecutable() {
   return facts;
 }
 
+class FakeRunner final : public broom::OperationRunner {
+ public:
+  bool acquire_ok = true;
+  std::string acquire_reason = "Another system cleanup is already running.";
+  int acquire_calls = 0;
+  int release_calls = 0;
+  std::vector<std::string> ran;
+  std::map<std::string, broom::OperationRunResult> results;
+
+  bool TryAcquire(std::string* reason) override {
+    ++acquire_calls;
+    if (!acquire_ok) {
+      if (reason != nullptr) *reason = acquire_reason;
+      return false;
+    }
+    return true;
+  }
+
+  void Release() override { ++release_calls; }
+
+  broom::OperationRunResult Run(const broom::OperationSpec& operation) override {
+    ran.emplace_back(operation.id);
+    const auto entry = results.find(operation.id);
+    if (entry != results.end()) return entry->second;
+    broom::OperationRunResult result;
+    result.status = broom::OperationStatus::kOk;
+    result.exit_code = 0;
+    result.message = "faked";
+    return result;
+  }
+};
+
 FileFacts SecurePolicyFile() {
   FileFacts facts;
   facts.exists = true;
@@ -97,10 +131,12 @@ FileFacts SecurePolicyFile() {
 
 struct Fixture {
   FakeEnvironment environment;
+  FakeRunner runner;
   broom::HelperContext context;
 
   Fixture() {
     context.environment = &environment;
+    context.runner = &runner;
     context.helper_install_path = kHelperPath;
     context.policy_path = kPolicyPath;
     context.pkexec_path = kPkexecPath;
@@ -108,6 +144,7 @@ struct Fixture {
   }
 
   void InstallTools() {
+    environment.files[kAptGetPath] = SecureExecutable();
     environment.files[kDnfPath] = SecureExecutable();
     environment.files[kJournalctlPath] = SecureExecutable();
   }
@@ -209,6 +246,8 @@ void TestOperationSelection() {
     Expect(!operation.arguments.empty(), "operations have fixed arguments");
     Expect(operation.timeout_seconds > 0, "operations have a timeout");
   }
+  Expect(broom::FindOperation("apt-cache") != nullptr,
+         "apt-cache is known");
   Expect(broom::FindOperation("dnf-packages") != nullptr,
          "dnf-packages is known");
   Expect(broom::FindOperation("journal-7d") != nullptr,
@@ -219,12 +258,15 @@ void TestOperationSelection() {
 
   const std::vector<const broom::OperationSpec*> selected =
       broom::SelectOperations(
-          {"journal-7d", "dnf-packages", "journal-7d", "unknown"});
-  Expect(selected.size() == 2, "selection deduplicates and drops unknown ids");
-  Expect(std::string(selected[0]->id) == "dnf-packages",
-         "dnf runs first regardless of input order");
-  Expect(std::string(selected[1]->id) == "journal-7d",
-         "journal runs second");
+          {"journal-7d", "dnf-packages", "apt-cache", "journal-7d",
+           "unknown"});
+  Expect(selected.size() == 3, "selection deduplicates and drops unknown ids");
+  Expect(std::string(selected[0]->id) == "apt-cache",
+         "apt runs first regardless of input order");
+  Expect(std::string(selected[1]->id) == "dnf-packages",
+         "dnf runs second");
+  Expect(std::string(selected[2]->id) == "journal-7d",
+         "journal runs third");
 }
 
 void TestList() {
@@ -237,6 +279,10 @@ void TestList() {
     ExpectContains(outcome.out, "\"schemaVersion\":1", "list schema");
     ExpectContains(outcome.out, "\"helperVersion\":\"test\"",
                    "list helper version");
+    ExpectContains(outcome.out,
+                   "\"id\":\"apt-cache\",\"available\":true", "apt listed");
+    ExpectContains(outcome.out, "\"reason\":null,\"timeoutSeconds\":600",
+                   "apt timeout");
     ExpectContains(outcome.out,
                    "\"id\":\"dnf-packages\",\"available\":true", "dnf listed");
     ExpectContains(outcome.out, "\"reason\":null,\"timeoutSeconds\":600",
@@ -303,10 +349,79 @@ void TestRunBoundary() {
   {
     Fixture fixture;
     fixture.environment.uid = 0;
-    const RunOutcome outcome = Run(&fixture, {"--run", "dnf-packages"});
-    Expect(outcome.exit_code == 69, "root run stops at not_implemented");
-    ExpectContains(outcome.out, "\"code\":\"not_implemented\"",
-                   "not_implemented code");
+    fixture.runner.acquire_ok = false;
+    const RunOutcome outcome =
+        Run(&fixture, {"--run", "dnf-packages,journal-7d", "--json"});
+    Expect(outcome.exit_code == 0, "a held lock still returns a report");
+    ExpectContains(outcome.out, "\"status\":\"busy\"", "lock reports busy");
+    ExpectContains(outcome.out,
+                   "\"message\":\"Another system cleanup is already running.\"",
+                   "lock reason is reported");
+    Expect(fixture.runner.ran.empty(), "no tool runs while the lock is held");
+  }
+  {
+    Fixture fixture;
+    fixture.environment.uid = 0;
+    fixture.InstallTools();
+    broom::OperationRunResult dnf;
+    dnf.status = broom::OperationStatus::kOk;
+    dnf.exit_code = 0;
+    dnf.freed_bytes = 4096;
+    dnf.message = "packages removed";
+    fixture.runner.results["dnf-packages"] = dnf;
+    const RunOutcome outcome =
+        Run(&fixture, {"--run", "journal-7d,dnf-packages", "--json"});
+    Expect(outcome.exit_code == 0, "root run reports success");
+    ExpectContains(outcome.out,
+                   "\"id\":\"dnf-packages\",\"status\":\"ok\"",
+                   "dnf status is ok");
+    ExpectContains(outcome.out, "\"freedBytes\":4096",
+                   "freed bytes are reported");
+    ExpectContains(outcome.out, "\"id\":\"journal-7d\",\"status\":\"ok\"",
+                   "journal status is ok");
+    Expect(fixture.runner.acquire_calls == 1, "the lock is acquired once");
+    Expect(fixture.runner.release_calls == 1, "the lock is released");
+    Expect(fixture.runner.ran.size() == 2, "both selected tools run");
+    Expect(fixture.runner.ran[0] == "dnf-packages",
+           "canonical order starts with dnf");
+    Expect(fixture.runner.ran[1] == "journal-7d",
+           "canonical order ends with journal");
+  }
+  {
+    Fixture fixture;
+    fixture.environment.uid = 0;
+    fixture.InstallTools();
+    fixture.environment.files.erase(kAptGetPath);
+    const RunOutcome outcome = Run(&fixture, {"--run", "apt-cache"});
+    Expect(outcome.exit_code == 0, "missing tools still produce a report");
+    ExpectContains(outcome.out,
+                   "\"id\":\"apt-cache\",\"status\":\"unavailable\"",
+                   "apt is unavailable");
+    ExpectContains(outcome.out, "\"exitCode\":null",
+                   "unavailable operations have no exit code");
+    Expect(fixture.runner.ran.empty(), "missing tools are never started");
+  }
+  {
+    Fixture fixture;
+    fixture.environment.uid = 0;
+    fixture.InstallTools();
+    broom::OperationRunResult failed;
+    failed.status = broom::OperationStatus::kFailed;
+    failed.exit_code = 100;
+    failed.message = "lock is busy";
+    fixture.runner.results["dnf-packages"] = failed;
+    const RunOutcome outcome =
+        Run(&fixture, {"--run", "dnf-packages,journal-7d", "--json"});
+    Expect(outcome.exit_code == 0, "partial failures still return a report");
+    ExpectContains(outcome.out,
+                   "\"id\":\"dnf-packages\",\"status\":\"failed\"",
+                   "failed dnf is reported");
+    ExpectContains(outcome.out, "\"exitCode\":100", "failure exit code");
+    ExpectContains(outcome.out, "\"message\":\"lock is busy\"",
+                   "failure message is escaped");
+    ExpectContains(outcome.out,
+                   "\"id\":\"journal-7d\",\"status\":\"ok\"",
+                   "later operations still run");
   }
   {
     Fixture fixture;
@@ -349,6 +464,9 @@ void TestSelfTest() {
                    "pkexec passes");
     ExpectContains(outcome.out, "\"id\":\"polkit.policy\",\"status\":\"pass\"",
                    "policy passes");
+    ExpectContains(outcome.out,
+                   "\"id\":\"operation.apt-cache\",\"status\":\"pass\"",
+                   "apt passes");
     ExpectContains(outcome.out,
                    "\"id\":\"operation.dnf-packages\",\"status\":\"pass\"",
                    "dnf passes");
@@ -450,6 +568,34 @@ void TestSelfTest() {
   }
 }
 
+void TestSystemRunner() {
+  const std::unique_ptr<broom::OperationRunner> runner =
+      broom::CreateSystemOperationRunner();
+  {
+    const broom::OperationSpec operation{"test-ok", "/usr/bin/true", {}, {},
+                                         "/tmp", 5};
+    const broom::OperationRunResult result = runner->Run(operation);
+    Expect(result.status == broom::OperationStatus::kOk, "true succeeds");
+    Expect(result.exit_code == 0, "true exit code");
+  }
+  {
+    const broom::OperationSpec operation{"test-fail", "/usr/bin/false", {}, {},
+                                         "/tmp", 5};
+    const broom::OperationRunResult result = runner->Run(operation);
+    Expect(result.status == broom::OperationStatus::kFailed, "false fails");
+    Expect(result.exit_code == 1, "false exit code");
+    ExpectContains(result.message, "exit code 1", "failure message");
+  }
+  {
+    const broom::OperationSpec operation{
+        "test-timeout", "/usr/bin/sleep", {"5"}, {}, "/tmp", 1};
+    const broom::OperationRunResult result = runner->Run(operation);
+    Expect(result.status == broom::OperationStatus::kFailed,
+           "timeout is a failure");
+    ExpectContains(result.message, "timed out", "timeout message");
+  }
+}
+
 void TestArgumentErrorsAndHelp() {
   {
     Fixture fixture;
@@ -467,6 +613,7 @@ void TestArgumentErrorsAndHelp() {
     ExpectContains(outcome.out, "Usage:", "help has usage");
     ExpectContains(outcome.out, "--self-test", "help lists self-test");
     ExpectContains(outcome.out, "--run", "help lists run");
+    ExpectContains(outcome.out, "apt-cache", "help lists apt-cache");
     Expect(outcome.out.find("\"schemaVersion\"") == std::string::npos,
            "help is not JSON");
   }
@@ -494,6 +641,7 @@ int main() {
   TestList();
   TestRunBoundary();
   TestSelfTest();
+  TestSystemRunner();
   TestArgumentErrorsAndHelp();
   TestJsonQuoting();
 

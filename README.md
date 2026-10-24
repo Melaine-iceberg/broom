@@ -339,7 +339,8 @@ bash tool/package_linux.sh
 # 产物：dist/broom-<版本>-linux-x64.tar.gz 与同名 .sha256
 ```
 
-- **核心可用范围**：规则扫描、预览、隔离区撤销 / 永久释放、设置与配置导入导出、重复文件与大文件分析可用；内置 39 条 Linux 规则（27 条 Safe、12 条 Review），覆盖日志、浏览器脚本、应用与常用开发工具缓存；系统级缓存、回收站、规则在线更新、软件更新与卸载残留仅在 Windows 显示。
+- **核心可用范围**：规则扫描、预览、隔离区撤销 / 永久释放、设置与配置导入导出、重复文件与大文件分析可用；内置 39 条 Linux 规则（27 条 Safe、12 条 Review），覆盖日志、浏览器脚本、应用与常用开发工具缓存；回收站、规则在线更新、软件更新与卸载残留仅在 Windows 显示。
+- **系统级缓存**：安装 `broom-system-helper` 与 Polkit policy 的 RPM 后，系统缓存入口会出现，可在一次 `pkexec` 授权后清理 APT / DNF 包缓存与 7 天前的 systemd journal。助手、policy 或 `pkexec` 缺失时入口自动隐藏；操作不传路径、不进入隔离区、不可撤销。设计与 VM 验证清单见 [docs/linux-system-cache.md](docs/linux-system-cache.md)。
 - **数据位置**：隔离区在 `$XDG_DATA_HOME/Broom/quarantine`（默认 `~/.local/share/Broom/quarantine`），配置、历史与日志同样位于该目录；规则使用 `$XDG_CACHE_HOME`、`$XDG_CONFIG_HOME`、`$XDG_DATA_HOME` 与 `$HOME`。
 - **原生能力**：文件选择器、磁盘空间（`statvfs`）、定位文件与进程优先级（`getpriority` / `setpriority`）、POSIX 权限与时间戳恢复（`chmod` / `utimensat`）都由 `linux/runner/native_channels.cc` 提供，不依赖 zenity 或外部命令。
 - **跨卷判断**：隔离区通过 `st_dev` 批量探测判断是否跨卷；无法探测时保守按跨卷复制处理，避免空间预检低估。
@@ -366,7 +367,7 @@ bash tool/package_linux.sh
 
 ## 已知限制
 
-- Windows 与 Linux 均支持规则扫描、隔离区撤销与释放、设置和只读分析；系统级缓存、回收站、规则在线更新、软件更新、NTFS 索引与卸载残留为 Windows 专属，Linux 界面会隐藏这些入口。普通扫描同时包含 Safe 与 Review 规则；Review 默认不勾选并需要额外确认，但仍通过隔离区清理。
+- Windows 与 Linux 均支持规则扫描、隔离区撤销与释放、设置和只读分析；Linux 额外支持由 Polkit 助手提供的 APT / DNF 包缓存与 systemd journal 清理。回收站、规则在线更新、软件更新、NTFS 索引与卸载残留为 Windows 专属，Linux 界面会隐藏这些入口。普通扫描同时包含 Safe 与 Review 规则；Review 默认不勾选并需要额外确认，但仍通过隔离区清理。
 - 系统级工具覆盖 Windows Update 的 `SoftwareDistribution\Download`、传递优化的 `DeliveryOptimization\Cache` 与系统盘 `Windows.old`，均为永久删除、无撤销；更新缓存清理期间会临时停止相关服务，服务恢复失败需手动启动或重启系统。
 - Windows.old 可能包含旧用户配置文件副本与旧程序；即使以管理员运行，部分文件仍可能因 TrustedInstaller 权限或占用而删除失败，因此可能只清理已找到的部分。
 - Docker 规则只处理 Windows 侧日志，WSL 规则只处理 `%LOCALAPPDATA%\Temp\wsl-crashes` 中超过 7 天的崩溃转储；镜像、容器、构建缓存、Linux 发行版文件系统与 `ext4.vhdx` 均由各自工具管理，Broom 不会直接删除或压缩虚拟磁盘。
