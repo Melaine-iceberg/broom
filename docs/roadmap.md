@@ -240,7 +240,7 @@
 - [x] 原生桥接：`statvfs` 磁盘空间、`GtkFileChooserNative` 选择器、Gio 定位文件、`getpriority` / `setpriority` 扫描优先级、`chmod` / `utimensat` 元数据恢复。
 - [x] 系统级缓存：通过 Polkit / `pkexec` 调用固定功能助手，清理 APT / DNF 包缓存与 7 天前的 systemd journal；助手、policy 或 pkexec 缺失时不显示入口。
 - [x] UI 平台裁剪：回收站、规则在线更新、软件更新、NTFS 索引与卸载残留仍按平台隐藏；系统缓存入口改为按助手能力显示。
-- [x] 打包与 CI：tar.gz + `.desktop` + 图标，`tool/package_linux.sh`，Ubuntu 22.04 CI。
+- [x] 打包与 CI：tar.gz + `.desktop` + 图标，Fedora / RHEL 系 x86_64 的 RPM（含系统助手与 Polkit policy），`tool/package_linux.sh`、`tool/package_rpm.sh`，Ubuntu 22.04 CI。
 - [ ] 后续：Flatpak / Snap / AppImage 分发、Wayland 下的定位行为验证、Snap 沙箱内的隔离区路径约定；系统级缓存的 VM 安装、授权与真实清理验证见 [linux-system-cache.md](linux-system-cache.md)。
 
 ### 移动端

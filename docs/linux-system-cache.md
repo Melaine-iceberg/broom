@@ -1,6 +1,6 @@
 # Linux 系统级缓存清理：提权模型、保护根与 RPM 交付
 
-> 状态：阶段 1–2 已实现（仓库侧测试通过）；pkexec 授权、安装布局与真实清理的 VM 验证待维护者执行
+> 状态：阶段 1–3 已实现（仓库侧测试与 Fedora WSL RPM 构建通过）；pkexec 授权、安装布局与真实清理的 VM 验证待维护者执行
 > 日期：2026-10-24
 > 范围：Linux 桌面版；最终只交付 RPM，实机验证由项目维护者在虚拟机中完成
 
@@ -289,7 +289,7 @@ broom-system-helper --self-test
 - 助手缺失、policy 缺失、`pkexec` 缺失或助手探测失败时，页面显示对应降级说明与“重新检测”，不展示可执行操作。
 - 清理完成后可重新检测；无法准确计算释放空间时，显示逐项操作结果而不是猜测字节数。
 
-## 9. 第三阶段：RPM 打包
+## 9. 第三阶段：RPM 打包（已实现）
 
 ### 9.1 范围
 
@@ -300,6 +300,11 @@ broom-system-helper --self-test
 - 不修改现有 tar.gz 产物；tar.gz 版本隐藏系统缓存入口；
 - 不在打包脚本中执行系统清理、不安装 RPM、不要求 root；
 - VM 中的安装与授权验证由维护者完成。
+
+实现文件：
+
+- `packaging/rpm/broom.spec`：安装预构建 bundle、助手、policy、desktop、图标与文档；
+- `tool/package_rpm.sh`：构建 Flutter bundle（可跳过）与助手，生成 policy，调用 `rpmbuild -bb`，输出 `.rpm` 与 `.sha256`。
 
 ### 9.2 包内布局
 
@@ -319,72 +324,27 @@ broom-system-helper --self-test
 - 入口符号链接是否影响 Flutter 查找 `data/` / `lib/` 必须在 VM 中验证；如果 `/proc/self/exe` 解析不符合预期，改为安装一个极小的 shell wrapper 或直接 `Exec=%{_libdir}/broom/broom`。
 - 图标当前为 1024×1024 PNG；如桌面环境需要其他尺寸，后续再生成多尺寸，不在本阶段阻塞。
 
-### 9.3 Spec 草案
+### 9.3 Spec
 
-```spec
-Name:           broom
-Version:        %{broom_version}
-Release:        1%{?dist}
-Summary:        Safe, reversible cache cleaner for Linux desktops
+实际 spec 位于 [packaging/rpm/broom.spec](../packaging/rpm/broom.spec)。关键约束：
 
-License:        Proprietary
-URL:            https://example.invalid/broom
-Source0:        broom-bundle-%{version}.tar.gz
-BuildArch:      x86_64
-
-Requires:       polkit
-Requires:       systemd
-Requires:       gtk3
-Requires:       glib2
-
-%description
-Broom scans declared cache locations, previews results, and moves files to a
-quarantine so a clean can be undone. The optional system helper cleans DNF
-package caches and the systemd journal after Polkit authorization.
-
-%prep
-%setup -q -n broom-bundle-%{version}
-
-%install
-mkdir -p %{buildroot}%{_libdir}/broom
-cp -a bundle/. %{buildroot}%{_libdir}/broom/
-install -Dm0755 helper/broom-system-helper %{buildroot}%{_libexecdir}/broom/broom-system-helper
-install -Dm0644 packaging/broom.desktop %{buildroot}%{_datadir}/applications/broom.desktop
-install -Dm0644 packaging/broom.png %{buildroot}%{_datadir}/icons/hicolor/1024x1024/apps/broom.png
-install -Dm0644 packaging/com.broom.Broom.policy %{buildroot}%{_datadir}/polkit-1/actions/com.broom.Broom.policy
-mkdir -p %{buildroot}%{_bindir}
-ln -sf %{_libdir}/broom/broom %{buildroot}%{_bindir}/broom
-
-%files
-%{_bindir}/broom
-%{_libdir}/broom/
-%{_datadir}/applications/broom.desktop
-%{_datadir}/icons/hicolor/1024x1024/apps/broom.png
-%{_libexecdir}/broom/broom-system-helper
-%{_datadir}/polkit-1/actions/com.broom.Broom.policy
-%doc README.md docs/linux-system-cache.md
-
-%changelog
-* Thu Oct 23 2026 Broom maintainers <maintainers@example.invalid> - 0.4.0-1
-- Initial Linux system helper packaging
-```
-
-占位项：
-
-- `License` 必须以项目实际许可证替换；当前仓库没有 LICENSE 文件，发布前必须确认。
-- `URL`、维护者邮箱与 changelog 身份为占位，正式出包前替换。
-- `Source0` 的具体打包形式由脚本决定；本阶段是预构建 binary RPM，不是 Fedora 官方仓库要求的 from-source 包。
-- `Version` 从 `pubspec.yaml` 读取后通过 `--define "broom_version ..."` 传给 rpmbuild。
+- `Version` 由脚本从 `pubspec.yaml` 读取，通过 `--define "broom_version ..."` 传入；`Release` 为 `1%{?dist}`，因此 Fedora 上产物类似 `broom-0.4.0-1.fc44.x86_64.rpm`。
+- `BuildArch: x86_64`；本阶段是预构建 binary RPM，不是 Fedora 官方仓库要求的 from-source 包。
+- `AutoReqProv: no` + 显式 `Requires: polkit systemd gtk3 glib2 libstdc++ xz-libs`；关闭 RPM 的 strip / rpath 后处理，避免改动 Flutter 预构建库。
+- 助手安装为 `%{_libexecdir}/broom/broom-system-helper`（0755，root:root），policy 安装为 `%{_datadir}/polkit-1/actions/com.broom.Broom.policy`（0644，root:root）。
+- 应用入口使用相对于 `%{_bindir}` 计算的符号链接（Fedora 上为 `../lib64/broom/broom`），避免绝对符号链接告警，也不假设 `%{_libdir}` 的具体布局。
+- `License` 仍为占位 `Proprietary`：仓库没有 LICENSE 文件，正式发布前必须确认。
+- `URL`、维护者邮箱与 changelog 身份仍需在正式出包前替换。
 
 ### 9.4 构建脚本
 
-建议新增 `tool/package_rpm.sh`：
+`tool/package_rpm.sh` 的流程：
 
-1. 读取 `pubspec.yaml` 版本；
-2. `flutter build linux --release`，得到 `build/linux/x64/release/bundle`；
-3. `cmake -S linux/system_helper -B build/system-helper -DCMAKE_BUILD_TYPE=Release` 并构建助手；
-4. 生成 policy（展开 `%{_libexecdir}`）；
-5. 把 bundle、助手、desktop、图标、policy、文档打包到 rpmbuild 的 `SOURCES`；
+1. 读取 `pubspec.yaml` 版本，校验 Linux x86_64 与 `rpmbuild` 等依赖；
+2. 默认执行 `flutter build linux --release`；`--skip-flutter-build` 可复用已有 bundle；
+3. `cmake -S linux/system_helper -B build/system-helper-rpm -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr` 并构建助手；
+4. 生成 policy（展开 `%{_libexecdir}`），并用 `rpm --eval '%{_libexecdir}/broom/broom-system-helper'` 校验它指向本发行版的实际安装路径；
+5. 把 bundle、助手、desktop、图标、policy、README 与本设计文档暂存为 `broom-bundle-<version>.tar.gz`；
 6. `rpmbuild -bb packaging/rpm/broom.spec --define "_topdir ..." --define "broom_version ..."`；
 7. 输出 `dist/broom-<version>-1.<dist>.x86_64.rpm` 与 `.sha256`。
 
@@ -393,19 +353,20 @@ ln -sf %{_libdir}/broom/broom %{buildroot}%{_bindir}/broom
 - 使用普通用户运行 `rpmbuild`，不要用 root 构建；
 - RPM 构建需要 Linux 环境（Fedora，或安装了 `rpm-build` 的 Ubuntu）；当前 Windows 工作区不执行 RPM 构建；
 - 构建机需要 `rpm-build`、`cmake`、C++ 工具链和 Flutter；
-- 构建脚本只打包，不安装、不执行助手、不运行 `dnf` / `journalctl`；
+- 构建脚本只打包，不安装、不执行助手、不运行 `pkexec`、`dnf`、`apt-get` 或 `journalctl`；
 - RPM 不签名，作为本地测试包；正式分发前再接入签名；
-- 现有 Ubuntu CI 是否增加 RPM 构建作为可选任务，留到打包脚本稳定后决定；本阶段的 RPM 由本地生成，VM 验证由维护者完成。
+- 现有 Ubuntu CI 只做 `bash -n` 语法校验；完整 RPM 构建与 VM 验证在本机 / Fedora VM 中执行。
 
 ### 9.5 依赖与安装行为
 
-- `Requires: polkit` 提供 `pkexec` 和 policy 基础设施；Fedora 上的确切包名以 `dnf provides /usr/bin/pkexec` 核对。
+- spec 显式声明 `Requires: polkit systemd gtk3 glib2 libstdc++ xz-libs`。`polkit` 提供 `pkexec` 和 policy 基础设施；Fedora 上的确切包名以 `dnf provides /usr/bin/pkexec` 核对。
 - `systemd` 提供 `journalctl`；没有 systemd 的系统隐藏 journal 操作。
-- DNF 不建议作为强依赖：助手在运行时探测 `/usr/bin/dnf`，不存在时 `--list` 标记为不可用。若目标只面向 Fedora，可改为 `Requires: dnf`。
-- GTK/GLib 运行时依赖应同时依赖 RPM 自动 ELF 依赖和显式 `Requires`；出包后用 `rpm -qpR` 核对。
+- APT / DNF 不作为强依赖：助手在运行时探测 `/usr/bin/apt-get` 与 `/usr/bin/dnf`，不存在时 `--list` 标记为不可用，UI 不显示该项。
+- 预构建 bundle 关闭了 RPM 的自动 ELF 依赖生成（`AutoReqProv: no`），因此 GTK/GLib 运行时依赖由上面的显式 `Requires` 承担；出包后用 `rpm -qpR` 核对。
+- 安装包中的助手为 `0755 root:root`，policy 为 `0644 root:root`，均不 setuid。
 - 安装后不需要启用 systemd 服务、不需要 D-Bus 重新加载、不需要 `polkitd` 重启；policy 放入标准目录即可被识别。
 - 卸载 RPM 删除助手、policy 和桌面入口；`$XDG_DATA_HOME/Broom` 中的配置、隔离区与历史继续保留，遵循现有数据保留策略。
-- 卸载不会恢复已被永久清理的 DNF 缓存或 journal；这一点在卸载文档与 UI 中都要说明。
+- 卸载不会恢复已被永久清理的 APT / DNF 缓存或 journal；这一点在卸载文档与 UI 中都要说明。
 
 ## 10. 验证计划
 
@@ -417,11 +378,13 @@ ln -sf %{_libdir}/broom/broom %{buildroot}%{_bindir}/broom
 - Dart 测试：可用性探测不启动进程、`--list` / `--self-test` 直接调用助手、pkexec 参数只含固定 operation id、APT → DNF → journal 顺序、认证取消与失败映射、部分失败与异常 JSON 的拒绝。
 - Dart UI fake 测试：只显示助手报告可用的操作、入口按能力位隐藏、默认不勾选、确认勾选门槛、认证取消无副作用、助手缺失降级。
 - policy：Linux CI 用 `xmllint` 校验 CMake 生成的 policy。
+- RPM：`test/linux_rpm_packaging_test.dart` 检查 spec 的安装路径、依赖与脚本的只读约束；Linux CI 对打包脚本执行 `bash -n`。
+- Fedora WSL 冒烟（2026-10-24）：本地 `rpmbuild` 成功；`rpm -qpl` / `rpm -qpR` / `rpm -qp --dump` 确认助手 `0755`、policy `0644`、相对符号链接和 `.sha256` 正确。
 
 后续阶段待补：
 
 - 输出截断与真实包管理器忙锁的 VM 验证。
-- RPM 构建冒烟：`rpm -qpl`、`rpm -qpR`、`rpm -V`。
+- RPM 安装后的 `rpm -V`、符号链接启动与 SELinux 验证。
 
 CI 不运行真实 `pkexec` / APT / DNF / journald；这些留给 VM。
 
@@ -474,13 +437,14 @@ VM 验证中发现的问题应回写到本文件“已知风险 / 开放问题�
 - [x] 验收：fake / CTest 测试覆盖全部状态；`flutter analyze` 与仓库测试通过。
 - [ ] VM 验收：真实 APT / DNF / journal 清理按第 10.2 节执行。
 
-### 阶段 3：RPM 打包（只出包）
+### 阶段 3：RPM 打包（已实现，安装验证待执行）
 
-- 新增 `packaging/rpm/broom.spec`、`tool/package_rpm.sh`；
-- 生成助手、policy、desktop、图标、bundle 的 RPM；
-- 输出 `.rpm` 与 `.sha256`；
-- 不在脚本中安装或运行 RPM；不实现 deb/Flatpak/Snap/AppImage；
-- 验收：本地可重复构建 RPM；`rpm -qpl` / `rpm -qpR` / `rpm -V` 冒烟通过；维护者在 VM 中完成安装与授权测试。
+- [x] 新增 `packaging/rpm/broom.spec`、`tool/package_rpm.sh`。
+- [x] 生成包含助手、policy、desktop、图标、bundle 与文档的 RPM。
+- [x] 输出 `.rpm` 与 `.sha256`。
+- [x] 脚本不安装或运行 RPM；不实现 deb/Flatpak/Snap/AppImage。
+- [x] 仓库内验收：Fedora WSL 可重复构建；`rpm -qpl` / `rpm -qpR` / 文件权限与校验和冒烟通过。
+- [ ] VM 验收：安装 RPM 后运行 `rpm -V`、从 `/usr/bin/broom` 启动并验证 Polkit 授权。
 
 ### 后续（不在本次范围）
 
@@ -518,6 +482,9 @@ VM 验证中发现的问题应回写到本文件“已知风险 / 开放问题�
 | Linux 系统缓存控制器 | [lib/ui/linux_system_cache_controller.dart](../lib/ui/linux_system_cache_controller.dart) |
 | Linux 系统缓存页与确认框 | [lib/ui/linux_system_cache_page.dart](../lib/ui/linux_system_cache_page.dart)、[lib/ui/linux_system_cache_confirm_dialog.dart](../lib/ui/linux_system_cache_confirm_dialog.dart) |
 | Linux 系统维护测试 fake | [test/support/linux_system_maintenance_fakes.dart](../test/support/linux_system_maintenance_fakes.dart) |
+| RPM spec | [packaging/rpm/broom.spec](../packaging/rpm/broom.spec) |
+| RPM 构建脚本 | [tool/package_rpm.sh](../tool/package_rpm.sh) |
+| RPM 回归测试 | [test/linux_rpm_packaging_test.dart](../test/linux_rpm_packaging_test.dart) |
 | Linux 用户规则 | [lib/core/rules/linux_rules.dart](../lib/core/rules/linux_rules.dart) |
 | Linux 规则与 Windows 差距 | [linux-windows-parity.md](linux-windows-parity.md) |
 | Linux 打包现状 | [tool/package_linux.sh](../tool/package_linux.sh) |

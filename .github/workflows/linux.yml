@@ -60,6 +60,11 @@ jobs:
           ctest --test-dir build/system-helper --output-on-failure
           xmllint --noout build/system-helper/com.broom.Broom.policy
 
+      - name: Validate packaging scripts
+        run: |
+          bash -n tool/package_linux.sh
+          bash -n tool/package_rpm.sh
+
       - name: Build Linux release
         run: flutter build linux --release
 

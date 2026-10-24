@@ -337,7 +337,13 @@ Linux 使用同一套 Dart UI 与规则引擎，平台差异由 `LinuxCleanerPla
 flutter build linux --release
 bash tool/package_linux.sh
 # 产物：dist/broom-<版本>-linux-x64.tar.gz 与同名 .sha256
+
+# Fedora / RHEL 系：构建助手、Polkit policy 与 RPM
+bash tool/package_rpm.sh
+# 产物：dist/broom-<版本>-1.<dist>.x86_64.rpm 与同名 .sha256
 ```
+
+- **RPM 打包**：`tool/package_rpm.sh` 会构建系统助手、展开 Polkit policy，并打包 Flutter bundle、`broom.desktop`、图标与文档。构建需要 x86_64 Linux、Flutter、CMake/C++ 工具链和 `rpm-build`；脚本不安装 RPM、不运行 `pkexec`、不执行清理。已有 Linux bundle 时可加 `--skip-flutter-build` 只重新打包。spec 位于 [packaging/rpm/broom.spec](packaging/rpm/broom.spec)。
 
 - **核心可用范围**：规则扫描、预览、隔离区撤销 / 永久释放、设置与配置导入导出、重复文件与大文件分析可用；内置 39 条 Linux 规则（27 条 Safe、12 条 Review），覆盖日志、浏览器脚本、应用与常用开发工具缓存；回收站、规则在线更新、软件更新与卸载残留仅在 Windows 显示。
 - **系统级缓存**：安装 `broom-system-helper` 与 Polkit policy 的 RPM 后，系统缓存入口会出现，可在一次 `pkexec` 授权后清理 APT / DNF 包缓存与 7 天前的 systemd journal。助手、policy 或 `pkexec` 缺失时入口自动隐藏；操作不传路径、不进入隔离区、不可撤销。设计与 VM 验证清单见 [docs/linux-system-cache.md](docs/linux-system-cache.md)。
