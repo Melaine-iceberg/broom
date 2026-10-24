@@ -51,6 +51,7 @@ class LeftoverCatalogEntry {
     required this.dataPathPatterns,
     required this.installMarkerPatterns,
     required this.installDisplayNamePrefixes,
+    this.installPackageIds = const [],
   });
 
   /// Stable id without [leftoverRuleIdPrefix].
@@ -62,6 +63,12 @@ class LeftoverCatalogEntry {
   final List<String> dataPathPatterns;
   final List<String> installMarkerPatterns;
   final List<String> installDisplayNamePrefixes;
+
+  /// Package identifiers used by Linux inventories (dpkg/rpm/flatpak/snap).
+  ///
+  /// Windows inventories do not need these; an entry that only provides
+  /// display-name prefixes and install markers remains valid there.
+  final List<String> installPackageIds;
 
   String get ruleId => '$leftoverRuleIdPrefix$id';
 }

@@ -268,12 +268,12 @@ class _RecycleBinCard extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       loading && snapshot == null
-                          ? context.t('正在查询所有磁盘的回收站占用。')
+                          ? context.t('正在查询用户回收站与可访问磁盘的回收站占用。')
                           : snapshot == null
                           ? context.t('可以稍后重试，或检查系统是否允许访问回收站。')
                           : empty
                           ? context.t('没有需要清空的内容。')
-                          : context.tf('占用约 {bytes} · 统计范围包含所有磁盘', {
+                          : context.tf('占用约 {bytes} · 包含用户回收站与可访问磁盘', {
                               'bytes': formatBytes(snapshot!.totalBytes),
                             }),
                       style: theme.textTheme.labelSmall?.copyWith(
@@ -299,7 +299,7 @@ class _RecycleBinCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              context.t('正在通知 Windows 清空回收站…'),
+              context.t('正在通知系统清空回收站…'),
               style: theme.textTheme.labelSmall?.copyWith(
                 color: BroomColors.inkMuted(context),
               ),
@@ -334,7 +334,7 @@ class _PolicyNote extends StatelessWidget {
           Expanded(
             child: Text(
               context.t(
-                '缓存清理使用 Broom 自己的隔离区，可以撤销。回收站由 Windows 管理，'
+                '缓存清理使用 Broom 自己的隔离区，可以撤销。回收站由桌面环境管理，'
                 'Broom 只读取统计并调用系统清空命令，不读取其中的文件内容。',
               ),
               style: theme.textTheme.labelSmall?.copyWith(
@@ -381,7 +381,7 @@ class _EmptyRecycleBinDialogState extends State<_EmptyRecycleBinDialog> {
           ),
           const SizedBox(height: 10),
           Text(
-            context.t('此操作覆盖所有磁盘上的回收站内容，无法撤销，也不会进入 Broom 隔离区。'),
+            context.t('此操作覆盖用户回收站及可访问磁盘上的回收站内容，无法撤销，也不会进入 Broom 隔离区。'),
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
               height: 1.5,

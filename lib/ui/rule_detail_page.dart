@@ -920,7 +920,7 @@ class _RuleInfoPanel extends StatelessWidget {
     final scheme = theme.colorScheme;
     final strings = context.strings;
     final version = controller.rulesVersion;
-    final source = version == 'builtin'
+    final source = version.startsWith('builtin')
         ? context.t('应用内置规则目录')
         : context.tf('已验证的规则目录更新 · 版本 {version}', {'version': version});
     final riskText = switch (rule.risk) {

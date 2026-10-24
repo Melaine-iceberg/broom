@@ -1,8 +1,8 @@
 # Linux 与 Windows 功能差距评估
 
 > 评估对象：Broom 0.4.0（`pubspec.yaml`，0.4.0+4）
-> 评估日期：2026-10-23
-> 结论：Linux 已具备“规则扫描 → 预览 → 隔离区 → 撤销 / 永久释放”的完整核心闭环。剩余差距集中在四类：Windows 专属功能入口、同名功能的能力降级、规则覆盖，以及分发与验证。
+> 评估日期：2026-10-24
+> 结论：Linux 已具备“规则扫描 → 预览 → 隔离区 → 撤销 / 永久释放”的完整核心闭环，并补齐回收站、卸载残留、规则在线更新与软件更新检查入口。剩余差距集中在同名功能的能力降级、系统缓存实机验证，以及分发与真实窗口测试。
 
 ## 1. 总览
 
@@ -12,11 +12,11 @@
 | 隔离区撤销、永久释放、清理历史、保留策略 | 支持 | 支持 | 已对齐 |
 | 设置、配置导入导出、排除列表、国际化 | 支持 | 支持 | 已对齐 |
 | 重复文件、大文件分析 | 支持 | 支持 | 已对齐 |
-| 系统缓存（Windows Update / 传递优化 / Windows.old） | 支持，需 UAC | 支持 APT / DNF 包缓存与 systemd journal，需 Polkit 助手 | 实现已接入，VM 验证待完成 |
-| 回收站查看与清空 | 支持 | 无入口 | 功能缺失 |
-| 卸载残留检测 | 支持，依赖注册表 | 无入口 | 功能缺失 |
-| 规则在线更新、签名校验、回滚 | 支持 | 无入口 | 功能缺失 |
-| 应用软件更新检查 | 支持，MSIX / App Installer | 无入口 | 功能缺失 |
+| 系统缓存（Windows Update / 传递优化 / Windows.old） | 支持，需 UAC | 支持 APT / DNF 包缓存与 systemd journal，需 Polkit 助手 | Fedora VM 已验证；APT / SELinux 待补测 |
+| 回收站查看与清空 | 支持 | 支持 freedesktop Trash（用户回收站 + 可访问磁盘） | 已对齐，平台语义不同 |
+| 卸载残留检测 | 支持，依赖注册表 | 支持 dpkg / rpm / Flatpak / Snap 清单与桌面文件 | 已对齐，采用策划清单 |
+| 规则在线更新、签名校验、回滚 | 支持 | 支持，需构建时签名密钥与 HTTPS 清单 | 已对齐，发布配置需提供 |
+| 应用软件更新检查 | 支持，MSIX / App Installer | 支持 HTTPS JSON 清单，只读检查 | 已对齐，升级仍由用户完成 |
 | NTFS 索引加速 | 支持，USN / MFT | 无等价实现 | 功能缺失 |
 | 文件占用预检 | 原生通道 | 空实现 | 能力降级 |
 | 原生目录枚举 | `FindFirstFileW` | `dart:io` + 逐文件 `stat` | 性能差距 |
@@ -42,38 +42,52 @@ Linux 不复用逐文件控制器，而是通过独立的 Polkit 助手执行固
 
 ### 2.2 回收站
 
-Windows 通过 `broom/shell` 的 `queryRecycleBin` / `emptyRecycleBin` 提供回收站查看与清空。Linux 原生通道明确返回未实现：
+Windows 通过 `broom/shell` 的 `queryRecycleBin` / `emptyRecycleBin` 提供回收站查看与清空；Linux 在同一通道上实现了 freedesktop Trash：
 
-- [linux/runner/native_channels.cc](../linux/runner/native_channels.cc#L271-L275)
-- 侧边栏在非 Windows 隐藏入口：[lib/ui/app_sidebar.dart](../lib/ui/app_sidebar.dart#L77-L94)
+- 原生实现：[linux/runner/native_channels.cc](../linux/runner/native_channels.cc)
+- 入口在 Windows 与 Linux 显示：[lib/app.dart](../lib/app.dart)
 
-Linux 的 freedesktop Trash（`~/.local/share/Trash`）没有接入；Broom 自身的隔离区可以替代“可撤销删除”，但不提供“清空系统回收站”。
+实现细节：
+
+- 统计用户回收站（`$XDG_DATA_HOME/Trash`）与所有可访问挂载点的 `.Trash/$uid` / `.Trash-$uid`。
+- 只接受属于当前用户、且组 / 其他用户不可写的真实目录；不跟随符号链接。空目录或不可访问的挂载点会被安全跳过。
+- 清空只删除识别出的回收站中的 `files/` 与 `info/` 内容，保留回收站目录本身。
+- 与 Windows 一样属于 Review 级：永久删除、不进入 Broom 隔离区、没有撤销入口，并且需要勾选确认。
 
 ### 2.3 卸载残留
 
-Windows 依赖原生 `broom/apps` 通道读取注册表安装清单，再匹配 AppData 中的残留目录：
+Windows 依赖原生 `broom/apps` 通道读取注册表安装清单；Linux 使用只读包管理器清单与桌面文件：
 
-- 服务只在 Windows 创建：[lib/main.dart](../lib/main.dart#L146-L152)
-- 非 Windows 返回不支持：[lib/core/platform/installed_apps.dart](../lib/core/platform/installed_apps.dart#L115-L118)
+- 安装清单：[lib/core/platform/linux_installed_apps.dart](../lib/core/platform/linux_installed_apps.dart)
+- Linux 策划清单：[lib/core/rules/linux_leftover_catalog.dart](../lib/core/rules/linux_leftover_catalog.dart)
+- 服务在 Windows 与 Linux 创建：[lib/main.dart](../lib/main.dart)
 
-Linux 侧没有对应的包管理器清单（dpkg / rpm / Flatpak / Snap）与孤儿配置目录扫描。
+检测规则：
+
+- 通过 `dpkg-query`、`rpm -qa`、`flatpak list`、`snap list` 读取已安装包；同时解析 `$XDG_DATA_HOME/applications` 与 `$XDG_DATA_DIRS` 下的 `.desktop` 文件。
+- 任一包管理器存在但执行失败时，清单标记为不完整，卸载残留检测与清理前复核都会失败关闭，不猜测应用已卸载。
+- 只有已策划应用的数据目录存在、且包名、显示名、Flatpak / Snap / 本地二进制安装标记全部缺失时，才生成 `leftover.*` 的 Review 规则。
+- 当前覆盖 Slack、Discord、VS Code、Obsidian、Spotify、Signal 与 Zoom；数据目录限定在 XDG 配置 / 缓存目录，不会指向整个 `$HOME` 或共享目录。
 
 ### 2.4 规则在线更新
 
-Windows 支持 HTTPS 清单、构建期签名校验、上一版回滚与恢复内置规则：
+Windows 与 Linux 现在共享同一套 HTTPS 清单、构建期 HMAC 签名校验、上一版回滚与恢复内置规则：
 
-- 控制器只在 Windows 创建：[lib/main.dart](../lib/main.dart#L169-L183)
-- 规则目录也只在 Windows 启动流程中应用：[lib/main.dart](../lib/main.dart#L207-L211)
+- 控制器在 Windows 与 Linux 创建：[lib/main.dart](../lib/main.dart)
+- Linux 规则目录可变：[lib/core/platform/cleaner_platform.dart](../lib/core/platform/cleaner_platform.dart)
+- 启动时加载激活规则目录：[lib/main.dart](../lib/main.dart)
+- 目录位置沿用 `$XDG_DATA_HOME/Broom/rules/{active,previous}.json`
 
-Linux 始终使用编译进二进制的内置规则目录，当前版本为 `builtin-linux-2`；即使磁盘上存在规则目录，启动时也不会加载。设置页的“规则更新”区块因控制器为空而不渲染（[settings_page.dart](../lib/ui/settings_page.dart#L319-L330)）。
+Linux 的内置版本仍为 `builtin-linux-2`；没有激活目录时保持该版本，不会被通用 store 的 `builtin` 覆盖。设置页的“规则更新”区块现在会在 Linux 显示，但只有在构建时注入 `--dart-define=BROOM_RULE_SIGNING_KEY=...` 并填写 HTTPS 更新地址后才能实际检查和应用更新。
 
 ### 2.5 应用软件更新
 
-Windows 通过 `.appinstaller` 与 MSIX 提供更新提示，应用内只展示当前版本与最新版本：
+Windows 通过 `.appinstaller` 与 MSIX 提供更新提示；Linux 读取一个只读 JSON 清单：
 
-- 控制器只在 Windows 创建：[lib/main.dart](../lib/main.dart#L190-L195)
+- Linux 清单解析：[lib/core/app/linux_app_update_service.dart](../lib/core/app/linux_app_update_service.dart)
+- 控制器在 Windows 与 Linux 创建：[lib/main.dart](../lib/main.dart)
 
-Linux 没有更新源与检查逻辑，设置页的“软件更新”区块不渲染；升级方式是重新下载 tar.gz 并替换目录。
+Linux 清单包含 `schemaVersion`、`version`、可选的 `publishedAt`、HTTPS 下载地址与 SHA-256。设置页展示当前版本、更新源、发现的新版本与下载地址；应用本身不下载、不执行安装程序。RPM 用户通过包管理器升级，tar.gz 用户替换解压目录。默认更新源为 `https://melaine-iceberg.github.io/broom/broom-linux.json`，可通过 `--dart-define=BROOM_LINUX_UPDATE_FEED=...` 覆盖。
 
 ### 2.6 NTFS 索引
 
@@ -171,15 +185,15 @@ Windows 侧存在但 Linux 没有对应规则的包括：
 - 系统临时文件、崩溃转储、Windows 错误报告（WER）
 - Teams、Docker、WSL、Scoop、vcpkg
 
-其中一部分确实属于 Windows 专有；Linux 侧仍待补齐的主要是需要提权或特殊语义的系统级目标：
+其中一部分确实属于 Windows 专有；Linux 侧仍待补齐的主要是需要特殊语义或尚未验证的目标：
 
-- freedesktop Trash
-- systemd journal / 系统日志
 - Flatpak、Snap 的旧版本与缓存
-- 包管理器缓存（apt、dnf、pacman 等，需要先决定是否纳入保护根与提权模型）
+- pacman / zypper 等尚未纳入系统助手的包管理器缓存
 - 新版 Teams 客户端与自定义安装路径的 vcpkg 尚未逐项验证
+- 回收站不作为普通清理规则，而是独立工具（见 2.2）
+- systemd journal 由系统助手处理，不进入普通规则（见 2.1）
 
-此外，Linux 只能使用内置规则，无法加载签名更新或回滚版本，因此规则修正仍需随版本发布，无法像 Windows 一样在线更新。
+规则在线更新已在 Linux 接入；默认发布仍需构建时注入签名密钥并配置 HTTPS 清单，未配置时入口会明确提示而不会静默使用未验证规则。
 
 ## 5. 分发、更新与验证
 
@@ -195,17 +209,20 @@ Windows：
 Linux：
 
 - `flutter build linux --release` + [tool/package_linux.sh](../tool/package_linux.sh)
-- 产物为 tar.gz，附带 `.desktop` 与图标，需要用户手动复制到应用目录
-- 没有系统安装器、软件源、自动更新、沙箱包或签名流程
+- tar.gz 便携版，附带 `.desktop` 与图标，需要用户手动复制到应用目录
+- Fedora / RHEL 系 RPM，包含系统助手与 Polkit policy，可用 `BROOM_RPM_SIGN_KEY` 签名（[tool/package_rpm.sh](../tool/package_rpm.sh)）
+- 设置页提供只读软件更新检查（HTTPS JSON 清单），不自动下载或安装
+- 没有软件源、自动更新安装、Flatpak / Snap / AppImage 或沙箱包
 
-路线图仍待办：Flatpak / Snap / AppImage、Wayland 下“打开文件位置”验证、Snap 沙箱内的隔离区路径约定（[roadmap.md](roadmap.md#L234-L242)）。
+路线图仍待办：Flatpak / Snap / AppImage、Wayland 下“打开文件位置”验证、Snap 沙箱内的隔离区路径约定（[roadmap.md](roadmap.md#L235-L244)）。
 
 ### 5.2 测试与 CI
 
-- Linux CI 执行格式校验、严格静态检查、单元 / Widget 测试、Release 构建与 tar.gz 打包（[.github/workflows/linux.yml](../.github/workflows/linux.yml)）
+- Linux CI 执行格式校验、严格静态检查、单元 / Widget 测试、C++ 助手测试、Release 构建、tar.gz 与 Fedora RPM 打包（[.github/workflows/linux.yml](../.github/workflows/linux.yml)）
 - Windows CI 额外提供真实窗口冒烟测试与帧率基准，手动触发（[.github/workflows/windows.yml](../.github/workflows/windows.yml#L67-L90)）
 - Linux 平台逻辑已有测试覆盖：[linux_platform_test.dart](../test/linux_platform_test.dart)、[posix_quarantine_test.dart](../test/posix_quarantine_test.dart)、[linux_rule_audit_test.dart](../test/linux_rule_audit_test.dart)
-- Linux 没有真实窗口的 UI 集成测试，也没有 GTK / Wayland 下的手工回归记录
+- 新增入口的测试：[linux_installed_apps_test.dart](../test/linux_installed_apps_test.dart)、[linux_leftover_catalog_test.dart](../test/linux_leftover_catalog_test.dart)、[linux_leftover_service_test.dart](../test/linux_leftover_service_test.dart)、[linux_rule_update_test.dart](../test/linux_rule_update_test.dart)、[linux_app_update_service_test.dart](../test/linux_app_update_service_test.dart)
+- Linux 没有真实窗口的 UI 集成测试，也没有 GTK / Wayland 下的手工回归记录；回收站、卸载残留与更新入口的实机行为仍由维护者验证
 
 ## 6. 已对齐的能力
 
@@ -217,6 +234,10 @@ Linux：
 - 排除列表、路径守卫、配置导入导出、设置迁移
 - 重复文件与大文件分析
 - 39 条内置规则（27 条 Safe、12 条 Review），覆盖日志、浏览器脚本、应用缓存与常用开发工具缓存
+- 回收站查看与清空（freedesktop Trash，永久删除、需确认）
+- 卸载残留检测（包管理器清单 + 桌面文件 + 策划 XDG 清单）
+- 签名规则目录的在线更新、回滚与恢复内置规则（需要构建密钥与 HTTPS 清单）
+- 软件更新检查（HTTPS JSON 清单，只读）
 - 磁盘空间查询（`statvfs`）
 - 文件夹 / JSON 文件选择器（GTK）
 - 定位文件（Gio 打开默认文件管理器）
@@ -228,10 +249,10 @@ Linux：
 
 按投入产出排序：
 
-1. **规则目录扩容与在线更新**：第一批用户级规则已补齐（24 → 39，含 12 条 Review）；下一步补系统级目标，并复用现有签名目录与回滚机制，让 Linux 也能更新规则。
+1. **系统缓存实机验证**：Fedora VM 已覆盖安装、授权、DNF 与 journal；剩余 Debian / Ubuntu 的 APT、SELinux enforcing、卸载回滚与负向认证场景。见 [linux-system-cache.md](linux-system-cache.md)。
 2. **文件占用预检与原生目录枚举**：前者提升预览可预期性，后者降低大目录扫描的系统调用次数。
-3. **回收站与系统缓存的实机验证**：系统缓存已接入 Polkit / `pkexec` 助手，剩余工作是 VM 中的安装、授权与真实清理验证；回收站仍需确定 freedesktop Trash 语义后再接入 UI。见 [linux-system-cache.md](linux-system-cache.md)。
-4. **安装包、自动更新与 Linux 集成测试**：决定 Flatpak / Snap / AppImage 路线，并补真实窗口冒烟与帧率测试。
+3. **回收站、卸载残留与更新入口的实机回归**：在 GNOME / KDE 上验证 freedesktop Trash 的多磁盘与权限场景、包管理器清单与实际卸载应用，以及规则 / 软件更新清单的 HTTPS 流程。
+4. **规则目录扩容与分发**：补 Flatpak / Snap 旧版本、pacman / zypper 等目标；决定 Flatpak / Snap / AppImage 路线，补真实窗口冒烟与帧率测试。
 
 ## 8. 代码索引
 
@@ -241,7 +262,13 @@ Linux：
 | 启动时的平台分支 | [lib/main.dart](../lib/main.dart) |
 | Windows 规则 | [lib/core/rules/windows_rules.dart](../lib/core/rules/windows_rules.dart) |
 | Linux 规则 | [lib/core/rules/linux_rules.dart](../lib/core/rules/linux_rules.dart) |
-| Linux 原生通道 | [linux/runner/native_channels.cc](../linux/runner/native_channels.cc) |
+| Linux 原生通道（含回收站） | [linux/runner/native_channels.cc](../linux/runner/native_channels.cc) |
+| 回收站页面 | [lib/ui/recycle_bin_page.dart](../lib/ui/recycle_bin_page.dart) |
+| Linux 已安装应用清单 | [lib/core/platform/linux_installed_apps.dart](../lib/core/platform/linux_installed_apps.dart) |
+| Linux 卸载残留清单 | [lib/core/rules/linux_leftover_catalog.dart](../lib/core/rules/linux_leftover_catalog.dart) |
+| 卸载残留服务 | [lib/core/leftover/leftover_service.dart](../lib/core/leftover/leftover_service.dart) |
+| 规则目录与在线更新 | [lib/core/rules/rule_catalog_store.dart](../lib/core/rules/rule_catalog_store.dart)、[lib/core/rules/rule_update_service.dart](../lib/core/rules/rule_update_service.dart) |
+| Linux 软件更新检查 | [lib/core/app/linux_app_update_service.dart](../lib/core/app/linux_app_update_service.dart) |
 | 文件元数据 | [lib/core/clean/file_metadata.dart](../lib/core/clean/file_metadata.dart) |
 | 目录枚举 | [lib/core/platform/directory_enum.dart](../lib/core/platform/directory_enum.dart) |
 | 占用检测 | [lib/core/platform/file_lock_probe.dart](../lib/core/platform/file_lock_probe.dart) |

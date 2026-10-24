@@ -17,10 +17,13 @@ import 'core/platform/app_version.dart';
 import 'core/platform/cleaner_platform.dart';
 import 'core/platform/file_lock_probe.dart';
 import 'core/platform/installed_apps.dart';
+import 'core/platform/linux_installed_apps.dart';
 import 'core/platform/linux_system_maintenance.dart';
 import 'core/platform/path_semantics.dart';
 import 'core/platform/system_access.dart';
 import 'core/platform/system_cache_platform.dart';
+import 'core/rules/leftover_catalog.dart';
+import 'core/rules/linux_leftover_catalog.dart';
 import 'core/rules/rule_catalog_store.dart';
 import 'core/rules/rule_update_service.dart';
 import 'core/safety/path_guard.dart';
@@ -138,16 +141,27 @@ void main(List<String> args) {
       semantics: semantics,
     ),
     builtinRules: platform.rules,
+    builtinVersion: platform.rulesVersion,
     semantics: semantics,
   );
   final ntfsIndex = Platform.isWindows
       ? NtfsIndexClient()
       : const UnavailableNtfsIndex();
-  final leftoverService = Platform.isWindows
+  final leftoverService = (Platform.isWindows || Platform.isLinux)
       ? LeftoverService(
-          installedApps: createInstalledApps(),
+          installedApps: Platform.isLinux
+              ? LinuxInstalledApps(
+                  environment: platform.environment,
+                  semantics: semantics,
+                )
+              : createInstalledApps(),
           guard: guard,
           exclusions: exclusions,
+          entries: Platform.isLinux
+              ? LinuxLeftoverCatalog.entries
+              : LeftoverCatalog.entries,
+          environment: platform.environment,
+          semantics: semantics,
         )
       : null;
   final controller = CleanController(
@@ -166,7 +180,7 @@ void main(List<String> args) {
     lockProbe: createFileLockProbe(),
     logger: logger,
   );
-  final ruleUpdates = Platform.isWindows
+  final ruleUpdates = (Platform.isWindows || Platform.isLinux)
       ? RuleUpdateController(
           service: RuleUpdateService(
             store: catalogStore,
@@ -174,8 +188,8 @@ void main(List<String> args) {
           ),
           settings: settings,
           onCatalogChanged: (catalog) {
-            if (platform is WindowsCleanerPlatform) {
-              platform.applyRuleCatalog(catalog.rules, catalog.version);
+            if (platform case final RuleCatalogTarget target) {
+              target.applyRuleCatalog(catalog.rules, catalog.version);
             }
             unawaited(controller.refreshRuleExclusionScopes());
           },
@@ -187,8 +201,13 @@ void main(List<String> args) {
     }),
   );
 
-  final appUpdates = Platform.isWindows
-      ? AppUpdateController(versionSource: createAppVersionSource())
+  final appUpdates = (Platform.isWindows || Platform.isLinux)
+      ? AppUpdateController(
+          versionSource: createAppVersionSource(),
+          distribution: Platform.isLinux
+              ? AppUpdateDistribution.linuxPackage
+              : AppUpdateDistribution.windowsInstaller,
+        )
       : null;
   if (appUpdates != null) {
     unawaited(appUpdates.loadVersion());
@@ -204,6 +223,8 @@ void main(List<String> args) {
       quarantineRoot: quarantineRoot,
       lockProbe: createFileLockProbe(),
     );
+  }
+  if (Platform.isWindows || Platform.isLinux) {
     _applyRuleCatalogAfterStartup(
       catalogStore: catalogStore,
       platform: platform,
@@ -271,8 +292,8 @@ Future<void> _applyRuleCatalog(
   await Future<void>.delayed(Duration.zero);
   try {
     final catalog = catalogStore.loadSync();
-    if (platform is WindowsCleanerPlatform) {
-      platform.applyRuleCatalog(catalog.rules, catalog.version);
+    if (platform case final RuleCatalogTarget target) {
+      target.applyRuleCatalog(catalog.rules, catalog.version);
     }
     await onApplied();
     AppLogger.instance?.info(

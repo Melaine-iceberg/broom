@@ -938,13 +938,17 @@ class _AppUpdateSection extends StatelessWidget {
     final scheme = theme.colorScheme;
     final info = updates.info;
     final current = updates.currentVersion;
+    final windows = updates.usesWindowsInstaller;
 
     return _Section(
       icon: LucideIcons.packageCheck,
       title: context.t('软件更新'),
       subtitle: context.t(
-        '通过 App Installer 更新源检查新版本。下载、安装与签名校验都由 Windows 完成，'
-        '应用本身只读取清单、不运行任何安装程序。',
+        windows
+            ? '通过 App Installer 更新源检查新版本。下载、安装与签名校验都由 Windows 完成，'
+                  '应用本身只读取清单、不运行任何安装程序。'
+            : '通过 HTTPS 更新清单检查新版本。应用只读取版本与下载地址，'
+                  '不下载或安装任何内容；请使用发行版包管理器或安装包升级。',
       ),
       trailing: updates.busy
           ? const SizedBox(
@@ -988,6 +992,18 @@ class _AppUpdateSection extends StatelessWidget {
               ),
             ),
           ),
+          if (info?.packageUri case final packageUri?)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(LucideIcons.link),
+              title: Text(context.t('下载地址')),
+              subtitle: SelectableText(
+                packageUri.toString(),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
           const SizedBox(height: 4),
           Row(
             children: [
@@ -1000,7 +1016,11 @@ class _AppUpdateSection extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  context.t('发现新版本后，Windows 会在后台完成下载与安装，重启应用即可生效。'),
+                  context.t(
+                    windows
+                        ? '发现新版本后，Windows 会在后台完成下载与安装，重启应用即可生效。'
+                        : '发现新版本后，请下载对应安装包，或通过发行版包管理器升级。',
+                  ),
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -1186,9 +1206,8 @@ class _ConfigTransferSection extends StatefulWidget {
 }
 
 class _ConfigTransferSectionState extends State<_ConfigTransferSection> {
-  ConfigTransferService get _transfer => ConfigTransferService(
-    semantics: cleanController.platform.pathSemantics,
-  );
+  ConfigTransferService get _transfer =>
+      ConfigTransferService(semantics: cleanController.platform.pathSemantics);
 
   bool _busy = false;
 

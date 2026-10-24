@@ -122,7 +122,7 @@ class _BroomAppState extends State<BroomApp> {
             showSystemCache:
                 widget.systemCacheController != null ||
                 widget.linuxSystemCacheController != null,
-            showRecycleBin: Platform.isWindows,
+            showRecycleBin: Platform.isWindows || Platform.isLinux,
           ),
         );
       },

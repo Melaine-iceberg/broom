@@ -272,7 +272,7 @@ broom-system-helper --self-test
 ## 8. Linux UI 与控制器（已实现）
 
 - 侧边栏拆成两个能力位：
-  - `showRecycleBin`：仍然仅 Windows；
+  - `showRecycleBin`：Windows 与 Linux 都显示（Linux 使用 freedesktop Trash）；
   - `showSystemCache`：Windows 或 Linux 系统助手可用时显示。
 - `main.dart` 只在 Linux 助手/policy/`pkexec` 均可用时创建 `LinuxSystemCacheController`；否则不创建控制器，入口隐藏。tar.gz 便携版默认不可用。
 - 可用性探测只检查助手可执行、policy 文件存在、`/usr/bin/pkexec` 存在；不要用一次真实 `pkexec` 试运行来探测，否则会无谓弹出授权框。

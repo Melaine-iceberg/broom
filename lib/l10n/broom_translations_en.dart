@@ -325,15 +325,18 @@ const translationsEn = <String, String>{
   '回收站中有 {count} 个项目':
       'The recycle bin holds {count, plural, one{# item} other{# items}}',
   '没有需要清空的内容。': 'Nothing to empty.',
-  '占用约 {bytes}，统计范围包含所有磁盘。': 'About {bytes} across all drives.',
-  '正在通知 Windows 清空回收站…': 'Asking Windows to empty the recycle bin…',
+  '正在查询用户回收站与可访问磁盘的回收站占用。':
+      'Checking the user trash and accessible volume trash directories.',
+  '占用约 {bytes} · 包含用户回收站与可访问磁盘':
+      'About {bytes} across the user trash and accessible volumes.',
+  '正在通知系统清空回收站…': 'Asking the system to empty the trash…',
   'Broom 的处理边界': 'What Broom handles',
-  '缓存清理使用 Broom 自己的隔离区，可以撤销。回收站由 Windows 管理，Broom 只读取统计并调用系统清空命令，不读取其中的文件内容。': 'Cache cleaning uses Broom\'s own quarantine and can be undone. The recycle bin belongs to Windows; Broom only reads statistics and asks the system to empty it, without reading file contents.',
+  '缓存清理使用 Broom 自己的隔离区，可以撤销。回收站由桌面环境管理，Broom 只读取统计并调用系统清空命令，不读取其中的文件内容。': 'Cache cleaning uses Broom\'s own quarantine and can be undone. The desktop environment owns the trash; Broom only reads statistics and asks the system to empty it, without reading file contents.',
   '永久清空回收站？': 'Empty the recycle bin permanently?',
   '将永久删除 {count} 个项目':
       'Permanently delete {count, plural, one{# item} other{# items}}',
   '将永久删除 {count} 个项目（{bytes}）。': 'Permanently delete {count, plural, one{# item} other{# items}} ({bytes}).',
-  '此操作覆盖所有磁盘上的回收站内容，无法撤销，也不会进入 Broom 隔离区。': 'This affects recycle bins on every drive. It cannot be undone and files do not enter Broom\'s quarantine.',
+  '此操作覆盖用户回收站及可访问磁盘上的回收站内容，无法撤销，也不会进入 Broom 隔离区。': 'This affects the user trash and trash directories on accessible volumes. It cannot be undone and files do not enter Broom\'s quarantine.',
   '我明白清空后无法恢复': 'I understand emptied items cannot be recovered',
   '永久清空': 'Empty permanently',
 
@@ -1058,12 +1061,16 @@ const translationsEn = <String, String>{
   '需要管理员权限与 NTFS 卷，不可用时自动回退。': 'Requires administrator rights and an NTFS volume; falls back when unavailable.',
   '软件更新': 'Software updates',
   '通过 App Installer 更新源检查新版本。下载、安装与签名校验都由 Windows 完成，应用本身只读取清单、不运行任何安装程序。': 'Checks the App Installer feed for a newer version. Windows handles the download, install, and signature validation; the app only reads the manifest and never runs an installer.',
+  '通过 HTTPS 更新清单检查新版本。应用只读取版本与下载地址，不下载或安装任何内容；请使用发行版包管理器或安装包升级。': 'Checks a version manifest over HTTPS. The app only reads the version and download URL; it never downloads or installs anything. Upgrade through your distribution package manager or installer package.',
   '当前版本：{version}': 'Current version: {version}',
   '更新源版本：{version}': 'Feed version: {version}',
   '未知': 'Unknown',
   '更新源': 'Update feed',
+  '下载地址': 'Download URL',
   '发现新版本后，Windows 会在后台完成下载与安装，重启应用即可生效。': 'When a newer version exists, Windows downloads and installs it in the background; restart the app to apply it.',
+  '发现新版本后，请下载对应安装包，或通过发行版包管理器升级。': 'When a newer version exists, download the matching package or upgrade through your distribution package manager.',
   '发现新版本 {latest}（当前 {current}）。Windows 会在后台完成更新，重启应用即可生效。': 'Version {latest} is available (current {current}). Windows will update in the background; restart the app to apply it.',
+  '发现新版本 {latest}（当前 {current}）。请下载新版本安装包，或通过发行版包管理器升级。': 'Version {latest} is available (current {current}). Download the new package or upgrade through your distribution package manager.',
   '当前已是最新版本。': 'You are on the latest version.',
   '检查更新失败：{error}': 'Update check failed: {error}',
   '无法读取当前程序版本，可能是不完整的安装。':

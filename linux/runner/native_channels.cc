@@ -1,4 +1,5 @@
 #include "native_channels.h"
+#include "trash.h"
 
 #include <fcntl.h>
 #include <sys/resource.h>
@@ -251,6 +252,37 @@ void HandleRevealPath(FlMethodCall* method_call, FlValue* args) {
   RespondSuccess(method_call, nullptr);
 }
 
+void HandleQueryRecycleBin(FlMethodCall* method_call) {
+  TrashSummary summary;
+  int error_number = 0;
+  if (!QueryUserTrash(&summary, &error_number)) {
+    RespondError(method_call, "recycle_bin_query_failed",
+                 std::string("无法读取回收站：") +
+                     std::strerror(error_number),
+                 error_number);
+    return;
+  }
+
+  g_autoptr(FlValue) result = fl_value_new_map();
+  fl_value_set_string_take(result, "itemCount",
+                           fl_value_new_int(summary.item_count));
+  fl_value_set_string_take(result, "totalBytes",
+                           fl_value_new_int(summary.total_bytes));
+  RespondSuccess(method_call, result);
+}
+
+void HandleEmptyRecycleBin(FlMethodCall* method_call) {
+  int error_number = 0;
+  if (!EmptyUserTrash(&error_number)) {
+    RespondError(method_call, "recycle_bin_empty_failed",
+                 std::string("无法清空回收站：") +
+                     std::strerror(error_number),
+                 error_number);
+    return;
+  }
+  RespondSuccess(method_call, nullptr);
+}
+
 void ShellMethodCallHandler(FlMethodChannel*,
                             FlMethodCall* method_call,
                             gpointer user_data) {
@@ -268,11 +300,10 @@ void ShellMethodCallHandler(FlMethodChannel*,
     HandleSaveJsonFile(channels, method_call, args);
   } else if (g_strcmp0(method, "revealPath") == 0) {
     HandleRevealPath(method_call, args);
-  } else if (g_strcmp0(method, "queryRecycleBin") == 0 ||
-             g_strcmp0(method, "emptyRecycleBin") == 0) {
-    // The UI hides recycle-bin features on Linux; there is no freedesktop
-    // equivalent that matches the Windows semantics.
-    RespondNotImplemented(method_call);
+  } else if (g_strcmp0(method, "queryRecycleBin") == 0) {
+    HandleQueryRecycleBin(method_call);
+  } else if (g_strcmp0(method, "emptyRecycleBin") == 0) {
+    HandleEmptyRecycleBin(method_call);
   } else {
     RespondNotImplemented(method_call);
   }

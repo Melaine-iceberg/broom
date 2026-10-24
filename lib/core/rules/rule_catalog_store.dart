@@ -16,9 +16,10 @@ class RuleCatalogStore {
     required this.directoryPath,
     List<CleanerRule>? builtinRules,
     PathSemantics? semantics,
+    String builtinVersion = 'builtin',
   }) : semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform(),
        builtin = RuleCatalog(
-         version: 'builtin',
+         version: builtinVersion,
          source: 'builtin',
          rules: builtinRules ?? windowsCleanupRules,
        ) {

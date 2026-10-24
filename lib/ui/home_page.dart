@@ -71,8 +71,7 @@ class HomePage extends StatefulWidget {
   final AppUpdateController? appUpdates;
   final AppLogger? logger;
 
-  /// Hides features that only exist on Windows (recycle bin, app/rule updates
-  /// and NTFS indexing).
+  /// Hides options that only exist on Windows (NTFS indexing).
   final bool showWindowsTools;
 
   /// The system-cache entry is platform-independent: Windows uses the UAC
@@ -542,7 +541,7 @@ class _HomePageState extends State<HomePage> {
     return {
       for (final rule in controller.rules)
         rule.id: context.strings.ruleTitle(rule),
-      for (final entry in LeftoverCatalog.entries)
+      for (final entry in LeftoverCatalog.allEntries)
         entry.ruleId: context.strings.leftoverRuleTitle(
           entry.appName,
           entry.appNameEn,

@@ -1,4 +1,5 @@
 import '../models/leftover_models.dart';
+import 'linux_leftover_catalog.dart';
 
 /// Curated uninstall leftovers for the supported applications.
 ///
@@ -195,10 +196,17 @@ abstract final class LeftoverCatalog {
     r'%USERPROFILE%\AppData\LocalLow\Microsoft',
   ];
 
+  /// Entries for every supported platform. Rule ids are only active on the
+  /// platform that produced them, so overlapping app names are acceptable.
+  static Iterable<LeftoverCatalogEntry> get allEntries => [
+    ...entries,
+    ...LinuxLeftoverCatalog.entries,
+  ];
+
   static LeftoverCatalogEntry? entryForRuleId(String ruleId) {
     if (!isLeftoverRuleId(ruleId)) return null;
     final id = ruleId.substring(leftoverRuleIdPrefix.length);
-    for (final entry in entries) {
+    for (final entry in allEntries) {
       if (entry.id == id) return entry;
     }
     return null;

@@ -239,9 +239,13 @@
 - [x] 隔离区：`$XDG_DATA_HOME/Broom/quarantine`；跨卷通过 `st_dev` 探测，不可探测时保守复制。
 - [x] 原生桥接：`statvfs` 磁盘空间、`GtkFileChooserNative` 选择器、Gio 定位文件、`getpriority` / `setpriority` 扫描优先级、`chmod` / `utimensat` 元数据恢复。
 - [x] 系统级缓存：通过 Polkit / `pkexec` 调用固定功能助手，清理 APT / DNF 包缓存与 7 天前的 systemd journal；助手、policy 或 pkexec 缺失时不显示入口。
-- [x] UI 平台裁剪：回收站、规则在线更新、软件更新、NTFS 索引与卸载残留仍按平台隐藏；系统缓存入口改为按助手能力显示。
+- [x] 回收站：freedesktop Trash 用户回收站与可访问挂载点的 `.Trash/$uid` / `.Trash-$uid`，只统计与清空属于当前用户的真实目录，不跟随符号链接；永久删除、需确认。
+- [x] 卸载残留：只读查询 dpkg / rpm / Flatpak / Snap 与 `.desktop` 文件，结合策划的 XDG 数据目录清单生成 Review 级 `leftover.*` 规则；清单不完整时失败关闭。
+- [x] 规则在线更新：Linux 加载 `$XDG_DATA_HOME/Broom/rules` 中的签名目录，支持回滚与恢复内置规则；未配置构建密钥时禁用并提示。
+- [x] 软件更新检查：读取 HTTPS JSON 清单，展示当前 / 最新版本与下载地址，不下载或安装；RPM 与 tar.gz 用户自行升级。
+- [x] UI 平台裁剪：只剩 NTFS 索引按 Windows 隐藏；系统缓存入口按助手能力显示，其余 Linux 入口在满足配置时显示。
 - [x] 打包与 CI：tar.gz + `.desktop` + 图标，Fedora / RHEL 系 x86_64 的 RPM（含系统助手与 Polkit policy），`tool/package_linux.sh`、`tool/package_rpm.sh`，Ubuntu 22.04 CI。
-- [ ] 后续：Flatpak / Snap / AppImage 分发、Wayland 下的定位行为验证、Snap 沙箱内的隔离区路径约定；系统级缓存的 VM 安装、授权与真实清理验证见 [linux-system-cache.md](linux-system-cache.md)。
+- [ ] 后续：Flatpak / Snap / AppImage 分发、Wayland 下的定位行为验证、Snap 沙箱内的隔离区路径约定；Debian / Ubuntu APT、SELinux enforcing、RPM 卸载回滚与负向认证仍待 VM 验证，见 [linux-system-cache.md](linux-system-cache.md)。
 
 ### 移动端
 

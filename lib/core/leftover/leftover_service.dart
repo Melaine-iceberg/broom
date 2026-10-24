@@ -1,10 +1,9 @@
 import 'dart:io';
 
-import 'package:path/path.dart' as p;
-
 import '../models/cleaner_rule.dart';
 import '../models/leftover_models.dart';
 import '../platform/installed_apps.dart';
+import '../platform/path_semantics.dart';
 import '../rules/leftover_catalog.dart';
 import '../safety/path_exclusions.dart';
 import '../safety/path_guard.dart';
@@ -33,17 +32,20 @@ class LeftoverService {
     this.exclusions = const EmptyPathExclusionSource(),
     List<LeftoverCatalogEntry>? entries,
     Map<String, String>? environment,
+    PathSemantics? semantics,
   }) : entries = List.unmodifiable(entries ?? LeftoverCatalog.entries),
        _environment = {
          for (final entry in (environment ?? Platform.environment).entries)
            entry.key.toLowerCase(): entry.value,
-       };
+       },
+       _semantics = semantics ?? PathSemanticsFactory.forCurrentPlatform();
 
   final InstalledApps installedApps;
   final PathGuard guard;
   final PathExclusionSource exclusions;
   final List<LeftoverCatalogEntry> entries;
   final Map<String, String> _environment;
+  final PathSemantics _semantics;
 
   Future<LeftoverDetection> detect() async {
     final inventory = await _loadInventory();
@@ -115,11 +117,30 @@ class LeftoverService {
     InstalledAppInventory inventory,
   ) {
     for (final app in inventory.apps) {
-      final name = app.displayName.trim().toLowerCase();
-      if (name.isEmpty) continue;
+      final candidates = <String>{
+        app.displayName.trim().toLowerCase(),
+        if (app.uninstallKey != null) app.uninstallKey!.trim().toLowerCase(),
+        if (app.installLocation != null)
+          app.installLocation!.trim().toLowerCase(),
+      }..removeWhere((value) => value.isEmpty);
+
+      for (final packageId in entry.installPackageIds) {
+        final id = packageId.trim().toLowerCase();
+        if (id.isEmpty) continue;
+        for (final candidate in candidates) {
+          if (candidate == id ||
+              candidate.endsWith(':$id') ||
+              candidate.endsWith('/$id')) {
+            return true;
+          }
+        }
+      }
       for (final prefix in entry.installDisplayNamePrefixes) {
         final normalized = prefix.trim().toLowerCase();
-        if (normalized.isNotEmpty && name.startsWith(normalized)) return true;
+        if (normalized.isEmpty) continue;
+        for (final candidate in candidates) {
+          if (candidate.startsWith(normalized)) return true;
+        }
       }
     }
     return false;
@@ -142,7 +163,7 @@ class LeftoverService {
   Future<bool?> _markerExists(String pattern) async {
     final expanded = _expandEnvironment(pattern);
     if (expanded == null) return null;
-    final normalized = PathGuard.normalize(expanded);
+    final normalized = _normalize(expanded);
 
     final hasWildcard = normalized.contains('*') || normalized.contains('?');
     if (!hasWildcard) {
@@ -151,8 +172,10 @@ class LeftoverService {
     }
 
     final separator = _lastSeparator(normalized);
-    if (separator <= 0 || separator == normalized.length - 1) return null;
-    final parent = normalized.substring(0, separator);
+    if (separator < 0 || separator == normalized.length - 1) return null;
+    final parent = separator == 0
+        ? normalized.substring(0, 1)
+        : normalized.substring(0, separator);
     final leaf = normalized.substring(separator + 1);
     final parentType = await FileSystemEntity.type(parent, followLinks: false);
     if (parentType != FileSystemEntityType.directory &&
@@ -162,7 +185,7 @@ class LeftoverService {
 
     final matcher = _wildcardRegExp(leaf);
     await for (final entity in Directory(parent).list(followLinks: false)) {
-      if (matcher.hasMatch(p.windows.basename(entity.path))) return true;
+      if (matcher.hasMatch(_semantics.basename(entity.path))) return true;
     }
     return false;
   }
@@ -172,7 +195,7 @@ class LeftoverService {
     for (final pattern in entry.dataPathPatterns) {
       final expanded = _expandEnvironment(pattern);
       if (expanded == null) continue;
-      final normalized = PathGuard.normalize(expanded);
+      final normalized = _normalize(expanded);
       if (guard.isProtected(normalized) || exclusions.excludes(normalized)) {
         continue;
       }
@@ -194,16 +217,36 @@ class LeftoverService {
 
   String? _expandEnvironment(String pattern) {
     var missing = false;
-    final expanded = pattern.replaceAllMapped(RegExp(r'%([^%]+)%'), (match) {
-      final value = _environment[match.group(1)!.toLowerCase()];
+    String? lookup(String name) {
+      final value = _environment[name.toLowerCase()];
       if (value == null || value.isEmpty) {
         missing = true;
-        return '';
+        return null;
       }
       return value;
+    }
+
+    var expanded = pattern;
+    if (expanded == '~' || expanded.startsWith('~/')) {
+      final home = lookup('HOME');
+      if (home == null) return null;
+      expanded = expanded == '~' ? home : '$home${expanded.substring(1)}';
+    }
+    expanded = expanded.replaceAllMapped(RegExp(r'\$\{([^}]+)\}'), (match) {
+      return lookup(match.group(1)!) ?? '';
+    });
+    expanded = expanded.replaceAllMapped(
+      RegExp(r'\$([A-Za-z_][A-Za-z0-9_]*)'),
+      (match) => lookup(match.group(1)!) ?? '',
+    );
+    expanded = expanded.replaceAllMapped(RegExp(r'%([^%]+)%'), (match) {
+      return lookup(match.group(1)!) ?? '';
     });
     return missing ? null : expanded;
   }
+
+  String _normalize(String path) =>
+      _semantics.normalize(_semantics.absolute(_semantics.canonical(path)));
 
   int _lastSeparator(String path) {
     final backslash = path.lastIndexOf('\\');
@@ -224,7 +267,7 @@ class LeftoverService {
       }
     }
     buffer.write(r'$');
-    return RegExp(buffer.toString(), caseSensitive: false);
+    return RegExp(buffer.toString(), caseSensitive: !_semantics.caseSensitive);
   }
 }
 

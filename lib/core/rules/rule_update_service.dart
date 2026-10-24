@@ -124,8 +124,8 @@ class RuleUpdateService {
     if (missing.isNotEmpty) {
       throw RuleUpdateException('规则更新删除了内置规则，已拒绝：${missing.join(', ')}');
     }
-    if (catalog.version == 'builtin') {
-      throw const RuleUpdateException('规则更新不能使用保留版本号 builtin。');
+    if (catalog.version == store.builtin.version) {
+      throw RuleUpdateException('规则更新不能使用保留版本号 ${store.builtin.version}。');
     }
     if (catalog.version == store.current.version &&
         catalog.source == store.current.source) {

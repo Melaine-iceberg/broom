@@ -24,10 +24,18 @@ abstract interface class CleanerPlatform {
   /// Identifies the active rule catalog (built-in or a verified online
   /// update). Persisted scan results are considered stale when this changes.
   String get rulesVersion;
+
   Future<List<String>> resolveRoots(CleanerRule rule);
 }
 
-class WindowsCleanerPlatform implements CleanerPlatform {
+/// Platform whose active rule catalog can be replaced after signature and
+/// audit validation. Both desktop platforms support this; test doubles that
+/// only need the scanning surface do not have to implement it.
+abstract interface class RuleCatalogTarget {
+  void applyRuleCatalog(List<CleanerRule> rules, String version);
+}
+
+class WindowsCleanerPlatform implements CleanerPlatform, RuleCatalogTarget {
   factory WindowsCleanerPlatform({
     Map<String, String>? environment,
     List<CleanerRule>? rules,
@@ -80,6 +88,7 @@ class WindowsCleanerPlatform implements CleanerPlatform {
   @override
   String get rulesVersion => _rulesVersion;
 
+  @override
   void applyRuleCatalog(List<CleanerRule> rules, String version) {
     _rules = List.unmodifiable(rules);
     _rulesVersion = version;
@@ -124,7 +133,7 @@ class WindowsCleanerPlatform implements CleanerPlatform {
 /// [environment] is normalized with the XDG defaults so rule patterns can
 /// reference `$XDG_CACHE_HOME`, `$XDG_CONFIG_HOME` and `$XDG_DATA_HOME` even
 /// when those variables are not explicitly set by the desktop session.
-class LinuxCleanerPlatform implements CleanerPlatform {
+class LinuxCleanerPlatform implements CleanerPlatform, RuleCatalogTarget {
   factory LinuxCleanerPlatform({
     Map<String, String>? environment,
     List<CleanerRule>? rules,
@@ -161,8 +170,8 @@ class LinuxCleanerPlatform implements CleanerPlatform {
   @override
   final Map<String, String> environment;
   late final PosixRuleResolver _resolver;
-  final List<CleanerRule> _rules;
-  final String _rulesVersion;
+  List<CleanerRule> _rules;
+  String _rulesVersion;
 
   @override
   bool get isSupported => Platform.isLinux;
@@ -197,6 +206,12 @@ class LinuxCleanerPlatform implements CleanerPlatform {
 
   @override
   String get rulesVersion => _rulesVersion;
+
+  @override
+  void applyRuleCatalog(List<CleanerRule> rules, String version) {
+    _rules = List.unmodifiable(rules);
+    _rulesVersion = version;
+  }
 
   @override
   String? get quarantineRoot {

@@ -135,4 +135,13 @@ void main() {
     final button = find.widgetWithText(FilledButton, '清空回收站');
     expect(tester.widget<FilledButton>(button).onPressed, isNull);
   });
+
+  testWidgets('describes the trash as system-managed on every desktop', (
+    tester,
+  ) async {
+    await _pumpPage(tester, _FakeSystemShell());
+
+    expect(find.textContaining('桌面环境管理'), findsOneWidget);
+    expect(find.textContaining('Windows'), findsNothing);
+  });
 }
