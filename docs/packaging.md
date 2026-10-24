@@ -14,7 +14,7 @@ Linux 的 tar.gz、deb、AppImage 与 RPM 打包、签名和更新清单是独�
 | `broom_<版本>_win-x64-portable.zip` | 便携版 | 解压即用，不写入注册表、不需安装 |
 | `SHA256SUMS.txt` | 校验和 | 上述文件的 SHA-256 |
 
-版本号由 `pubspec.yaml` 推导：`version: 0.4.0+4` → MSIX `0.4.0.4`。MSIX 要求四段版本且只能递增，因此把语义化版本的 build 号映射为第四段（revision）是自然选择，发布时只需改 `pubspec.yaml`。
+版本号由 `pubspec.yaml` 推导：`version: 0.5.1+6` → MSIX `0.5.1.6`。MSIX 要求四段版本且只能递增，因此把语义化版本的 build 号映射为第四段（revision）是自然选择，发布时只需改 `pubspec.yaml`。
 
 ## 前置条件
 
@@ -80,6 +80,37 @@ winapp manifest update-assets assets/icon/app_icon.png --manifest windows/packag
 
 私钥不进入版本库：`.gitignore` 忽略 `signing/`；`dist/` 内只放导出的公钥 `Broom.cer`。
 
+## 发版流程：CI 发布与本地签名
+
+推送 `vX.Y.Z` 标签会触发 [`.github/workflows/release.yml`](../.github/workflows/release.yml)：
+
+1. 复用 `linux.yml` / `windows.yml` 执行格式校验、严格静态检查与完整测试；
+2. 构建 Linux 的 tar.gz / deb / AppImage / RPM，汇总 `SHA256SUMS` 与 `broom-linux.json`；
+3. 构建 Windows 便携 ZIP；
+4. 校验标签与 `pubspec.yaml` 前三段版本一致后，创建或更新该标签的 GitHub Release，并上传上述产物。
+
+标签必须与 `pubspec.yaml` 前三段一致，否则第 4 步会直接失败；因此顺序始终是**先提交并推送 `version` 的 bump，再打标签**。
+
+MSIX **不在 CI 构建**：签名私钥 `signing/broom-release.pfx` 被 `.gitignore` 排除，只保存在发布机器上，CI 无法以固定身份签名。因此需要在发布机器上完成签名，再把 MSIX 附加到同一个 Release：
+
+```powershell
+# 1. 检出与标签一致的提交（v0.5.1 ↔ pubspec 0.5.1+6）
+git fetch --tags
+git checkout v0.5.1
+
+# 2. 本地签名：0.5.1+6 → MSIX 0.5.1.6。便携 ZIP 已由 CI 发布，这里跳过
+pwsh -File tool/package_windows.ps1 -SkipPortable
+
+# 3. 附加到 Release
+gh release upload v0.5.1 `
+  dist/broom_0.5.1.6_x64.msix `
+  dist/Broom.cer
+```
+
+- 需要自动更新源时，在打包命令加 `-UpdateFeedUrl https://<你的域名>/broom/broom.appinstaller`，并额外上传 `dist/broom.appinstaller`；**先传 MSIX、后传 `.appinstaller`**，避免清单指向尚不存在的包。
+- 不要把本地的 `SHA256SUMS.txt` 上传到 Release：CI 那份是便携 ZIP 的校验和，本地这份只覆盖签名产物，同名会互相覆盖。MSIX 的完整性由包签名保证；如需校验和，用 `Get-FileHash dist\broom_0.5.1.6_x64.msix -Algorithm SHA256` 单独记录。
+- 发布后用 `gh release view vX.Y.Z` 确认资产齐全，并按「安装」一节实际安装一次签名包。
+
 ## 安装
 
 MSIX 的签名由部署服务（以 SYSTEM 身份运行）校验，因此**信任证书与安装包注册都需要管理员权限**，即使用户级安装本身不需要。
@@ -109,7 +140,7 @@ Add-AppxPackage -Appinstaller .\dist\broom.appinstaller
 同 `Identity`（`Name` + `Publisher`）、版本号更高的包即完成就地升级，用户数据保留：
 
 ```powershell
-Add-AppxPackage -Path .\dist\broom_0.5.0.0_x64.msix
+Add-AppxPackage -Path .\dist\broom_0.5.1.6_x64.msix
 ```
 
 版本号更低会被拒绝。若要同时保留旧版本并排安装，需要改为不同的 `Identity/@Name`。
@@ -154,18 +185,18 @@ Add-AppxPackage -Path .\dist\broom_0.5.0.0_x64.msix
 
 ### 发布流程
 
-1. 修改 `pubspec.yaml` 的 `version`（如 `0.5.0+5`）。
+1. 修改 `pubspec.yaml` 的 `version`（如 `0.5.1+6`）。
 2. 打包时给出更新源地址：
 
 ```powershell
 pwsh -File tool/package_windows.ps1 -UpdateFeedUrl https://<你的域名>/broom/broom.appinstaller
 ```
 
-3. 把 `dist/broom.appinstaller` 与 `dist/broom_0.5.0.0_x64.msix` 上传到同一目录，文件名必须与清单里的一致：
+3. 把 `dist/broom.appinstaller` 与 `dist/broom_0.5.1.6_x64.msix` 上传到同一目录，文件名必须与清单里的一致：
 
 ```
 https://<你的域名>/broom/broom.appinstaller
-https://<你的域名>/broom/broom_0.5.0.0_x64.msix
+https://<你的域名>/broom/broom_0.5.1.6_x64.msix
 ```
 
 4. 旧版本的 `.msix` 建议保留一段时间，正在下载旧包的客户端仍可能请求它。
@@ -177,20 +208,18 @@ https://<你的域名>/broom/broom_0.5.0.0_x64.msix
 - **不要改标识与签名证书**：`Name`、`Publisher` 和签名证书必须跨版本一致，否则不是「升级」而是「另一个应用」。
 - **`ms-appinstaller:` 协议已失效**：微软自 2023 年 12 月起默认禁用该协议（曾被恶意软件滥用），所以不能做网页一键安装，只能让用户下载 `.appinstaller` 后打开。企业可通过组策略重新启用，不应把它当作分发前提。
 
-### 当前发布状态：未发布
+### 当前发布状态
 
-产物已就绪但**刻意没有上线**，原因有两层，按顺序解决：
+- **Linux 与便携版已随 tag 自动发布**：`release.yml` 会把 Linux 的四种包、`SHA256SUMS`、`broom-linux.json` 与 Windows 便携 ZIP 附加到对应 GitHub Release。
+- **MSIX 不随 Release 自动发布**：签名私钥只在发布机器上，需按「发版流程」手工签名并附加。当前签名仍是自签名 `CN=Broom`，一旦对外分发，每个下载者都要手动把 `Broom.cer` 装进受信任根，并持续面对 SmartScreen「未知发布者」——对一款删文件的工具，这是在训练用户无脑信任证书。**首次公开发布 MSIX 前应换成商业代码签名证书**（`-CertificatePath`），并同步更新清单的 `Identity/@Publisher`。此时换证书的代价只是重装一次；一旦有外部用户，换证书就等于换发布身份，已有安装无法升级。
+- **Pages 尚未启用**：`https://melaine-iceberg.github.io/broom/` 目前返回 404，应用内默认更新源仍不可达；Release 中的 `broom-linux.json` 可手动下载，或通过 `--dart-define=BROOM_LINUX_UPDATE_FEED=...` 指向其他 HTTPS 源。清单里的 `.appinstaller` `Uri` 同样指向 Pages，未上线时应用内「检查更新」会以网络错误结束，不影响任何本地功能。
+- **GitHub Release 直接作为 App Installer 更新源尚未验证**：`.appinstaller`、`.msix` 与清单里的包地址必须位于同一稳定 HTTPS 目录；正式启用自动更新前仍建议独立托管，并先传包、后传清单。
 
-1. **签名身份必须先定**。现在是自签名 `CN=Broom`。自签名的包一旦对外分发，每个下载者都要手动把 `Broom.cer` 装进受信任根，并持续面对 SmartScreen「未知发布者」——对一款删文件的工具，这是在训练用户无脑信任证书。**首次公开发布前应换成商业代码签名证书**（`-CertificatePath`），并同步更新清单的 `Identity/@Publisher`。此时换证书的代价只是重装一次；一旦有外部用户，换证书就等于换发布身份，已有安装无法升级。
-2. **仓库是 PUBLIC，Pages 尚未启用**。在本项目当前形态下（自签名 + 公开仓库），发布等于把一个自签名可执行文件公开挂出，收益不足以抵消上述风险。
-
-因此暂不建立 `gh-pages`。拿到商业证书后的动作：
+拿到商业证书后的动作：
 
 1. 改 `windows/packaging/Package.appxmanifest` 的 `Identity/@Publisher` 为证书实际 DN。
 2. `pwsh -File tool/package_windows.ps1 -CertificatePath .\signing\prod.pfx -CertificatePassword <密码> -UpdateFeedUrl https://<域名>/broom/broom.appinstaller`
-3. 按上一节流程推送，并启用 Pages。
-
-清单里的 `Uri` 目前指向 `https://melaine-iceberg.github.io/broom/`，未上线时应用内「检查更新」会以网络错误结束，不影响任何本地功能。
+3. 先上传 MSIX，再上传 `.appinstaller`；启用 Pages 或把应用内默认更新源替换为该目录。
 
 ### 用户侧操作
 
@@ -262,8 +291,8 @@ Broom 的普通扫描与清理以当前用户权限运行；只有独立的「�
 
 ## 尚未实现
 
-- 更新源未上线（见「当前发布状态」）：产物已在 `dist/`，阻碍不是技术而是签名身份——自签名不适合对外分发。上线时用独立的 `gh-pages` 分支并每次单提交覆盖，否则每版 30 MB 的二进制会迅速撑大仓库历史；同时需在仓库设置中启用 Pages。
-- 发布会话的自动化：上传、清单替换顺序、旧包保留策略目前靠手工执行。
+- 正式更新源未上线（见「当前发布状态」）：Linux 清单已随 Release 发布，但 Pages 未启用、应用内默认源不可达；Windows `.appinstaller` 仍依赖外部 HTTPS 目录。上线时用独立的 `gh-pages` 分支并每次单提交覆盖，否则每版 30 MB 的二进制会迅速撑大仓库历史；同时需在仓库设置中启用 Pages。
+- MSIX 发布会话的自动化：Linux 包与便携 ZIP 已随 tag 自动发布，但签名 MSIX 的上传、`.appinstaller` 替换顺序与旧包保留仍靠手工执行。
 - winget 清单提交、官网下载页与发布渠道自动化。
 - ARM64 与 x86 包：Flutter Windows 默认只构建 x64，`winapp package` 需要对应的产物目录。
 - SmartScreen 声誉：自签名包仍会提示「未知发布者」，只有受信任的商业证书配合时间戳与下载量积累才会消除。

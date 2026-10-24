@@ -323,7 +323,8 @@ pwsh -File tool/package_windows.ps1 -UpdateFeedUrl https://<你的域名>/broom/
 - **产物**：`broom_<版本>_x64.msix`（开始菜单、卸载与就地升级）、`broom.appinstaller`（自动更新源）、`Broom.cer`（公钥）与 `broom_<版本>_win-x64-portable.zip`、`SHA256SUMS.txt`。
 - **自动更新**：通过 `.appinstaller` 安装后由 Windows 接管——启动时静默检查、后台约 8 小时兜底、不弹窗不阻塞。只有从该文件安装的机器会收到更新，直接装 `.msix` 不会。
 - **应用内提示**：设置页「软件更新」读取同一份更新源，显示当前版本与最新版本；只做提示，下载与安装仍由 Windows 完成。
-- **版本**：由 `pubspec.yaml` 推导，`0.4.0+4` → MSIX `0.4.0.4`，发布时只改一处。
+- **发布**：推送 `vX.Y.Z` 标签触发 [.github/workflows/release.yml](.github/workflows/release.yml)，自动发布 Linux 包、`broom-linux.json` 与 Windows 便携 ZIP；MSIX 的签名私钥只在本地，需在发布机器上签名后按 [docs/packaging.md](docs/packaging.md#发版流程ci-发布与本地签名) 手工附加。
+- **版本**：由 `pubspec.yaml` 推导，`0.5.1+6` → MSIX `0.5.1.6`，发布时只改一处。
 - **包标识与签名**：`Broom` / `CN=Broom`，且签名证书 `signing/broom-release.pfx` 跨版本复用——改变其中任一项都会断掉升级链。
 - **能力**：`runFullTrust` 与 `allowElevation`。后者让「系统级缓存」工具能通过 `runas` 动态提权；侧载分发无需审批，Microsoft Store 基本不会批准。
 - **卸载不清理用户数据**：隔离区、配置与历史都在 `%LOCALAPPDATA%\Broom`，卸载前应先恢复或永久释放隔离区文件。
