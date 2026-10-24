@@ -1,7 +1,7 @@
 name: broom
 description: "A safe, reversible cache cleaner for Windows and Linux desktops."
 publish_to: 'none'
-version: 0.5.0+5
+version: 0.5.1+6
 
 environment:
   sdk: ^3.13.5
