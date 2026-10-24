@@ -155,7 +155,9 @@ jobs:
           path: build
 
       - name: Extract Linux bundle
-        run: tar -C build/linux/x64/release -xzf build/broom-linux-bundle.tar.gz
+        run: |
+          mkdir -p build/linux/x64/release
+          tar -C build/linux/x64/release -xzf build/broom-linux-bundle.tar.gz
 
       - name: Prepare unprivileged builder
         run: |
