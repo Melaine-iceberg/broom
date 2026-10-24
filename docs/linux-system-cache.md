@@ -1,6 +1,6 @@
 # Linux 系统级缓存清理：提权模型、保护根与 RPM 交付
 
-> 状态：阶段 1–3 已实现（仓库侧测试与 Fedora WSL RPM 构建通过）；pkexec 授权、安装布局与真实清理的 VM 验证待维护者执行
+> 状态：阶段 1–3 已实现；仓库测试、Fedora WSL 构建与 Fedora Hyper-V VM 验证（GNOME/KDE 的安装、入口、pkexec 认证、DNF/journal 清理与图标）均已通过。APT、SELinux enforcing、卸载回滚与负向认证场景仍待补测。
 > 日期：2026-10-24
 > 范围：Linux 桌面版；最终只交付 RPM，实机验证由项目维护者在虚拟机中完成
 
@@ -381,18 +381,21 @@ broom-system-helper --self-test
 - Dart UI fake 测试：只显示助手报告可用的操作、入口按能力位隐藏、默认不勾选、确认勾选门槛、认证取消无副作用、助手缺失降级。
 - policy：Linux CI 用 `xmllint` 校验 CMake 生成的 policy。
 - RPM：`test/linux_rpm_packaging_test.dart` 检查 spec 的安装路径、依赖与脚本的只读约束；Linux CI 对打包脚本执行 `bash -n`。
-- Fedora WSL 冒烟（2026-10-24）：本地 `rpmbuild` 成功；`rpm -qpl` / `rpm -qpR` / `rpm -qp --dump` 确认助手 `0755`、policy `0644`、相对符号链接和 `.sha256` 正确。
+- Fedora WSL 冒烟（2026-10-24）：本地 `rpmbuild` 成功；`%attr` 与权限探针确保助手 `0755`、policy / desktop / 图标 `0644`；GTK 能从 hicolor 的 256×256 目录解析到应用图标。
 
 后续阶段待补：
 
 - 输出截断与真实包管理器忙锁的 VM 验证。
-- RPM 安装后的 `rpm -V`、符号链接启动与 SELinux 验证。
+- SELinux enforcing 下的助手域与 AVC 检查。
+- Debian / Ubuntu 的 APT 路径与 RPM 卸载回滚验证。
 
 CI 不运行真实 `pkexec` / APT / DNF / journald；这些留给 VM。
 
 ### 10.2 VM 手工验证（维护者执行）
 
 建议使用 Fedora Workstation（DNF5）或等价 RHEL 系虚拟机；APT 路径另用 Debian / Ubuntu 虚拟机验证。
+
+> 2026-10-24 Fedora Hyper-V VM 结果：RPM 安装与覆盖安装、`/usr/bin/broom` 菜单启动、系统缓存入口、pkexec 认证框、DNF 缓存与 journal 清理、GNOME 与 KDE 的应用图标均通过。仍待补测：APT（Debian / Ubuntu）、SELinux enforcing、卸载回滚、负向认证（取消 / 错误密码 / 无 agent / 非活跃会话）、tar.gz 在无助手环境的入口隐藏。
 
 阶段 2 已实现真实执行，仓库测试不会运行系统工具。可先运行
 
@@ -422,31 +425,31 @@ VM 验证中发现的问题应回写到本文件“已知风险 / 开放问题�
 
 ## 11. 分阶段实施与验收
 
-### 阶段 1：助手骨架与授权链路（已实现，VM 验证待执行）
+### 阶段 1：助手骨架与授权链路（已实现，VM 验证通过）
 
 - [x] 新增 `linux/system_helper/` 的 C++ 助手骨架、CMake 构建与 CTest。
 - [x] 新增 policy 模板、CMake 展开与 `/usr/libexec` / `/usr/share` 安装约定；CI 校验 XML。
 - [x] 新增 Dart `LinuxSystemMaintenance` 抽象、pkexec 客户端、严格 JSON 校验与 fake。
 - [x] 助手支持 `--list` / `--self-test` / 参数校验；`--run` 在阶段 1 返回 `not_implemented`（该行为已被阶段 2 替换）。
 - [x] 仓库内验收：CTest、Dart 单元测试、`flutter analyze` 全部通过。
-- [ ] VM 验收：按第 10.2 节确认 policy 被识别，`pkexec` 能弹出认证框。
+- [x] VM 验收：Fedora Hyper-V VM 中 policy 被识别，GNOME / KDE 下 `pkexec` 均能弹出认证框。
 
-### 阶段 2：APT / DNF / journal 操作 + UI（已实现，VM 验证待执行）
+### 阶段 2：APT / DNF / journal 操作 + UI（已实现，DNF / journal 已验证；APT 待补）
 
 - [x] 实现 `apt-cache`、`dnf-packages`、`journal-7d` 与固定执行器（root 校验、串行锁、超时、输出上限、逐项状态）。
 - [x] 新增 Linux 系统缓存页、控制器、侧边栏 `showSystemCache` / `showRecycleBin` 能力位。
 - [x] 实现确认、认证取消、部分失败、忙锁、超时与助手缺失降级。
 - [x] 验收：fake / CTest 测试覆盖全部状态；`flutter analyze` 与仓库测试通过。
-- [ ] VM 验收：真实 APT / DNF / journal 清理按第 10.2 节执行。
+- [x] VM 验收：Fedora VM 的 DNF 缓存与 journal 清理通过；APT 路径待 Debian / Ubuntu VM 补测。
 
-### 阶段 3：RPM 打包（已实现，安装验证待执行）
+### 阶段 3：RPM 打包（已实现，VM 验证通过）
 
 - [x] 新增 `packaging/rpm/broom.spec`、`tool/package_rpm.sh`。
 - [x] 生成包含助手、policy、desktop、图标、bundle 与文档的 RPM。
 - [x] 输出 `.rpm` 与 `.sha256`。
 - [x] 脚本不安装或运行 RPM；不实现 deb/Flatpak/Snap/AppImage。
 - [x] 仓库内验收：Fedora WSL 可重复构建；`rpm -qpl` / `rpm -qpR` / 文件权限与校验和冒烟通过。
-- [ ] VM 验收：安装 RPM 后运行 `rpm -V`、从 `/usr/bin/broom` 启动并验证 Polkit 授权。
+- [x] VM 验收：安装 RPM、从 `/usr/bin/broom` 启动并验证 Polkit 授权；GNOME / KDE 的图标与认证框均正常（`rpm -V` 已在 WSL 安装验证）。
 
 ### 后续（不在本次范围）
 
@@ -458,15 +461,15 @@ VM 验证中发现的问题应回写到本文件“已知风险 / 开放问题�
 ## 12. 已知风险与开放问题
 
 1. **许可证**：仓库没有 LICENSE，RPM `License` 字段暂为占位，正式发布前必须确认。
-2. **SELinux**：`pkexec` 启动自定义助手后的 domain 与写入 `/var/cache/dnf`、`/var/log/journal` 的权限需要 Fedora VM 实测；若有 AVC，可能需要 SELinux policy 或改用 systemd service。
-3. **包管理器兼容性**：`dnf clean packages` 在 DNF4 / DNF5 上的行为和输出可能不同，`apt-get clean` 也可能受 APT 配置影响；实现只以退出码与固定参数为准，不解析本地化文本。VM 中需分别验证 APT 与 DNF 路径。
-4. **Polkit agent**：没有 authentication agent 的桌面/远程会话无法完成授权；系统缓存入口应优雅降级。
-5. **符号链接启动**：Flutter 通过 `/proc/self/exe` 定位 bundle；`/usr/bin/broom` 符号链接需在 VM 中验证，必要时改用 wrapper。
+2. **SELinux**：`pkexec` 启动自定义助手后的 domain 与写入 `/var/cache/dnf`、`/var/log/journal` 的权限仍需在 SELinux enforcing 的 Fedora VM 中实测；若有 AVC，可能需要 SELinux policy 或改用 systemd service。
+3. **包管理器兼容性**：DNF 路径已在 Fedora VM 验证；`apt-get clean` 仍待 Debian / Ubuntu VM 验证。实现只以退出码与固定参数为准，不解析本地化文本。
+4. **Polkit agent**：GNOME / KDE 的正常认证框已通过；取消、错误密码、无 agent 与非活跃会话仍需补测，系统缓存入口应优雅降级。
+5. **符号链接启动**：Flutter 通过 `/proc/self/exe` 定位 bundle；`/usr/bin/broom` 已通过 GNOME / KDE 菜单启动验证。
 6. **授权面**：`pkexec` 本身是 setuid 组件，历史上出现过漏洞；助手必须保持最小、无可配置路径、无 shell，并跟随发行版的 polkit 更新。
 7. **不可撤销**：DNF 缓存和 journal 都是永久删除，不进入隔离区；UI 必须明确说明。
 8. **未来 D-Bus 迁移**：如果 Flatpak 或长任务成为近期目标，尽早切换到 D-Bus helper，避免两套授权入口长期并存。
 9. **RPM 来源构建**：本阶段是预构建 binary RPM，不适合直接提交 Fedora 官方仓库；若要走官方源，需要补 from-source 构建、许可证与打包规范。
-10. **阶段 1 的 VM 验证尚未完成**：仓库内自动化只能证明参数、JSON 与安装约定；popup、安装后权限和 Polkit 识别仍需在 Fedora VM 中按第 10.2 节确认。完成前不宣称授权链路已验证。
+10. **VM 验证范围**：Fedora Hyper-V VM 已覆盖安装、菜单启动、pkexec 认证、DNF / journal 清理与 GNOME / KDE 图标；APT 路径、SELinux enforcing、卸载回滚和负向认证场景仍待补测，完成前不宣称这些路径已验证。
 
 ## 13. 代码与文档索引
 
